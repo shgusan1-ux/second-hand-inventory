@@ -22,7 +22,7 @@ function getSqliteDb() {
 export const db = {
   query: async <T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> => {
     // Checking environment - In a real scenario, check process.env.POSTGRES_URL
-    const isCloud = process.env.POSTGRES_URL && process.env.NODE_ENV === 'production';
+    const isCloud = !!process.env.POSTGRES_URL && process.env.NODE_ENV === 'production';
 
     if (isCloud) {
       // Lazy load @vercel/postgres to avoid install errors locally
@@ -41,25 +41,33 @@ export const db = {
     } else {
       // Local SQLite (Simulate Async)
       const db = getSqliteDb();
-      // Convert Postgres-style $1, $2 to SQLite-style ?, ?
-      let sqliteSql = text;
-      let index = 1;
-      while (sqliteSql.includes(`$${index}`)) {
-        sqliteSql = sqliteSql.replace(`$${index}`, '?');
-        index++;
-      }
 
-      // Check if it's a SELECT or INSERT/UPDATE
+      // Convert Postgres-style $1, $2... to SQLite-style ?
+      // Since Postgres allows reusing parameters ($1 used multiple times),
+      // we must expand the params array to match the order of '?' in the generated SQLite query.
+
+      const newParams: any[] = [];
+      const sqliteSql = text.replace(/\$(\d+)/g, (match, number) => {
+        const idx = parseInt(number, 10) - 1;
+        if (idx >= 0 && idx < params.length) {
+          newParams.push(params[idx]);
+          return '?';
+        }
+        return match;
+      });
+
       const isSelect = text.trim().toLowerCase().startsWith('select');
 
       try {
         const stmt = db.prepare(sqliteSql);
+
+        let result;
         if (isSelect) {
-          const rows = stmt.all(...params);
-          return { rows: rows as T[], rowCount: rows.length };
+          result = stmt.all(...newParams);
+          return { rows: result as T[], rowCount: (result as any[]).length };
         } else {
-          const info = stmt.run(...params);
-          return { rows: [], rowCount: info.changes };
+          result = stmt.run(...newParams);
+          return { rows: [], rowCount: result.changes };
         }
       } catch (e) {
         console.error("SQL Error:", e, text, params);

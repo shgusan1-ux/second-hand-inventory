@@ -5,9 +5,12 @@ import { Shirt, ArrowDownLeft, ArrowUpRight, Calendar, Package } from 'lucide-re
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { WeatherWidget } from '@/components/dashboard/weather-widget';
-import { getDashboardTasks } from '@/lib/actions';
+import { KoreaWeatherMap } from '@/components/dashboard/korea-weather-map';
+import { getDashboardTasks, getMemos } from '@/lib/actions';
 import { DashboardChecklist } from '@/components/dashboard/checklist';
 import { checkSystemUpdates } from '@/lib/updates';
+import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
+import { MemoWidget } from '@/components/dashboard/memo-widget';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,11 +23,19 @@ export default async function DashboardPage() {
   await checkSystemUpdates();
 
   const tasks = await getDashboardTasks();
+  const memos = await getMemos();
 
   return (
     <div className="space-y-8">
-      {/* Weather Strategy Widget */}
-      <WeatherWidget data={weather} />
+      {/* Weather Strategy Widget & Map */}
+      <div className="grid gap-6 md:grid-cols-7 lg:grid-cols-7 items-stretch">
+        <div className="md:col-span-4 lg:col-span-5 flex flex-col h-full">
+          <WeatherWidget data={weather} />
+        </div>
+        <div className="md:col-span-3 lg:col-span-2 flex flex-col h-full">
+          <KoreaWeatherMap />
+        </div>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">대시보드</h1>
@@ -118,57 +129,13 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Items */}
-      <div className="grid gap-4 md:grid-cols-1">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle>최근 등록된 의류</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative w-full overflow-auto">
-              <table className="w-full caption-bottom text-sm text-left">
-                <thead className="[&_tr]:border-b">
-                  <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">상품명</th>
-                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">브랜드</th>
-                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">판매가</th>
-                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">등록일</th>
-                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right">상태</th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:last-child]:border-0">
-                  {recentProducts.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-4 text-center text-slate-500">
-                        아직 등록된 상품이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    recentProducts.map((product) => (
-                      <tr key={product.id} className="border-b transition-colors hover:bg-slate-50">
-                        <td className="p-4 align-middle font-medium text-slate-900">{product.name}</td>
-                        <td className="p-4 align-middle text-slate-600">{product.brand}</td>
-                        <td className="p-4 align-middle text-slate-600">₩{product.price_sell.toLocaleString()}</td>
-                        <td className="p-4 align-middle text-slate-500">
-                          {new Date(product.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="p-4 align-middle text-right">
-                          <span className={
-                            product.status === '판매중' ? 'bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full text-xs font-semibold' :
-                              product.status === '판매완료' ? 'bg-slate-100 text-slate-500 px-2 py-1 rounded-full text-xs font-semibold' :
-                                'bg-orange-100 text-orange-700 px-2 py-1 rounded-full text-xs font-semibold'
-                          }>
-                            {product.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+      {/* System Updates & Patch Logs + Memo Widget */}
+      <div className="grid gap-4 md:grid-cols-2 md:items-start">
+        {/* Update Log */}
+        <UpdateLogWidget tasks={tasks} />
+
+        {/* Shared Memo */}
+        <MemoWidget memos={memos} />
       </div>
     </div>
   );

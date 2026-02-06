@@ -201,7 +201,7 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
 
             {mode === 'single' ? (
                 <>
-                    <form action={addCategory} className="flex gap-2 items-center">
+                    <form action={async (formData) => { await addCategory(formData); }} className="flex gap-2 items-center">
                         <select name="classification" className="h-10 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
                             {CLASSIFICATIONS.map(c => (
                                 <option key={c} value={c}>{c}</option>

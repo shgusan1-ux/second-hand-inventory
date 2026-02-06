@@ -1,31 +1,22 @@
 import { db } from './db';
 
-const SYSTEM_UPDATES = [
+export const SYSTEM_UPDATES = [
     {
-        id: 'sys-v1.2.0',
-        content: '📢 [시스템 업데이트 v1.2.0] 브랜드명 Brownstreet 변경 완료'
+        id: 'admin-patch-v2.0.1',
+        content: '🔒 [관리자] 관리자 전용 : 보안 설정 강화 및 비밀번호 정책 업데이트'
     },
     {
-        id: 'sys-v1.2.1',
-        content: '🐛 [버그 수정 v1.2.1] 로그인/회원가입 페이지 접속 오류 해결 (React 19 대응)'
+        id: 'admin-patch-v2.0.0',
+        content: '⚙️ [관리자] 관리자 대시보드 : 시스템 패치 로그 위젯 신규 리뉴얼'
     },
     {
-        id: 'sys-v1.2.2',
-        content: '✨ [기능 개선 v1.2.2] 재고 등록 페이지 통합 (개별/대량/코너로지스 탭 분류)'
-    },
-    {
-        id: 'sys-v1.2.3',
-        content: '🌤 [기능 추가 v1.2.3] AI 날씨 전략 위젯 고도화 (오늘/주간/월간/계절별 제안)'
-    },
-    {
-        id: 'sys-v1.2.4',
-        content: '🔔 [기능 추가 v1.2.4] 직원 활동 내역 자동 알림 및 시스템 업데이트 공지 기능 추가'
+        id: 'admin-patch-v1.9.5',
+        content: '👥 [관리자] 회원 관리 : 관리자 권한 부여 프로세스 간소화'
     }
 ];
 
 export async function checkSystemUpdates() {
     try {
-        // Ensure table exists (redundant but safe)
         await db.query(`
              CREATE TABLE IF NOT EXISTS dashboard_tasks (
                 id TEXT PRIMARY KEY,
@@ -35,6 +26,10 @@ export async function checkSystemUpdates() {
                 completed_at TIMESTAMP
             )
         `);
+
+        // Cleanup old non-admin system updates (optional cleanup)
+        // Removes specific old version patterns if needed to clean up display
+        await db.query("DELETE FROM dashboard_tasks WHERE id LIKE 'sys-v%'");
 
         for (const update of SYSTEM_UPDATES) {
             // Check if exists

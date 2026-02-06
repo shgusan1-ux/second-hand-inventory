@@ -1,134 +1,178 @@
 import { db } from '@/lib/db';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Search, PlusCircle } from 'lucide-react';
-import Link from 'next/link';
-import { DiscardButton } from '@/components/inventory/discard-button';
-import { SmartStoreButton } from '@/components/inventory/smartstore-button';
+import { Card, CardContent } from '@/components/ui/card';
+import { InventoryFilter } from '@/components/inventory/inventory-filter';
+import { InventoryTable } from '@/components/inventory/inventory-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InventoryPage({
     searchParams,
 }: {
-    searchParams: Promise<{ q?: string; category?: string; status?: string }>;
+    searchParams: Promise<{
+        q?: string;
+        category?: string;
+        categories?: string;
+        conditions?: string;
+        sizes?: string;
+        status?: string;
+        excludeCode?: string;
+        startDate?: string;
+        endDate?: string;
+        limit?: string;
+        page?: string;
+        sort?: string;
+        order?: string;
+    }>;
 }) {
     const resolvedParams = await searchParams;
     const query = resolvedParams.q || '';
-    const categoryFilter = resolvedParams.category || '';
-    const statusFilter = resolvedParams.status || ''; // '판매중', '판매완료', etc.
+    const excludeCode = resolvedParams.excludeCode || '';
+    const startDate = resolvedParams.startDate || '';
+    const endDate = resolvedParams.endDate || '';
+    const statusParam = resolvedParams.status || '';
+    const categoriesParam = resolvedParams.category /* legacy */ || resolvedParams.categories || '';
+    const conditionsParam = resolvedParams.conditions || '';
+    const sizesParam = resolvedParams.sizes || '';
 
-    // Base Condition: Exclude discarded items
-    let sqlConditions = [`status != '폐기'`];
+    // Pagination
+    const page = parseInt(resolvedParams.page || '1', 10);
+    const limit = parseInt(resolvedParams.limit || '50', 10);
+    const safeLimit = isNaN(limit) ? 50 : Math.min(limit, 1000);
+    const offset = (page - 1) * safeLimit;
+
+    // Build SQL Conditions
+    let sqlConditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Status Filter logic
+    if (statusParam) {
+        const statuses = statusParam.split(',').map(s => s.trim()).filter(Boolean);
+        if (statuses.length > 0) {
+            const placeholders = statuses.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`status IN (${placeholders.join(', ')})`);
+            params.push(...statuses);
+        }
+    } else {
+        sqlConditions.push(`status != '폐기'`);
+    }
+
+    // Category Filter
+    if (categoriesParam) {
+        const cats = categoriesParam.split(',').map(s => s.trim()).filter(Boolean);
+        if (cats.length > 0) {
+            const placeholders = cats.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`category IN (${placeholders.join(', ')})`);
+            params.push(...cats);
+        }
+    }
+
+    // Condition Filter
+    if (conditionsParam) {
+        const conds = conditionsParam.split(',').map(s => s.trim()).filter(Boolean);
+        if (conds.length > 0) {
+            const placeholders = conds.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`condition IN (${placeholders.join(', ')})`);
+            params.push(...conds);
+        }
+    }
+
+    // Size Filter
+    if (sizesParam) {
+        const sizes = sizesParam.split(',').map(s => s.trim()).filter(Boolean);
+        if (sizes.length > 0) {
+            const placeholders = sizes.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`size IN (${placeholders.join(', ')})`);
+            params.push(...sizes);
+        }
+    }
+
+    // Search Query
     if (query) {
-        sqlConditions.push(`(name LIKE $${paramIndex} OR id LIKE $${paramIndex})`);
-        params.push(`%${query}%`);
+        // Bulk Search Logic: Check for comma or newline separators
+        // This allows users to paste multiple IDs to find them quickly
+        const terms = query.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
+        if (terms.length > 1) {
+            // Bulk ID Search Mode
+            const placeholders = terms.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`id IN (${placeholders.join(', ')})`);
+            params.push(...terms);
+        } else {
+            // Single Term Broad Search Mode
+            sqlConditions.push(`(name LIKE $${paramIndex} OR id LIKE $${paramIndex} OR brand LIKE $${paramIndex})`);
+            params.push(`%${query}%`);
+            paramIndex++;
+        }
+    }
+
+    // Exclude Code
+    if (excludeCode) {
+        const excludes = excludeCode.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+        if (excludes.length > 0) {
+            const placeholders = excludes.map(() => `$${paramIndex++}`);
+            sqlConditions.push(`id NOT IN (${placeholders.join(', ')})`);
+            params.push(...excludes);
+        }
+    }
+
+    // Date Range
+    if (startDate) {
+        sqlConditions.push(`created_at >= $${paramIndex}`);
+        params.push(`${startDate} 00:00:00`);
         paramIndex++;
     }
 
-    if (categoryFilter) {
-        sqlConditions.push(`category = $${paramIndex}`);
-        params.push(categoryFilter);
-        paramIndex++;
-    }
-
-    if (statusFilter) {
-        sqlConditions.push(`status = $${paramIndex}`);
-        params.push(statusFilter);
+    if (endDate) {
+        sqlConditions.push(`created_at <= $${paramIndex}`);
+        params.push(`${endDate} 23:59:59`);
         paramIndex++;
     }
 
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';
-    const sqlQuery = `SELECT * FROM products ${whereClause} ORDER BY created_at DESC`;
 
-    const result = await db.query(sqlQuery, params);
+    // 1. Fetch Total Count for Pagination
+    // Note: We cast the result to avoid TS errors with specific DB adapter return types
+    const countSql = `SELECT COUNT(*) as count FROM products ${whereClause}`;
+    const countResult = await db.query(countSql, params);
+    const totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
+
+    // Sort Logic
+    const sort = resolvedParams.sort || 'created_at';
+    const order = resolvedParams.order || 'desc';
+
+    // Whitelist sort fields
+    const validSorts = ['id', 'name', 'price_sell', 'status', 'created_at'];
+    const safeSort = validSorts.includes(sort) ? sort : 'created_at';
+    const safeOrder = order === 'asc' ? 'ASC' : 'DESC';
+
+    // 2. Fetch Data
+    const dataSql = `SELECT * FROM products ${whereClause} ORDER BY ${safeSort} ${safeOrder} LIMIT ${safeLimit} OFFSET ${offset}`;
+    // Warning: We must NOT pass LIMIT/OFFSET as params because we hardcoded them in string.
+    // The `params` array matches the placeholders in `whereClause`.
+    const result = await db.query(dataSql, params);
     const products = result.rows;
+
+    // 3. Fetch Brands for Filter
+    const brandResult = await db.query('SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND brand != \'\' ORDER BY brand ASC');
+    const brands = brandResult.rows.map(r => r.brand);
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">재고 목록</h1>
-                {/* Registration buttons moved to /inventory/new */}
+                <p className="text-sm font-medium text-slate-500">원하는 상품을 빠르게 찾을 수 있는 페이지입니다.</p>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                            <form>
-                                <Input
-                                    name="q"
-                                    placeholder="상품명 또는 상품코드로 검색..."
-                                    className="pl-9"
-                                    defaultValue={query}
-                                />
-                                {/* Preserve other filters if needed, or handle via JS. For now basic reload. */}
-                            </form>
-                        </div>
-                        {/* Filter buttons could go here */}
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="relative w-full overflow-auto">
-                        <table className="w-full caption-bottom text-sm text-left">
-                            <thead className="[&_tr]:border-b">
-                                <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[80px]">이미지</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">자체상품코드</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">상품명</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">브랜드</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">사이즈</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">카테고리</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">판매가</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground">상태</th>
-                                    <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right">삭제/관리</th>
-                                </tr>
-                            </thead>
-                            <tbody className="[&_tr:last-child]:border-0">
-                                {products.length === 0 ? (
-                                    <tr><td colSpan={9} className="p-4 text-center text-slate-500">검색 결과가 없습니다.</td></tr>
-                                ) : (
-                                    products.map((product) => (
-                                        <tr key={product.id} className="border-b transition-colors hover:bg-slate-50">
-                                            <td className="p-4 align-middle font-mono text-xs"></td> {/* Placeholder for image */}
-                                            <td className="p-4 align-middle">
-                                                <Link href={`/inventory/${product.id}`} className="hover:underline font-mono text-emerald-700">
-                                                    {product.id}
-                                                </Link>
-                                            </td>
-                                            <td className="p-4 align-middle font-medium">{product.name}</td>
-                                            <td className="p-4 align-middle text-slate-500">{product.brand}</td>
-                                            <td className="p-4 align-middle text-slate-500">{product.size}</td>
-                                            <td className="p-4 align-middle text-slate-500 hidden md:table-cell">{product.category}</td>
-                                            <td className="p-4 align-middle">₩{product.price_sell.toLocaleString()}</td>
-                                            <td className="p-4 align-middle text-center">
-                                                <span className={
-                                                    product.status === '판매중' ? 'bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full text-xs font-semibold' :
-                                                        product.status === '판매완료' ? 'bg-slate-100 text-slate-500 px-2 py-1 rounded-full text-xs font-semibold' :
-                                                            'bg-orange-100 text-orange-700 px-2 py-1 rounded-full text-xs font-semibold'
-                                                }>
-                                                    {product.status}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 align-middle text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <SmartStoreButton product={product} />
-                                                    <DiscardButton id={product.id} name={product.name} />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </CardContent>
-            </Card>
+            <InventoryFilter brands={brands} />
+
+            {/* Render Client Component Table */}
+            <InventoryTable
+                products={products}
+                totalCount={totalCount}
+                limit={safeLimit}
+                currentPage={page}
+            />
         </div>
     );
 }

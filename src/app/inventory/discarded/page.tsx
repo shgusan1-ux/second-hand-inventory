@@ -1,7 +1,10 @@
 import { db } from '@/lib/db';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
+import { restoreProduct, permanentlyDeleteProduct } from '@/lib/actions';
+import { RefreshCw, Trash2 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +63,26 @@ export default async function DiscardedInventoryPage() {
                                 <div className="text-right">
                                     <div className="font-bold text-slate-600">{product.price_sell?.toLocaleString()}원</div>
                                     <div className="text-xs text-slate-400 line-through">{product.price_consumer?.toLocaleString()}원</div>
+
+                                    <div className="flex gap-2 mt-2 justify-end">
+                                        <form action={async () => {
+                                            'use server';
+                                            await restoreProduct(product.id);
+                                        }}>
+                                            <Button variant="outline" size="sm" className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50">
+                                                <RefreshCw className="h-3 w-3 mr-1" /> 복구
+                                            </Button>
+                                        </form>
+
+                                        <form action={async () => {
+                                            'use server';
+                                            await permanentlyDeleteProduct(product.id);
+                                        }}>
+                                            <Button variant="outline" size="sm" className="h-7 text-xs border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300">
+                                                <Trash2 className="h-3 w-3 mr-1" /> 삭제
+                                            </Button>
+                                        </form>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

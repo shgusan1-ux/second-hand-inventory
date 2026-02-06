@@ -6,58 +6,78 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Clock, Star, Archive, Tag, ArrowRight } from "lucide-react";
 
-export function SmartStoreDashboard({ groups }: { groups: any }) {
-
-    const ProductList = ({ items, tag, color, discount }: { items: any[], tag: string, color: string, discount: number }) => (
+// Helper Component extracted outside
+function ProductList({ items, tag, color, discount }: { items: any[], tag: string, color: string, discount: number }) {
+    return (
         <div className="space-y-4">
             {items.length === 0 ? (
                 <div className="text-center py-10 text-slate-500">해당 조건의 상품이 없습니다.</div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    {items.map((item: any) => {
-                        const originalPrice = item.price_sell;
-                        const discountedPrice = discount > 0
-                            ? Math.round(originalPrice * (1 - discount / 100) / 100) * 100
-                            : originalPrice;
+                <div className="relative w-full overflow-auto border rounded-md">
+                    <table className="w-full caption-bottom text-sm text-left">
+                        <thead className="[&_tr]:border-b bg-slate-50 sticky top-0 z-10">
+                            <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground">상품코드</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground w-[60px]">이미지</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground">브랜드</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground">상품명</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground">마스터등록일</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground">경과</th>
+                                <th className="h-10 px-4 align-middle font-medium text-muted-foreground text-right w-[150px]">판매가</th>
+                            </tr>
+                        </thead>
+                        <tbody className="[&_tr:last-child]:border-0 divide-y">
+                            {items.map((item: any) => {
+                                const originalPrice = item.price_sell;
+                                const discountedPrice = discount > 0
+                                    ? Math.round(originalPrice * (1 - discount / 100) / 100) * 100
+                                    : originalPrice;
 
-                        return (
-                            <Card key={item.id} className="overflow-hidden hover:shadow-md transition-shadow relative">
-                                <div className="aspect-square bg-slate-100 relative group">
-                                    {item.image_url ? (
-                                        <img src={item.image_url} alt={item.name} className="object-cover w-full h-full" />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-slate-300">No Img</div>
-                                    )}
-                                    <Badge className={`absolute top-2 left-2 ${color}`}>{tag}</Badge>
-                                    {discount > 0 && (
-                                        <Badge className="absolute top-2 right-2 bg-red-600 animate-pulse">
-                                            {discount}% OFF
-                                        </Badge>
-                                    )}
-                                </div>
-                                <div className="p-3">
-                                    <div className="font-bold text-sm truncate">{item.brand}</div>
-                                    <div className="text-xs text-slate-600 truncate mb-2">{item.name}</div>
+                                const masterDate = item.master_reg_date ? new Date(item.master_reg_date) : null;
+                                const today = new Date();
+                                const elapsedDays = masterDate ? Math.floor((today.getTime() - masterDate.getTime()) / (1000 * 60 * 60 * 24)) : '-';
 
-                                    <div className="flex items-end gap-2">
-                                        <div className="font-bold text-lg text-slate-900">
-                                            ₩{discountedPrice.toLocaleString()}
-                                        </div>
-                                        {discount > 0 && (
-                                            <div className="text-xs text-slate-400 line-through mb-1">
-                                                ₩{originalPrice.toLocaleString()}
+                                return (
+                                    <tr key={item.id} className="transition-colors hover:bg-slate-50">
+                                        <td className="p-3 align-middle font-black text-slate-900 font-mono text-base">{item.id}</td>
+                                        <td className="p-3 align-middle">
+                                            <div className="relative h-10 w-10 rounded overflow-hidden bg-slate-100 border">
+                                                {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.name} className="object-cover w-full h-full" />
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full text-[10px] text-slate-300">img</div>
+                                                )}
+                                                <Badge className={`absolute top-0 right-0 p-[2px] text-[8px] h-3 ${color} pointer-events-none`}>{tag}</Badge>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </Card>
-                        );
-                    })}
+                                        </td>
+                                        <td className="p-3 align-middle font-medium">{item.brand}</td>
+                                        <td className="p-3 align-middle text-slate-600 truncate max-w-[300px]">{item.name}</td>
+                                        <td className="p-3 align-middle text-xs text-slate-500">
+                                            {masterDate ? masterDate.toLocaleDateString() : '-'}
+                                        </td>
+                                        <td className="p-3 align-middle text-xs font-bold text-slate-700">
+                                            {typeof elapsedDays === 'number' ? `${elapsedDays}일` : '-'}
+                                        </td>
+                                        <td className="p-3 align-middle text-right">
+                                            <div className="flex flex-col items-end">
+                                                <span className="font-bold text-slate-900">₩{discountedPrice.toLocaleString()}</span>
+                                                {discount > 0 && (
+                                                    <span className="text-xs text-slate-400 line-through">₩{originalPrice.toLocaleString()}</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>
     );
+}
 
+export function SmartStoreDashboard({ groups }: { groups: any }) {
     return (
         <Tabs defaultValue="new" className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-end gap-4">
@@ -68,10 +88,10 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                     </p>
                 </div>
                 <TabsList>
-                    <TabsTrigger value="new">NEW (신규)</TabsTrigger>
-                    <TabsTrigger value="curated">CURATED (추천)</TabsTrigger>
-                    <TabsTrigger value="archive">ARCHIVE (빈티지)</TabsTrigger>
-                    <TabsTrigger value="clearance">CLEARANCE (재고)</TabsTrigger>
+                    <TabsTrigger value="new">NEW <Badge variant="secondary" className="ml-2 h-5 px-1">{groups.newItems.length}</Badge></TabsTrigger>
+                    <TabsTrigger value="curated">CURATED <Badge variant="secondary" className="ml-2 h-5 px-1">{groups.curatedItems.length}</Badge></TabsTrigger>
+                    <TabsTrigger value="archive">ARCHIVE <Badge variant="secondary" className="ml-2 h-5 px-1">{groups.archiveItems.length}</Badge></TabsTrigger>
+                    <TabsTrigger value="clearance">CLEARANCE <Badge variant="secondary" className="ml-2 h-5 px-1">{groups.clearanceItems.length}</Badge></TabsTrigger>
                 </TabsList>
             </div>
 
