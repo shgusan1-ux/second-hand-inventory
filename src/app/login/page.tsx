@@ -37,7 +37,7 @@ export default function LoginPage() {
             setShowSplash(true);
             const timer = setTimeout(() => {
                 router.push('/');
-            }, 2000);
+            }, 4000);
             return () => clearTimeout(timer);
         }
     }, [state?.success, router]);
@@ -83,10 +83,8 @@ export default function LoginPage() {
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                     </div>
                     <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
-                        <span className="text-sm font-medium opacity-80 block mb-1 tracking-wider uppercase">(주)에이치엠이커머스</span>
-                        환경을 생각하는 기업
+                        <span className="text-lg font-bold block mb-1 tracking-wider uppercase">(주)에이치엠이커머스</span>
                     </h1>
-                    <p className="text-sm font-medium opacity-70">자연과 함께하는 지속 가능한 미래</p>
                 </div>
                 <form action={formAction} className="space-y-5">
                     <div className="space-y-2">
@@ -122,14 +120,9 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            {/* Bottom Slogan & Logo - Changed to relative/flex to avoid overlap on small screens */}
+            {/* Bottom Slogan & Logo - Removed per user request */}
             <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-4">
-                <span className="text-2xl md:text-4xl font-light text-white tracking-widest drop-shadow-lg opacity-90" style={{ fontFamily: 'serif' }}>Eco-Friendly Life</span>
-                <p className="text-xs text-white/50 uppercase tracking-[0.5em]">Brown Street Inventory System</p>
-                <div className="opacity-80 hover:opacity-100 transition-opacity mt-2">
-                    {/* Logo expecting public/brown_street.svg */}
-                    <Image src="/brown_street.svg" alt="Brown Street Logo" width={150} height={50} className="object-contain invert brightness-0 filter" />
-                </div>
+                <p className="text-xs text-white/50 uppercase tracking-[0.5em] mb-4">Brown Street Inventory System</p>
             </div>
         </div>
     );
