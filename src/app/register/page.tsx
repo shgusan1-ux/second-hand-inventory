@@ -113,7 +113,10 @@ export default function RegisterPage() {
                     <p className="text-sm font-medium text-slate-600">함께 성장하는 여정을 시작하세요</p>
                 </div>
                 <form action={formAction} className="space-y-4">
-                    <EmailVerificationSection />
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-slate-500">이메일</label>
+                        <Input name="email" type="email" placeholder="example@company.com" className="h-10" />
+                    </div>
 
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase text-slate-500">휴대폰 번호 (ID)</label>

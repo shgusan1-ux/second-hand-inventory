@@ -527,11 +527,14 @@ export async function deleteUser(targetId: string) {
         await db.query('DELETE FROM attendance_logs WHERE user_id = $1', [targetId]);
 
         // 2. Action Logs (Optional: Update to NULL if you want to keep logs, or delete)
-        // For now, assuming we want to remove all traces or if FK exists:
-        // Attempt to set user_id to NULL if nullable, otherwise delete.
-        // Let's try deleting for clean removal or UPDATE if FK fails.
-        // Safest approach for "Delete Account" feature request often implies full removal.
-        await db.query('DELETE FROM action_logs WHERE user_id = $1', [targetId]);
+        // 2. Audit Logs (Fixed table name from action_logs to audit_logs)
+        await db.query('DELETE FROM audit_logs WHERE user_id = $1', [targetId]);
+
+        // 3. Security Logs
+        await db.query('DELETE FROM security_logs WHERE user_id = $1', [targetId]);
+
+        // 4. User Permissions (if exists)
+        await db.query('DELETE FROM user_permissions WHERE user_id = $1', [targetId]);
 
         // 3. Delete User
         await db.query('DELETE FROM users WHERE id = $1', [targetId]);

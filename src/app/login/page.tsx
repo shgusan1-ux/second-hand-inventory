@@ -50,7 +50,7 @@ export default function LoginPage() {
                     <div className="mb-8 opacity-0 animate-in slide-in-from-bottom-5 duration-1000 fill-mode-forwards">
                         <Image src="/brown_street.svg" alt="Brown Street" width={200} height={60} className="mx-auto invert brightness-0 filter" />
                     </div>
-                    <h2 className="text-2xl md:text-4xl font-light leading-relaxed font-serif italic mb-6 opacity-0 animate-in zoom-in-95 duration-1000 delay-300 fill-mode-forwards">
+                    <h2 className="text-2xl md:text-4xl font-light leading-relaxed font-serif italic mb-6 animate-in zoom-in-95 duration-1000 delay-300 fill-mode-forwards">
                         "{quote}"
                     </h2>
                     <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full opacity-0 animate-in expand duration-700 delay-700 fill-mode-forwards"></div>
