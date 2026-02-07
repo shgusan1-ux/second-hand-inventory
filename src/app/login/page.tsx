@@ -37,7 +37,7 @@ export default function LoginPage() {
             setShowSplash(true);
             const timer = setTimeout(() => {
                 router.push('/');
-            }, 4000);
+            }, 3000);
             return () => clearTimeout(timer);
         }
     }, [state?.success, router]);
