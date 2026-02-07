@@ -5,6 +5,8 @@ import { login } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 const QUOTES = [
     "성공은 종착점이 아니라 여정이다.",
@@ -23,15 +25,44 @@ const QUOTES = [
 export default function LoginPage() {
     const [state, formAction] = useActionState(login, { success: false, error: '' });
     const [quote, setQuote] = useState('');
+    const [showSplash, setShowSplash] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
     }, []);
 
+    useEffect(() => {
+        if (state?.success) {
+            setShowSplash(true);
+            const timer = setTimeout(() => {
+                router.push('/');
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [state?.success, router]);
+
+    if (showSplash) {
+        return (
+            <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-900 text-white animate-in fade-in duration-700">
+                <div className="absolute inset-0 bg-[url('https://images.pexels.com/photos/1001682/pexels-photo-1001682.jpeg')] bg-cover bg-center opacity-30"></div>
+                <div className="z-10 text-center max-w-2xl px-6">
+                    <div className="mb-8 opacity-0 animate-in slide-in-from-bottom-5 duration-1000 fill-mode-forwards">
+                        <Image src="/brown_street.svg" alt="Brown Street" width={200} height={60} className="mx-auto invert brightness-0 filter" />
+                    </div>
+                    <h2 className="text-2xl md:text-4xl font-light leading-relaxed font-serif italic mb-6 opacity-0 animate-in zoom-in-95 duration-1000 delay-300 fill-mode-forwards">
+                        "{quote}"
+                    </h2>
+                    <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full opacity-0 animate-in expand duration-700 delay-700 fill-mode-forwards"></div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="fixed inset-0 z-[9999] overflow-hidden flex items-center justify-center p-4 bg-slate-900">
+        <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 bg-slate-900 overflow-y-auto">
             {/* Live Background Video */}
-            <div className="absolute inset-0 z-0">
+            <div className="fixed inset-0 z-0">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20 z-10"></div>
                 <video
                     autoPlay
@@ -46,7 +77,7 @@ export default function LoginPage() {
                 </video>
             </div>
 
-            <div className="w-full max-w-sm space-y-6 p-8 bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 relative z-20 transition-all hover:scale-[1.01] duration-300">
+            <div className="w-full max-w-sm space-y-6 p-8 bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
                 <div className="space-y-2 text-center text-white">
                     <div className="mx-auto w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/30">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
@@ -56,11 +87,6 @@ export default function LoginPage() {
                         환경을 생각하는 기업
                     </h1>
                     <p className="text-sm font-medium opacity-70">자연과 함께하는 지속 가능한 미래</p>
-                    {quote && (
-                        <div className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10 backdrop-blur-sm">
-                            <p className="text-xs italic text-white/90 font-serif">"{quote}"</p>
-                        </div>
-                    )}
                 </div>
                 <form action={formAction} className="space-y-5">
                     <div className="space-y-2">
@@ -96,10 +122,14 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            {/* Bottom Slogan */}
-            <div className="absolute bottom-10 left-0 right-0 text-center z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in">
-                <span className="text-4xl font-light text-white tracking-widest drop-shadow-lg opacity-90" style={{ fontFamily: 'serif' }}>Eco-Friendly Life</span>
-                <p className="text-xs text-white/50 mt-2 uppercase tracking-[0.5em]">Brown Street Inventory System</p>
+            {/* Bottom Slogan & Logo - Changed to relative/flex to avoid overlap on small screens */}
+            <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-4">
+                <span className="text-2xl md:text-4xl font-light text-white tracking-widest drop-shadow-lg opacity-90" style={{ fontFamily: 'serif' }}>Eco-Friendly Life</span>
+                <p className="text-xs text-white/50 uppercase tracking-[0.5em]">Brown Street Inventory System</p>
+                <div className="opacity-80 hover:opacity-100 transition-opacity mt-2">
+                    {/* Logo expecting public/brown_street.svg */}
+                    <Image src="/brown_street.svg" alt="Brown Street Logo" width={150} height={50} className="object-contain invert brightness-0 filter" />
+                </div>
             </div>
         </div>
     );

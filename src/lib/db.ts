@@ -70,7 +70,9 @@ export const db = {
           return { rows: [], rowCount: result.changes };
         }
       } catch (e) {
-        console.error("SQL Error:", e, text, params);
+        console.error("SQL Error:", e);
+        console.error("Failed SQL:", sqliteSql);
+        console.error("Parameters:", newParams);
         throw e;
       }
     }

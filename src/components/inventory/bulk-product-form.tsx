@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, FileSpreadsheet, Upload, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { ensureBrand } from '@/lib/brand-extractor';
 
 export function BulkProductForm() {
     const [file, setFile] = useState<File | null>(null);
@@ -71,16 +72,21 @@ export function BulkProductForm() {
                     if (row[imgCol]) images.push(String(row[imgCol]).trim());
                 }
 
+                const productName = String(row[2]).trim();
+                const brandFromExcel = row[16] ? String(row[16]).trim() : '';
+                const masterRegDate = row[17] ? String(row[17]).trim() : '';
+
                 parsedRows.push({
                     id: row[0] ? String(row[0]).trim() : '',
                     category: row[1] ? String(row[1]).trim() : '기타',
-                    name: String(row[2]).trim(),
+                    name: productName,
                     price_sell: row[3] ? Number(String(row[3]).replace(/,/g, '')) : 0,
                     price_consumer: row[4] ? Number(String(row[4]).replace(/,/g, '')) : 0,
                     image_url: images.length > 0 ? images[0] : '',
                     images: images,
                     md_comment: row[15] ? String(row[15]) : '', // Keep standard string, HTML is fine
-                    brand: row[16] ? String(row[16]).trim() : '',
+                    brand: ensureBrand(productName, brandFromExcel),
+                    master_reg_date: masterRegDate,
                     status: '판매중',
                     condition: 'A급',
                     size: ''
@@ -110,9 +116,10 @@ export function BulkProductForm() {
         setSuccessCount(0);
         setError('');
 
-        const BATCH_SIZE = 50; // Safe batch size for Vercel functions
+        const BATCH_SIZE = 20; // Reduce batch size for safety and debugging
         const totalBatches = Math.ceil(fullData.length / BATCH_SIZE);
         let completed = 0;
+        let lastErrorMsg = '';
 
         for (let i = 0; i < fullData.length; i += BATCH_SIZE) {
             setCurrentBatch(Math.floor(i / BATCH_SIZE) + 1);
@@ -124,12 +131,12 @@ export function BulkProductForm() {
                     completed += res.count || chunk.length;
                     setSuccessCount(completed);
                 } else {
-                    // Log error but maybe continue? Or stop?
-                    // For now, let's continue but log it.
                     console.error(`Batch ${i} failed:`, res.error);
+                    lastErrorMsg = res.error || 'Unknown error';
                 }
-            } catch (e) {
-                console.error(`Batch ${i} network error`);
+            } catch (e: any) {
+                console.error(`Batch ${i} network error`, e);
+                lastErrorMsg = e.message || 'Network error';
             }
 
             // Update Progress
@@ -141,7 +148,12 @@ export function BulkProductForm() {
         }
 
         setUploading(false);
-        alert(`${completed}개 상품 등록이 완료되었습니다.`);
+        const failed = totalRows - completed;
+        if (failed > 0) {
+            alert(`완료되었습니다.\n성공: ${completed}개\n\n[오류 발생]\n실패: ${failed}개\n원인: ${lastErrorMsg}\n(콘솔 로그 확인 필요)`);
+        } else {
+            alert(`${completed}개 상품 등록이 완료되었습니다.`);
+        }
         router.refresh();
         setFile(null);
         setPreview([]);
@@ -289,6 +301,7 @@ export function BulkProductForm() {
                     <li><strong>F~O열</strong>: 이미지 URL (최대 10개)</li>
                     <li><strong>P열</strong>: 상품 상세 설명 (HTML 가능, 대용량 지원)</li>
                     <li><strong>Q열</strong>: 브랜드</li>
+                    <li><strong>R열</strong>: 마스터상품등록일 (예: 2024-01-15, 선택사항)</li>
                 </ul>
             </div>
         </div>

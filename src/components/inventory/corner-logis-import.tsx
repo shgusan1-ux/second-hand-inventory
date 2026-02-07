@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input'; // Added Input import
 
 import * as XLSX from 'xlsx';
+import { ensureBrand } from '@/lib/brand-extractor';
 
 export function CornerLogisImportForm() {
     const [text, setText] = useState('');
@@ -56,7 +57,7 @@ export function CornerLogisImportForm() {
             return {
                 id: cleanId,
                 name: name || '상품명 없음',
-                brand: '', // Not provided in this layout
+                brand: ensureBrand(name || ''), // Extract brand from product name
                 category: '기타', // Not provided
                 price_consumer: 0,
                 price_sell: 0, // Needs pricing engine later

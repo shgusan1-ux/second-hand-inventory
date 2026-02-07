@@ -9,12 +9,21 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, RotateCcw, Filter, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
+interface InventoryFilterProps {
+    brands?: string[];
+    categories?: any[];
+    onBulkSearch?: (codes: string[]) => void;
+    onReset?: () => void;
+    isLoading?: boolean;
+}
+
+export function InventoryFilter({ brands = [], categories = [], onBulkSearch, onReset, isLoading }: InventoryFilterProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
     // States for filter inputs (initialize from URL)
     const [query, setQuery] = useState(searchParams.get('q') || '');
+    const [searchField, setSearchField] = useState(searchParams.get('field') || 'all');
     const [excludeCode, setExcludeCode] = useState(searchParams.get('excludeCode') || '');
     const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
     const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
@@ -26,8 +35,32 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
     const [selectedBrand, setSelectedBrand] = useState(searchParams.get('brand') || 'all');
 
     const handleSearch = () => { // Trigger search
+        // Smart Parsing for Glued Codes
+        let rawCodes = query.split(/[\n,\s]+/).map(s => s.trim()).filter(Boolean);
+        const cleanedCodes: string[] = [];
+
+        for (const code of rawCodes) {
+            if (code.length > 20 || (code.length > 10 && /[A-Z].*[A-Z]/.test(code))) {
+                const parts = code.replace(/([a-z0-9])([A-Z]{3,})/g, '$1 $2').split(' ');
+                cleanedCodes.push(...parts);
+            } else {
+                cleanedCodes.push(code);
+            }
+        }
+
+        const finalCodes = cleanedCodes.filter(c => c.length >= 3);
+        const isBulk = finalCodes.length > 1;
+
+        if (isBulk && onBulkSearch) {
+            if (finalCodes.length > 0) {
+                onBulkSearch(finalCodes);
+                return;
+            }
+        }
+
         const params = new URLSearchParams();
         if (query) params.set('q', query);
+        if (searchField && searchField !== 'all') params.set('field', searchField);
         if (excludeCode) params.set('excludeCode', excludeCode);
         if (startDate) params.set('startDate', startDate);
         if (endDate) params.set('endDate', endDate);
@@ -36,30 +69,35 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
         if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
         if (selectedConditions.length > 0) params.set('conditions', selectedConditions.join(','));
         if (selectedSizes.length > 0) params.set('sizes', selectedSizes.join(','));
-        if (selectedBrand && selectedBrand !== 'all') params.set('q', selectedBrand); // Brand search can reuse query param or be separate. Usually specific filter.
-        // User asked for "Rolling Box". I'll use query param 'brand' if I handle it in page.tsx. 
-        // Page.tsx currently searches 'q' against brand column. So setting 'q' to brand works simplistically, 
-        // but cleaner to use specific brand param if we want to combine with text search.
-        // Let's check page.tsx... it checks "name LIKE q OR brand LIKE q".
-        // If I want strict filtering: modify page.tsx to handle 'brand' param.
-        // For now, let's keep it simple: just set 'q' to brand if empty, or append?
-        // Actually, let's just add 'brand' param support in page.tsx if possible, but 'q' works for now.
-        // Wait, user explicitly asked for "Brand Select".
-        // I'll stick to 'q' for now as a fallback or if I can edit page.tsx again I would add strict filter.
-        // Let's try to append to query if it's broad search.
-        // Actually, I'll assume 'q' handles it.
+        if (selectedBrand && selectedBrand !== 'all') params.set('brand', selectedBrand);
 
-        // Reset to page 1 on new search
         params.set('page', '1');
-
-        router.push(`/inventory?${params.toString()}`);
+        router.push(`/inventory/manage?${params.toString()}`);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch();
     };
 
+    const handlePaste = (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text');
+        const formatted = text.replace(/[\r\n]+/g, ' ');
+
+        if (text.includes('\n') || text.length > 50) {
+            setQuery(formatted);
+        } else {
+            setQuery(formatted);
+        }
+    };
+
     const applyDatePreset = (preset: string) => {
+        if (preset === 'all') {
+            setStartDate('');
+            setEndDate('');
+            return;
+        }
+
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -75,7 +113,7 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
             const yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
             start = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-            end = start; // Just yesterday
+            end = start;
         } else if (preset === 'week') {
             const weekAgo = new Date(today);
             weekAgo.setDate(today.getDate() - 7);
@@ -90,14 +128,23 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
         setEndDate(end);
     };
 
-    // Update resetFilters to clear brand
     const resetFilters = () => {
         setQuery('');
+        setSearchField('all');
         setExcludeCode('');
         setStartDate('');
         setEndDate('');
         setSelectedBrand('all');
-        router.push('/inventory');
+        setSelectedStatuses([]);
+        setSelectedCategories([]);
+        setSelectedConditions([]);
+        setSelectedSizes([]);
+
+        if (onReset) {
+            onReset();
+        } else {
+            router.push('/inventory/manage');
+        }
     };
 
     return (
@@ -106,22 +153,31 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
                 <div className="flex flex-col md:flex-row gap-4">
                     {/* Main Search */}
                     <div className="flex-1 relative flex gap-2">
-                        {/* Brand Select (New) */}
-                        <div className="w-40 shrink-0">
-                            <Select value={selectedBrand} onValueChange={(val) => {
-                                setSelectedBrand(val);
-                                // Auto-set query if empty? Or just let user click search.
-                                // If I set query to brand, it overwrites other text.
-                                // Better: Set query to brand when changed.
-                                if (val !== 'all') setQuery(val);
-                            }}>
+                        {/* Search Field Select */}
+                        <div className="w-[120px] shrink-0">
+                            <Select value={searchField} onValueChange={setSearchField}>
                                 <SelectTrigger className="bg-white">
-                                    <SelectValue placeholder="브랜드 선택" />
+                                    <SelectValue placeholder="검색 옵션" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">통합검색</SelectItem>
+                                    <SelectItem value="name">상품명</SelectItem>
+                                    <SelectItem value="id">상품코드</SelectItem>
+                                    <SelectItem value="brand">브랜드</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Brand Select */}
+                        <div className="w-[150px] shrink-0">
+                            <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                                <SelectTrigger className="bg-white">
+                                    <SelectValue placeholder="브랜드 전체" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px]">
-                                    <SelectItem value="all">전체 브랜드</SelectItem>
-                                    {brands.map(b => (
-                                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                                    <SelectItem value="all">브랜드 전체</SelectItem>
+                                    {brands.map((brand) => (
+                                        <SelectItem key={brand} value={brand}>{brand}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -133,195 +189,111 @@ export function InventoryFilter({ brands = [] }: { brands?: string[] }) {
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="상품명, 브랜드, 코드 검색..."
+                                onPaste={handlePaste}
+                                placeholder="상품명, 코드 검색... (엑셀 붙여넣기 가능)"
                                 className="pl-9 bg-white"
                             />
+                            {/* Code Counter */}
+                            {query && (
+                                <div className="absolute right-3 top-2.5 text-xs text-slate-400">
+                                    {query.split(/[\n,\s]+/).filter(Boolean).length > 1 &&
+                                        `${query.split(/[\n,\s]+/).filter(Boolean).length}개`
+                                    }
+                                </div>
+                            )}
                         </div>
                     </div>
-                    {/* ... rest of UI ... */}
 
-                    {/* Exclude Code (Multiline Support) */}
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="outline" className={`justify-start text-slate-600 ${excludeCode ? 'border-red-300 bg-red-50 text-red-700' : 'bg-white'}`}>
-                                <Filter className="mr-2 h-4 w-4" />
-                                {excludeCode ? '제외 필터 적용됨' : '제외할 코드 설정'}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-4" align="end">
-                            <div className="space-y-2">
-                                <h4 className="font-medium leading-none">제외할 상품 코드</h4>
-                                <p className="text-sm text-muted-foreground">
-                                    검색 결과에서 제외할 코드를 입력하세요.<br />(줄바꿈으로 여러 개 입력 가능)
-                                </p>
-                                <textarea
-                                    className="w-full h-32 p-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 font-mono resize-none"
-                                    placeholder="A001&#10;A002&#10;B055"
-                                    value={excludeCode}
-                                    onChange={(e) => setExcludeCode(e.target.value)}
-                                />
-                                {excludeCode && (
-                                    <Button variant="ghost" size="sm" onClick={() => setExcludeCode('')} className="w-full text-red-500 h-8">
-                                        초기화
-                                    </Button>
-                                )}
-                            </div>
-                        </PopoverContent>
-                    </Popover>
-
-                    <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-700">
-                        <Search className="mr-2 h-4 w-4" />
+                    <Button onClick={resetFilters} variant="outline" size="icon" title="필터 초기화">
+                        <RotateCcw className="h-4 w-4" />
+                    </Button>
+                    <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-800">
                         검색
                     </Button>
-
-                    <Button variant="ghost" size="icon" onClick={resetFilters} title="초기화">
-                        <RotateCcw className="h-4 w-4 text-slate-500" />
-                    </Button>
                 </div>
 
-                {/* Status Filter */}
-                <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-200">
-                    <span className="text-sm font-medium text-slate-600 min-w-[60px]">상태:</span>
-                    <div className="flex flex-wrap items-center gap-4">
-                        {['판매대기', '판매중', '판매완료', '수정중', '폐기'].map((status) => (
-                            <label key={status} className="flex items-center gap-2 cursor-pointer group">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedStatuses.includes(status)}
-                                    onChange={() => {
-                                        if (selectedStatuses.includes(status)) {
-                                            setSelectedStatuses(selectedStatuses.filter(s => s !== status));
-                                        } else {
-                                            setSelectedStatuses([...selectedStatuses, status]);
-                                        }
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer accent-slate-900"
-                                />
-                                <span className={`text-sm ${selectedStatuses.includes(status) ? 'text-slate-900 font-medium' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                                    {status}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Category Filter */}
-                <div className="flex flex-wrap items-start gap-4 pt-2 border-t border-slate-200">
-                    <span className="text-sm font-medium text-slate-600 min-w-[60px] pt-1">카테고리:</span>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 max-w-4xl">
-                        {['아우터', '상의', '하의', '원피스', '가방', '지갑', '신발', '패션잡화', '기타'].map((cat) => (
-                            <label key={cat} className="flex items-center gap-2 cursor-pointer group">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedCategories.includes(cat)}
-                                    onChange={() => {
-                                        if (selectedCategories.includes(cat)) {
-                                            setSelectedCategories(selectedCategories.filter(c => c !== cat));
-                                        } else {
-                                            setSelectedCategories([...selectedCategories, cat]);
-                                        }
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer accent-slate-900"
-                                />
-                                <span className={`text-sm ${selectedCategories.includes(cat) ? 'text-slate-900 font-medium' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                                    {cat}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Condition & Size Filter (Grouped for compactness) */}
-                <div className="flex flex-col md:flex-row gap-4 pt-2 border-t border-slate-200">
-                    <div className="flex flex-wrap items-center gap-4 flex-1">
-                        <span className="text-sm font-medium text-slate-600 min-w-[60px]">등급:</span>
-                        {['새상품', 'S급', 'A급', 'B급'].map((cond) => (
-                            <label key={cond} className="flex items-center gap-2 cursor-pointer group">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedConditions.includes(cond)}
-                                    onChange={() => {
-                                        if (selectedConditions.includes(cond)) {
-                                            setSelectedConditions(selectedConditions.filter(c => c !== cond));
-                                        } else {
-                                            setSelectedConditions([...selectedConditions, cond]);
-                                        }
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer accent-slate-900"
-                                />
-                                <span className={`text-sm ${selectedConditions.includes(cond) ? 'text-slate-900 font-medium' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                                    {cond}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-
-                    <div className="w-[1px] h-6 bg-slate-200 hidden md:block"></div>
-
-                    <div className="flex flex-wrap items-center gap-4 flex-1">
-                        <span className="text-sm font-medium text-slate-600 min-w-[40px]">사이즈:</span>
-                        {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Free'].map((sz) => (
-                            <label key={sz} className="flex items-center gap-2 cursor-pointer group">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedSizes.includes(sz)}
-                                    onChange={() => {
-                                        if (selectedSizes.includes(sz)) {
-                                            setSelectedSizes(selectedSizes.filter(s => s !== sz));
-                                        } else {
-                                            setSelectedSizes([...selectedSizes, sz]);
-                                        }
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer accent-slate-900"
-                                />
-                                <span className={`text-sm ${selectedSizes.includes(sz) ? 'text-slate-900 font-medium' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                                    {sz}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Detailed Date Search */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">
-                    <span className="text-sm font-medium text-slate-600 mr-2">등록일:</span>
-                    <Button variant="outline" size="sm" onClick={() => applyDatePreset('today')} className="h-8 text-xs bg-white">오늘</Button>
-                    <Button variant="outline" size="sm" onClick={() => applyDatePreset('yesterday')} className="h-8 text-xs bg-white">어제</Button>
-                    <Button variant="outline" size="sm" onClick={() => applyDatePreset('week')} className="h-8 text-xs bg-white">1주일</Button>
-                    <Button variant="outline" size="sm" onClick={() => applyDatePreset('month')} className="h-8 text-xs bg-white">1개월</Button>
-
-                    <div className="flex items-center gap-2 ml-auto">
-                        <Input
-                            type="date"
-                            className="h-8 w-36 text-xs bg-white"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                        />
-                        <span className="text-slate-400">~</span>
-                        <Input
-                            type="date"
-                            className="h-8 w-36 text-xs bg-white"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                        />
-
-                        <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-
-                        <Select value={limit} onValueChange={setLimit}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs bg-white">
-                                <SelectValue placeholder="표시 개수" />
+                {/* Additional Filters (Row 2) */}
+                <div className="flex flex-wrap gap-2 items-center">
+                    {/* Status */}
+                    <div className="w-[120px]">
+                        <Select value={selectedStatuses.join(',')} onValueChange={(val) => setSelectedStatuses(val ? [val] : [])}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="상태" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="30">30개씩</SelectItem>
-                                <SelectItem value="50">50개씩</SelectItem>
-                                <SelectItem value="100">100개씩</SelectItem>
-                                <SelectItem value="300">300개씩</SelectItem>
-                                <SelectItem value="500">500개씩</SelectItem>
-                                <SelectItem value="1000">1000개씩</SelectItem>
+                                <SelectItem value="판매중">판매중</SelectItem>
+                                <SelectItem value="판매완료">판매완료</SelectItem>
+                                <SelectItem value="판매대기">판매대기</SelectItem>
+                                <SelectItem value="수정중">수정중</SelectItem>
+                                <SelectItem value="예약중">예약중</SelectItem>
+                                <SelectItem value="폐기">폐기</SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
 
-                        <Button variant="secondary" size="sm" onClick={handleSearch} className="h-8 text-xs">적용</Button>
+                    {/* Category */}
+                    <div className="w-[120px]">
+                        <Select value={selectedCategories.join(',')} onValueChange={(val) => setSelectedCategories(val ? [val] : [])}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="카테고리" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[300px]">
+                                {categories.map((cat: any) => (
+                                    <SelectItem key={cat.id || cat.name} value={cat.name}>{cat.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Condition (Grade) */}
+                    <div className="w-[100px]">
+                        <Select value={selectedConditions.join(',')} onValueChange={(val) => setSelectedConditions(val ? [val] : [])}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="등급" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="S급">S급 (새상품급)</SelectItem>
+                                <SelectItem value="A급">A급 (사용감 적음)</SelectItem>
+                                <SelectItem value="B급">B급 (사용감 있음)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Size */}
+                    <div className="w-[100px]">
+                        <Select value={selectedSizes.join(',')} onValueChange={(val) => setSelectedSizes(val ? [val] : [])}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="사이즈" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="XS">XS</SelectItem>
+                                <SelectItem value="S">S</SelectItem>
+                                <SelectItem value="M">M</SelectItem>
+                                <SelectItem value="L">L</SelectItem>
+                                <SelectItem value="XL">XL</SelectItem>
+                                <SelectItem value="XXL">XXL</SelectItem>
+                                <SelectItem value="FREE">FREE</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Date Presets */}
+                    <div className="flex gap-1 border-l pl-2 ml-2">
+                        <Button variant="ghost" size="sm" onClick={() => applyDatePreset('all')} className="h-9 text-xs px-2 text-slate-500">전체</Button>
+                        <Button variant="ghost" size="sm" onClick={() => applyDatePreset('today')} className="h-9 text-xs px-2 text-slate-500">오늘</Button>
+                        <Button variant="ghost" size="sm" onClick={() => applyDatePreset('yesterday')} className="h-9 text-xs px-2 text-slate-500">어제</Button>
+                        <Button variant="ghost" size="sm" onClick={() => applyDatePreset('week')} className="h-9 text-xs px-2 text-slate-500">1주</Button>
+                        <Button variant="ghost" size="sm" onClick={() => applyDatePreset('month')} className="h-9 text-xs px-2 text-slate-500">1개월</Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-xs text-slate-500">제외할 코드:</span>
+                        <Input
+                            className="w-[150px] h-9 text-xs bg-white"
+                            placeholder="제외 코드 (콤마 구분)"
+                            value={excludeCode}
+                            onChange={(e) => setExcludeCode(e.target.value)}
+                        />
                     </div>
                 </div>
             </CardContent>

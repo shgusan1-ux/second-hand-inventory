@@ -200,7 +200,8 @@ export async function login(prevState: any, formData: FormData) {
 
     await createSession(user.id);
     await logAction('LOGIN', 'user', user.id, 'User logged in');
-    redirect('/');
+    // redirect('/'); // Removed immediate redirect
+    return { success: true };
 }
 
 export async function logout() {
@@ -213,19 +214,26 @@ export async function logout() {
 
 // ...
 export async function bulkCreateProducts(products: any[]) {
+    if (!products || products.length === 0) return { success: true, count: 0 };
+
     try {
         // Lazy Column Init
         try {
-            await db.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS master_reg_date TIMESTAMP`);
-        } catch (e) { /* Ignore */ }
+            // Remove 'IF NOT EXISTS' for better SQLite compatibility (older versions)
+            // If column exists, it throws an error which we catch and ignore.
+            await db.query(`ALTER TABLE products ADD COLUMN master_reg_date TIMESTAMP`);
+        } catch (e) {
+            // Ignore "duplicate column" or "column exists" errors
+            // console.log("Column add result:", e); 
+        }
+
+        // Construct Bulk Insert Query (Multi-row Insert)
+        const valueTuples = [];
+        const params = [];
+        let paramIndex = 1;
 
         for (const item of products) {
-            await db.query(`
-            INSERT INTO products (id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, images, size, master_reg_date)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            ON CONFLICT(id) DO UPDATE SET
-            name=$2, brand=$3, category=$4, price_consumer=$5, price_sell=$6, status=$7, condition=$8, image_url=$9, md_comment=$10, images=$11, size=$12, master_reg_date=$13
-           `, [
+            params.push(
                 item.id,
                 item.name,
                 item.brand,
@@ -238,16 +246,43 @@ export async function bulkCreateProducts(products: any[]) {
                 item.md_comment || '',
                 item.images ? JSON.stringify(item.images) : '[]',
                 item.size || '',
-                item.master_reg_date || null // New field
-            ]);
+                item.master_reg_date || null
+            );
+
+            // Create placeholders for this row ($1, $2, ... $13)
+            // Ensure sequential indexing
+            const placeholders = Array.from({ length: 13 }, (_, i) => `$${paramIndex + i}`).join(', ');
+            valueTuples.push(`(${placeholders})`);
+            paramIndex += 13;
         }
+
+        const query = `
+            INSERT INTO products (id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, images, size, master_reg_date)
+            VALUES ${valueTuples.join(', ')}
+            ON CONFLICT(id) DO UPDATE SET
+            name=EXCLUDED.name,
+            brand=EXCLUDED.brand,
+            category=EXCLUDED.category,
+            price_consumer=EXCLUDED.price_consumer,
+            price_sell=EXCLUDED.price_sell,
+            status=EXCLUDED.status,
+            condition=EXCLUDED.condition,
+            image_url=EXCLUDED.image_url,
+            md_comment=EXCLUDED.md_comment,
+            images=EXCLUDED.images,
+            size=EXCLUDED.size,
+            master_reg_date=EXCLUDED.master_reg_date
+        `;
+
+        await db.query(query, params);
+
         await logAction('BULK_CREATE_PRODUCTS', 'product', 'bulk', `${products.length} items`);
         revalidatePath('/inventory');
         revalidatePath('/');
         return { success: true, count: products.length };
-    } catch (error) {
+    } catch (error: any) {
         console.error('Bulk create failed:', error);
-        return { success: false, error: 'Bulk create failed' };
+        return { success: false, error: error.message || 'Bulk create failed' };
     }
 }
 // ...
@@ -754,30 +789,34 @@ export async function bulkUpdateProducts(ids: string[], updates: any) {
     }
 
     try {
-        const setClauses = fieldsToUpdate.map((key, index) => `${key} = $${index + 2}`);
         const values = fieldsToUpdate.map(key => updates[key]);
-        const idPlaceholders = ids.map((_, i) => `$${fieldsToUpdate.length + 2 + i}`).join(', ');
 
-        const query = `
-            UPDATE products
-            SET ${setClauses.join(', ')}
-            WHERE id IN (${idPlaceholders})
-        `;
+        // SQLite has a parameter limit (usually 999).
+        // Since we bind update values + IDs, we need to be careful.
+        // Chunk size: (999 - values.length) roughly. 500 is safe.
+        const CHUNK_SIZE = 500;
 
-        await db.query(query, ['판매중', ...values, ...ids]); // Wait, $1 is reserved? No.
-        // Re-construct query params carefully.
-        // $1 is usually first param.
-        // Actually, let's construct simpler.
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            const chunkIds = ids.slice(i, i + CHUNK_SIZE);
 
-        const q = `UPDATE products SET ${fieldsToUpdate.map((k, i) => `${k} = $${i + 1}`).join(', ')} WHERE id = ANY($${fieldsToUpdate.length + 1})`;
-        await db.query(q, [...values, ids]);
+            const setClauses = fieldsToUpdate.map((key, index) => `${key} = $${index + 1}`);
+            const idPlaceholders = chunkIds.map((_, idx) => `$${values.length + 1 + idx}`).join(', ');
+
+            const query = `
+                UPDATE products
+                SET ${setClauses.join(', ')}
+                WHERE id IN (${idPlaceholders})
+            `;
+
+            await db.query(query, [...values, ...chunkIds]);
+        }
 
         await logAction('BULK_UPDATE', 'product', 'bulk', `Updated ${ids.length} items: ${fieldsToUpdate.join(', ')}`);
         revalidatePath('/inventory');
         return { success: true };
-    } catch (e) {
+    } catch (e: any) {
         console.error('Bulk update failed:', e);
-        return { success: false, error: '일괄 수정 실패' };
+        return { success: false, error: e.message || '일괄 수정 실패' };
     }
 }
 
@@ -796,5 +835,53 @@ export async function getMemos() {
         return res.rows;
     } catch (e) {
         return [];
+    }
+}
+
+export async function bulkUpdateProductsAI(ids: string[], options: { grade: boolean, price: boolean, description: boolean, name: boolean }) {
+    if (!ids || ids.length === 0) return { success: false, error: '선택된 상품이 없습니다.' };
+
+    try {
+        const CHUNK_SIZE = 500;
+        let successCount = 0;
+
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            const chunkIds = ids.slice(i, i + CHUNK_SIZE);
+            const params = [chunkIds];
+
+            // Build dynamic update query
+            let updates = [];
+
+            if (options.grade) {
+                // Mock AI Logic: Set a high grade for demonstration.
+                // Using PostgreSQL random if available, or just static for simplicity if DB compatibility varies.
+                // Safest to toggle between A and S based on ID hash or random.
+                updates.push(`condition = CASE WHEN (FLOOR(RANDOM() * 10) > 5) THEN 'S급' ELSE 'A급' END`);
+            }
+            if (options.price) {
+                // Mock AI Logic: Set random price.
+                updates.push(`price_sell = (FLOOR(RANDOM() * 90) + 10)::int * 1000`);
+            }
+            if (options.description) {
+                updates.push(`md_comment = 'AI가 분석한 추천 상품입니다. 상태가 우수하며 가격 경쟁력이 있습니다. (AI 생성)'`);
+            }
+
+            if (updates.length > 0) {
+                await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id = ANY($1)`, params);
+                successCount += chunkIds.length;
+            }
+        }
+
+        if (successCount > 0) {
+            await logAction('BULK_AI_UPDATE', 'product', 'bulk', `AI Updated ${successCount} items`);
+            revalidatePath('/inventory');
+            return { success: true, count: successCount };
+        } else {
+            return { success: false, error: '선택된 AI 작업이 없습니다.' };
+        }
+
+    } catch (e: any) {
+        console.error('AI Bulk Update Failed', e);
+        return { success: false, error: e.message || 'AI 일괄 작업 실패' };
     }
 }

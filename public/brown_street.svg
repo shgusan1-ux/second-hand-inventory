@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" width="300" height="80">
+  <defs>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#34D399;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <path d="M40,60 Q20,60 20,40 Q20,10 50,10 Q80,10 80,40 Q80,60 60,60 L50,70 L40,60 Z" fill="url(#leafGrad)" opacity="0.9"/>
+  <path d="M50,10 Q50,60 20,40" stroke="white" stroke-width="2" fill="none" opacity="0.5"/>
+  <text x="90" y="50" font-family="'Times New Roman', serif" font-size="38" font-weight="bold" fill="white" letter-spacing="1">Brown Street</text>
+  <text x="94" y="68" font-family="sans-serif" font-size="10" fill="#A7F3D0" letter-spacing="3" text-transform="uppercase">INVENTORY SYSTEM</text>
+</svg>

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { AttendanceWidget } from './attendance-widget';
 import { ClockWidget } from './clock-widget';
@@ -44,8 +45,7 @@ export function Sidebar({ user }: { user?: any }) {
         <div className="flex h-full w-64 flex-col bg-slate-900 text-white">
             <div className="flex h-16 items-center px-4 border-b border-slate-800">
                 <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <Shirt className="h-6 w-6 text-emerald-400" />
-                    <span className="font-bold tracking-tight">Brownstreet</span>
+                    <Image src="/brown_street.svg" alt="Brown Street" width={140} height={40} className="object-contain" />
                 </Link>
             </div>
             <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">

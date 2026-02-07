@@ -8,6 +8,7 @@ import { createProduct, bulkCreateProducts } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ensureBrand } from '@/lib/brand-extractor';
 
 interface Category {
     id: string;
@@ -47,10 +48,13 @@ export function ProductForm({ categories }: { categories: Category[] }) {
 
         const preview = rows.map((cols, i) => {
             // [ID] [Name] [Brand] [Category] [PriceSell] [Size/Condition?]
+            const productName = cols[1]?.trim() || '이름 없음';
+            const brandFromPaste = cols[2]?.trim() || '';
+
             return {
                 id: cols[0]?.trim() || `AUTO-${Date.now()}-${i}`,
-                name: cols[1]?.trim() || '이름 없음',
-                brand: cols[2]?.trim() || '',
+                name: productName,
+                brand: ensureBrand(productName, brandFromPaste),
                 category: cols[3]?.trim() || '기타',
                 price_consumer: parseInt(cols[4]?.replace(/,/g, '') || '0'),
                 price_sell: parseInt(cols[5]?.replace(/,/g, '') || '0'),

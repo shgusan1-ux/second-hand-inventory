@@ -1,6 +1,5 @@
 import { db } from '@/lib/db';
-import { InventoryFilter } from '@/components/inventory/inventory-filter';
-import { InventoryTable } from '@/components/inventory/inventory-table';
+import { InventoryManager } from '@/components/inventory/inventory-manager';
 import { getCategories } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
@@ -20,10 +19,12 @@ export default async function InventoryManagePage({
         endDate?: string;
         limit?: string;
         page?: string;
+        field?: string;
     }>;
 }) {
     const resolvedParams = await searchParams;
     const query = resolvedParams.q || '';
+    const searchField = resolvedParams.field || 'all';
     const excludeCode = resolvedParams.excludeCode || '';
     const startDate = resolvedParams.startDate || '';
     const endDate = resolvedParams.endDate || '';
@@ -85,16 +86,35 @@ export default async function InventoryManagePage({
         }
     }
 
-    // Search Query (Bulk)
+    // Search Query (Fallback to GET for small queries or direct URL access)
+    // Bulk search via API relies on client-side state, so this only handles URL param 'q'
     if (query) {
         const terms = query.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
         if (terms.length > 1) {
-            const placeholders = terms.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`id IN (${placeholders.join(', ')})`);
-            params.push(...terms);
+            // Bulk Search Strategy
+            if (terms.length <= 100) {
+                // Small batch: Use Safe Parameter Binding
+                const placeholders = terms.map(() => `$${paramIndex++}`);
+                sqlConditions.push(`id IN (${placeholders.join(', ')})`);
+                params.push(...terms);
+            } else {
+                // Large batch (100+): Use Sanitized Literals
+                const sanitizedTerms = terms.map(t => `'${t.replace(/'/g, "''")}'`);
+                sqlConditions.push(`id IN (${sanitizedTerms.join(', ')})`);
+            }
         } else {
-            sqlConditions.push(`(name LIKE $${paramIndex} OR id LIKE $${paramIndex} OR brand LIKE $${paramIndex})`);
-            params.push(`%${query}%`);
+            // Single Search Logic
+            if (searchField === 'name') {
+                sqlConditions.push(`name LIKE $${paramIndex}`);
+            } else if (searchField === 'id') {
+                sqlConditions.push(`id LIKE $${paramIndex}`);
+            } else if (searchField === 'brand') {
+                sqlConditions.push(`brand LIKE $${paramIndex}`);
+            } else {
+                sqlConditions.push(`(name LIKE $${paramIndex} OR id LIKE $${paramIndex} OR brand LIKE $${paramIndex})`);
+            }
+            params.push(`%${query.trim()}%`);
             paramIndex++;
         }
     }
@@ -125,14 +145,24 @@ export default async function InventoryManagePage({
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';
 
     // 1. Fetch Total Count
-    const countSql = `SELECT COUNT(*) as count FROM products ${whereClause}`;
-    const countResult = await db.query(countSql, params);
-    const totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
+    let result;
+    let totalCount = 0;
+    let products = [];
 
-    // 2. Fetch Data
-    const dataSql = `SELECT * FROM products ${whereClause} ORDER BY created_at DESC LIMIT ${safeLimit} OFFSET ${offset}`;
-    const result = await db.query(dataSql, params);
-    const products = result.rows;
+    try {
+        const countSql = `SELECT COUNT(*) as count FROM products ${whereClause}`;
+        const countResult = await db.query(countSql, params);
+        totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
+
+        // 2. Fetch Data
+        const dataSql = `SELECT * FROM products ${whereClause} ORDER BY created_at DESC LIMIT ${safeLimit} OFFSET ${offset}`;
+        result = await db.query(dataSql, params);
+        products = result.rows;
+    } catch (error) {
+        console.error("Inventory Page DB Error:", error);
+        products = [];
+        totalCount = 0;
+    }
 
     const categories = await getCategories();
 
@@ -143,15 +173,11 @@ export default async function InventoryManagePage({
                 <p className="text-sm font-medium text-slate-500">상품 정보를 수정하거나 관리할 수 있는 페이지입니다.</p>
             </div>
 
-            <InventoryFilter />
-
-            {/* Render Client Component Table with isEditable=true */}
-            <InventoryTable
-                products={products}
-                totalCount={totalCount}
-                limit={safeLimit}
+            <InventoryManager
+                initialProducts={products}
+                initialTotalCount={totalCount}
+                initialLimit={safeLimit}
                 currentPage={page}
-                isEditable={true}
                 categories={categories}
             />
         </div>

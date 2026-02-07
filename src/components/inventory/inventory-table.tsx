@@ -14,8 +14,31 @@ import { toast } from 'sonner';
 import { ProductEditDialog } from '@/components/inventory/product-edit-dialog';
 import { BulkEditDialog } from '@/components/inventory/bulk-edit-dialog';
 import * as XLSX from 'xlsx';
+import { BulkAiUpdateDialog } from '@/components/inventory/bulk-ai-update-dialog';
 
-export function InventoryTable({ products, totalCount, limit, currentPage, isEditable = false, categories = [] }: { products: any[], totalCount: number, limit: number, currentPage: number, isEditable?: boolean, categories?: any[] }) {
+interface InventoryTableProps {
+    products: any[];
+    totalCount: number;
+    limit: number;
+    currentPage: number;
+    isEditable?: boolean;
+    categories?: any[];
+    onSort?: (key: string) => void;
+    onPageChange?: (page: number) => void;
+    isBulkMode?: boolean;
+}
+
+export function InventoryTable({
+    products,
+    totalCount,
+    limit,
+    currentPage,
+    isEditable = false,
+    categories = [],
+    onSort,
+    onPageChange,
+    isBulkMode = false
+}: InventoryTableProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -35,9 +58,14 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
     };
 
     const handlePageChange = (p: number) => {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('page', p.toString());
-        router.push(`/inventory?${params.toString()}`);
+        if (isBulkMode && onPageChange) {
+            onPageChange(p);
+        } else {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('page', p.toString());
+            // Use current pathname to support both /inventory and /inventory/manage
+            router.push(`${window.location.pathname}?${params.toString()}`);
+        }
     };
 
     const handleEditImage = () => {
@@ -117,6 +145,14 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
         return <span className="text-emerald-500 ml-1">{order === 'asc' ? '↑' : '↓'}</span>;
     };
 
+    const handleHeaderClick = (col: string) => {
+        if (isBulkMode && onSort) {
+            onSort(col);
+        } else {
+            router.push(getSortLink(col));
+        }
+    };
+
     const handleBulkDelete = async () => {
         if (!confirm(`${selectedIds.length}개의 상품을 정말로 삭제(폐기)하시겠습니까?`)) return;
 
@@ -147,6 +183,15 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
                             <Edit className="w-3 h-3 mr-2" />
                             일괄 수정
                         </Button>
+                        <BulkAiUpdateDialog selectedIds={selectedIds} onSuccess={() => {
+                            setSelectedIds([]);
+                            if (isBulkMode) {
+                                // For bulk mode, ideally we should refresh parent state.
+                                // But since Dialog is fake for now, we just clear selection.
+                            } else {
+                                router.refresh();
+                            }
+                        }} />
                         <Button size="sm" variant="secondary" onClick={() => handleDownloadExcel('selected')} className="h-8 text-xs font-semibold hover:bg-blue-500 hover:text-white transition-colors">
                             <Download className="w-3 h-3 mr-2" />
                             선택 엑셀
@@ -162,12 +207,32 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
                 categories={categories}
             />
 
-            {/* Actions Bar (Download All) */}
-            <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleDownloadExcel('all')} className="h-8 text-xs">
-                    <Download className="w-3 h-3 mr-2" />
-                    전체 필터결과 엑셀 다운로드
-                </Button>
+            {/* Actions Bar & Top Pagination */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50 p-2 rounded-md border">
+                <div className="text-xs text-slate-500 font-medium pl-2">
+                    총 <span className="text-slate-900 font-bold">{totalCount.toLocaleString()}</span>개 중
+                    <span className="ml-1 text-slate-700">{(currentPage - 1) * limit + 1} ~ {Math.min(currentPage * limit, totalCount)}</span> 표시
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {/* Top Pagination Controls */}
+                    <div className="flex items-center gap-1 bg-white rounded border px-2 py-1 shadow-sm">
+                        <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={() => handlePageChange(currentPage - 1)} className="h-6 w-6 p-0 hover:bg-slate-100">
+                            <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                        <span className="text-xs font-medium min-w-[30px] text-center">
+                            {currentPage} / {totalPages || 1}
+                        </span>
+                        <Button variant="ghost" size="sm" disabled={currentPage >= totalPages} onClick={() => handlePageChange(currentPage + 1)} className="h-6 w-6 p-0 hover:bg-slate-100">
+                            <ChevronRight className="h-3 w-3" />
+                        </Button>
+                    </div>
+
+                    <Button variant="outline" size="sm" onClick={() => handleDownloadExcel('all')} className="h-8 text-xs bg-white hover:bg-slate-50">
+                        <Download className="w-3 h-3 mr-2 text-slate-500" />
+                        전체 엑셀
+                    </Button>
+                </div>
             </div>
 
             {/* Table */}
@@ -182,29 +247,31 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
                                     className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer accent-slate-900"
                                 />
                             </th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[80px]">이미지</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                                <Link href={getSortLink('id')} className="flex items-center hover:text-slate-900">
+                            <th className="h-12 px-4 align-middle w-[60px]">이미지</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('id')}>
+                                <div className="flex items-center hover:text-slate-900">
                                     자체상품코드 <SortIcon col="id" />
-                                </Link>
+                                </div>
                             </th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                                <Link href={getSortLink('name')} className="flex items-center hover:text-slate-900">
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('name')}>
+                                <div className="flex items-center hover:text-slate-900">
                                     상품명 <SortIcon col="name" />
-                                </Link>
+                                </div>
                             </th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">브랜드</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">등급</th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">사이즈</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">카테고리</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                                <Link href={getSortLink('price_sell')} className="flex items-center hover:text-slate-900">
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden md:table-cell">카테고리</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">마스터등록일</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('price_sell')}>
+                                <div className="flex items-center hover:text-slate-900">
                                     판매가 <SortIcon col="price_sell" />
-                                </Link>
+                                </div>
                             </th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                                <Link href={getSortLink('status')} className="flex items-center hover:text-slate-900">
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('status')}>
+                                <div className="flex items-center hover:text-slate-900">
                                     상태 <SortIcon col="status" />
-                                </Link>
+                                </div>
                             </th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right">
                                 {isEditable ? '관리' : '스마트스토어'}
@@ -213,7 +280,7 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
                     </thead>
                     <tbody className="[&_tr:last-child]:border-0 divide-y">
                         {products.length === 0 ? (
-                            <tr><td colSpan={10} className="p-10 text-center text-slate-500">검색 조건에 맞는 상품이 없습니다.</td></tr>
+                            <tr><td colSpan={12} className="p-10 text-center text-slate-500">검색 조건에 맞는 상품이 없습니다.</td></tr>
                         ) : (
                             products.map((product) => (
                                 <tr key={product.id} className={`transition-colors hover:bg-slate-50 ${selectedIds.includes(product.id) ? 'bg-emerald-50/50' : ''}`}>
@@ -276,8 +343,20 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
                                         )}
                                     </td>
                                     <td className="p-3 align-middle text-slate-600">{product.brand}</td>
+                                    <td className="p-3 align-middle text-center">
+                                        <span className={
+                                            product.condition === 'S급' ? 'bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-purple-200' :
+                                                product.condition === 'A급' ? 'bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-blue-200' :
+                                                    'bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs font-semibold border border-slate-200'
+                                        }>
+                                            {product.condition || 'A급'}
+                                        </span>
+                                    </td>
                                     <td className="p-3 align-middle text-slate-500 text-xs">{product.size}</td>
                                     <td className="p-3 align-middle text-slate-500 hidden md:table-cell text-xs">{product.category}</td>
+                                    <td className="p-3 align-middle text-slate-500 text-xs">
+                                        {product.master_reg_date ? new Date(product.master_reg_date).toLocaleDateString('ko-KR') : '-'}
+                                    </td>
                                     <td className="p-3 align-middle font-semibold text-slate-700">₩{product.price_sell.toLocaleString()}</td>
                                     <td className="p-3 align-middle text-center">
                                         <span className={
@@ -311,46 +390,50 @@ export function InventoryTable({ products, totalCount, limit, currentPage, isEdi
             </div>
 
             {/* Edit Dialog */}
-            {isEditable && (
-                <ProductEditDialog
-                    open={!!editingProduct}
-                    onClose={() => setEditingProduct(null)}
-                    product={editingProduct}
-                    categories={categories}
-                />
-            )}
+            {
+                isEditable && (
+                    <ProductEditDialog
+                        open={!!editingProduct}
+                        onClose={() => setEditingProduct(null)}
+                        product={editingProduct}
+                        categories={categories}
+                    />
+                )
+            }
 
             {/* Pagination Logic ... */}
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-6 pb-10">
-                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)} className="h-8 w-8 p-0">
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-
-                    {getPageNumbers().map((p, i) => (
-                        <Button
-                            key={i}
-                            variant={p === currentPage ? "default" : "outline"}
-                            size="sm"
-                            className={`h-8 w-8 p-0 ${p === currentPage ? "bg-slate-900 hover:bg-slate-800" : "hover:bg-slate-100"} ${p === '...' ? 'cursor-default hover:bg-white border-none' : ''}`}
-                            onClick={() => typeof p === 'number' && handlePageChange(p)}
-                            disabled={p === '...'}
-                        >
-                            {p}
+            {
+                totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-2 mt-6 pb-10">
+                        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)} className="h-8 w-8 p-0">
+                            <ChevronLeft className="h-4 w-4" />
                         </Button>
-                    ))}
 
-                    <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)} className="h-8 w-8 p-0">
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
+                        {getPageNumbers().map((p, i) => (
+                            <Button
+                                key={i}
+                                variant={p === currentPage ? "default" : "outline"}
+                                size="sm"
+                                className={`h-8 w-8 p-0 ${p === currentPage ? "bg-slate-900 hover:bg-slate-800" : "hover:bg-slate-100"} ${p === '...' ? 'cursor-default hover:bg-white border-none' : ''}`}
+                                onClick={() => typeof p === 'number' && handlePageChange(p)}
+                                disabled={p === '...'}
+                            >
+                                {p}
+                            </Button>
+                        ))}
 
-                    <span className="text-xs text-slate-500 ml-4">
-                        Total {totalCount} items
-                    </span>
-                </div>
-            )}
-        </div>
+                        <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)} className="h-8 w-8 p-0">
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+
+                        <span className="text-xs text-slate-500 ml-4">
+                            Total {totalCount} items
+                        </span>
+                    </div>
+                )
+            }
+        </div >
     );
 }
