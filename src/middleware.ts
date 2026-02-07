@@ -7,9 +7,7 @@ export function middleware(request: NextRequest) {
 
     // Public paths
     if (pathname === '/login' || pathname === '/register') {
-        if (session) {
-            return NextResponse.redirect(new URL('/', request.url));
-        }
+        // Allow access even if session exists to let the client handle the splash screen / flow
         return NextResponse.next();
     }
 
