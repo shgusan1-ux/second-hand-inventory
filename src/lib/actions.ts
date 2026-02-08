@@ -797,7 +797,8 @@ export async function getInventoryForExport(searchParams: any) {
 
     // Exclude Code
     if (excludeCode) {
-        const excludes = excludeCode.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+        // Support newline, comma, tab, space separators
+        const excludes = excludeCode.split(/[\n,\t\s]+/).map((s: string) => s.trim()).filter(Boolean);
         if (excludes.length > 0) {
             const placeholders = excludes.map(() => `$${paramIndex++}`);
             sqlConditions.push(`id NOT IN (${placeholders.join(', ')})`);
@@ -828,6 +829,11 @@ export async function getInventoryForExport(searchParams: any) {
         console.error('Export failed:', e);
         return [];
     }
+}
+
+export async function searchProducts(searchParams: any) {
+    // Reuses getInventoryForExport logic but explicitly for search action (POST)
+    return getInventoryForExport(searchParams);
 }
 // Memo Actions
 export async function addMemo(content: string) {

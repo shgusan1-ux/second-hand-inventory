@@ -14,10 +14,11 @@ interface InventoryFilterProps {
     categories?: any[];
     onBulkSearch?: (codes: string[]) => void;
     onReset?: () => void;
+    onFilterSearch?: (params: any) => void;
     isLoading?: boolean;
 }
 
-export function InventoryFilter({ brands = [], categories = [], onBulkSearch, onReset, isLoading }: InventoryFilterProps) {
+export function InventoryFilter({ brands = [], categories = [], onBulkSearch, onReset, onFilterSearch, isLoading }: InventoryFilterProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -58,10 +59,31 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             }
         }
 
+        // If excludeCode is present or filtering with heavy params, use callback (if provided)
+        if (excludeCode && onFilterSearch) {
+            const params: any = {};
+            if (query) params.q = query;
+            if (searchField && searchField !== 'all') params.field = searchField;
+            if (excludeCode) params.excludeCode = excludeCode;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (limit) params.limit = limit;
+            if (selectedStatuses.length > 0) params.status = selectedStatuses.join(',');
+            if (selectedCategories.length > 0) params.categories = selectedCategories.join(',');
+            if (selectedConditions.length > 0) params.conditions = selectedConditions.join(',');
+            if (selectedSizes.length > 0) params.sizes = selectedSizes.join(',');
+            if (selectedBrand && selectedBrand !== 'all') params.brand = selectedBrand;
+
+            onFilterSearch(params);
+            return;
+        }
+
         const params = new URLSearchParams();
         if (query) params.set('q', query);
         if (searchField && searchField !== 'all') params.set('field', searchField);
+        // Exclude excludeCode from URL if it's too long, but for now we rely on onFilterSearch
         if (excludeCode) params.set('excludeCode', excludeCode);
+
         if (startDate) params.set('startDate', startDate);
         if (endDate) params.set('endDate', endDate);
         if (limit) params.set('limit', limit);
@@ -288,12 +310,38 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
 
                     <div className="flex items-center gap-2 ml-auto">
                         <span className="text-xs text-slate-500">제외할 코드:</span>
-                        <Input
-                            className="w-[150px] h-9 text-xs bg-white"
-                            placeholder="제외 코드 (콤마 구분)"
-                            value={excludeCode}
-                            onChange={(e) => setExcludeCode(e.target.value)}
-                        />
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className={`h-9 text-xs justify-between w-[160px] ${excludeCode ? 'border-red-300 bg-red-50 text-red-700' : 'bg-white text-slate-500'}`}>
+                                    {excludeCode
+                                        ? `${excludeCode.split(/[\n,\s\t]+/).filter(Boolean).length}개 제외 설정됨`
+                                        : '제외 코드 입력 (클릭)'}
+                                    <span className="ml-1 opacity-50">▼</span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-3" align="end">
+                                <div className="space-y-2">
+                                    <h4 className="font-medium text-sm">제외할 상품 코드 목록</h4>
+                                    <p className="text-xs text-slate-500">
+                                        엑셀에서 복사하여 붙여넣으세요. 줄바꿈, 콤마, 공백으로 자동 구분됩니다.
+                                    </p>
+                                    <textarea
+                                        className="w-full h-[200px] text-xs p-2 border rounded resize-none font-mono focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                        placeholder="EX) P001&#13;&#10;P002&#13;&#10;P003..."
+                                        value={excludeCode}
+                                        onChange={(e) => setExcludeCode(e.target.value)}
+                                    />
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="text-slate-500">
+                                            총 {excludeCode.split(/[\n,\s\t]+/).filter(Boolean).length}개
+                                        </span>
+                                        <Button variant="ghost" size="sm" onClick={() => setExcludeCode('')} className="h-6 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                            초기화
+                                        </Button>
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
                     </div>
                 </div>
             </CardContent>

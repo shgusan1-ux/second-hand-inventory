@@ -71,6 +71,35 @@ export function InventoryManager({
         }
     };
 
+    const handleFilterSearch = async (params: any) => {
+        setIsLoading(true);
+        setIsBulkMode(true);
+
+        try {
+            const { searchProducts } = await import('@/lib/actions');
+            const results = await searchProducts(params);
+
+            setProducts(results);
+            setTotalCount(results.length);
+            setBulkPage(1);
+
+            const urlParams = new URLSearchParams();
+            Object.entries(params).forEach(([key, val]) => {
+                if (key !== 'excludeCode' && val) urlParams.set(key, String(val));
+            });
+            router.replace(`${window.location.pathname}?${urlParams.toString()}`);
+
+            toast.success(`검색 완료: ${results.length}개`);
+
+        } catch (error) {
+            console.error('Filter search error:', error);
+            toast.error('검색 중 오류가 발생했습니다.');
+            setIsBulkMode(false);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleReset = () => {
         setIsBulkMode(false);
         setProducts(initialProducts);
@@ -78,9 +107,7 @@ export function InventoryManager({
         setSortConfig(null);
         setBulkPage(1);
 
-        // If we are on a filtered URL, maybe we should reset that too?
-        // But 'Reset' usually means reset the bulk search mode back to normal view.
-        // It currently keeps URL state which is fine.
+        router.push('/inventory/manage');
     };
 
     const handleExportAll = () => {
@@ -163,6 +190,7 @@ export function InventoryManager({
                 categories={categories}
                 onBulkSearch={handleBulkSearch}
                 onReset={handleReset}
+                onFilterSearch={handleFilterSearch}
                 isLoading={isLoading}
             />
 
