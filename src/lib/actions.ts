@@ -212,6 +212,24 @@ export async function logout() {
 
 // --- Inventory Actions ---
 
+function parseExcelDate(value: any): string | null {
+    if (!value) return null;
+    const strVal = String(value).trim();
+    if (!strVal) return null;
+
+    // Check if it's an Excel serial date (numeric)
+    // Excel dates usually > 20000 (year 1954)
+    if (/^\d+(\.\d+)?$/.test(strVal)) {
+        const serial = parseFloat(strVal);
+        if (serial > 20000 && serial < 80000) { // Safety range
+            // Excel base date: Dec 30, 1899. 25569 is offset to Unix Epoch
+            const date = new Date(Math.round((serial - 25569) * 86400 * 1000));
+            return date.toISOString();
+        }
+    }
+    return strVal;
+}
+
 // ...
 export async function bulkCreateProducts(products: any[]) {
     if (!products || products.length === 0) return { success: true, count: 0 };
@@ -246,7 +264,7 @@ export async function bulkCreateProducts(products: any[]) {
                 item.md_comment || '',
                 item.images ? JSON.stringify(item.images) : '[]',
                 item.size || '',
-                item.master_reg_date || null
+                parseExcelDate(item.master_reg_date) || null
             );
 
             // Create placeholders for this row ($1, $2, ... $13)
@@ -479,7 +497,11 @@ export async function bulkUpdateFromExcel(products: any[]) {
                 if (item.status !== undefined) { updates.push(`status = $${pIdx++}`); params.push(item.status); }
                 if (item.condition !== undefined) { updates.push(`condition = $${pIdx++}`); params.push(item.condition); }
                 if (item.size !== undefined) { updates.push(`size = $${pIdx++}`); params.push(item.size); }
-                if (item.master_reg_date !== undefined) { updates.push(`master_reg_date = $${pIdx++}`); params.push(item.master_reg_date || null); }
+                if (item.master_reg_date !== undefined) {
+                    const parsedDate = parseExcelDate(item.master_reg_date);
+                    updates.push(`master_reg_date = $${pIdx++}`);
+                    params.push(parsedDate || null);
+                }
 
                 // Only update if there are fields to update
                 if (updates.length > 0) {
