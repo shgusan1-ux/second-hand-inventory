@@ -451,46 +451,66 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function bulkUpdateFromExcel(products: any[]) {
-    if (!products || products.length === 0) return { success: true, count: 0 };
+    if (!products || products.length === 0) return { success: true, count: 0, details: [] };
+
+    const details: { id: string, name: string, status: 'success' | 'error', message?: string }[] = [];
+    let successCount = 0;
+    let failCount = 0;
 
     try {
-        let count = 0;
-
-        // Use a transaction for safety? or just update one by one for better error handling per row?
-        // Bulk update via valid SQL is better. 
-        // We will loop deeply for now as it allows flexible field sets.
-
         for (const item of products) {
-            if (!item.id) continue;
+            if (!item.id) {
+                failCount++;
+                details.push({ id: 'UNKNOWN', name: item.name || 'Unknown', status: 'error', message: 'ID가 없습니다.' });
+                continue;
+            }
 
-            // Build dynamic update query based on present fields
-            const updates: string[] = [];
-            const params: any[] = [];
-            let pIdx = 1;
+            try {
+                // Build dynamic update query based on present fields
+                const updates: string[] = [];
+                const params: any[] = [];
+                let pIdx = 1;
 
-            if (item.name !== undefined) { updates.push(`name = $${pIdx++}`); params.push(item.name); }
-            if (item.brand !== undefined) { updates.push(`brand = $${pIdx++}`); params.push(item.brand); }
-            if (item.category !== undefined) { updates.push(`category = $${pIdx++}`); params.push(item.category); }
-            if (item.price_consumer !== undefined) { updates.push(`price_consumer = $${pIdx++}`); params.push(Number(item.price_consumer)); }
-            if (item.price_sell !== undefined) { updates.push(`price_sell = $${pIdx++}`); params.push(Number(item.price_sell)); }
-            if (item.status !== undefined) { updates.push(`status = $${pIdx++}`); params.push(item.status); }
-            if (item.condition !== undefined) { updates.push(`condition = $${pIdx++}`); params.push(item.condition); }
-            if (item.size !== undefined) { updates.push(`size = $${pIdx++}`); params.push(item.size); }
-            if (item.master_reg_date !== undefined) { updates.push(`master_reg_date = $${pIdx++}`); params.push(item.master_reg_date || null); }
+                if (item.name !== undefined) { updates.push(`name = $${pIdx++}`); params.push(item.name); }
+                if (item.brand !== undefined) { updates.push(`brand = $${pIdx++}`); params.push(item.brand); }
+                if (item.category !== undefined) { updates.push(`category = $${pIdx++}`); params.push(item.category); }
+                if (item.price_consumer !== undefined) { updates.push(`price_consumer = $${pIdx++}`); params.push(Number(item.price_consumer)); }
+                if (item.price_sell !== undefined) { updates.push(`price_sell = $${pIdx++}`); params.push(Number(item.price_sell)); }
+                if (item.status !== undefined) { updates.push(`status = $${pIdx++}`); params.push(item.status); }
+                if (item.condition !== undefined) { updates.push(`condition = $${pIdx++}`); params.push(item.condition); }
+                if (item.size !== undefined) { updates.push(`size = $${pIdx++}`); params.push(item.size); }
+                if (item.master_reg_date !== undefined) { updates.push(`master_reg_date = $${pIdx++}`); params.push(item.master_reg_date || null); }
 
-            // Only update if there are fields to update
-            if (updates.length > 0) {
-                params.push(item.id);
-                // Use a simpler query without joins
-                await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id = $${pIdx}`, params);
-                count++;
+                // Only update if there are fields to update
+                if (updates.length > 0) {
+                    params.push(item.id);
+                    // Use a simpler query without joins
+                    const result = await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id = $${pIdx}`, params);
+
+                    if (result.rowCount === 0) {
+                        failCount++;
+                        details.push({ id: item.id, name: item.name, status: 'error', message: 'ID와 일치하는 상품을 찾을 수 없습니다.' });
+                    } else {
+                        successCount++;
+                        details.push({ id: item.id, name: item.name, status: 'success' });
+                    }
+                } else {
+                    // No fields to update
+                    successCount++;
+                    details.push({ id: item.id, name: item.name, status: 'success', message: '변경 사항 없음' });
+                }
+            } catch (innerError: any) {
+                failCount++;
+                details.push({ id: item.id, name: item.name, status: 'error', message: innerError.message || '업데이트 중 오류 발생' });
             }
         }
 
-        await logAction('BULK_UPDATE_EXCEL', 'product', 'bulk', `Updated ${count} items from Excel`);
+        await logAction('BULK_UPDATE_EXCEL', 'product', 'bulk', `Updated ${successCount} items, Failed ${failCount}`);
         revalidatePath('/inventory');
         revalidatePath('/');
-        return { success: true, count };
+
+        return { success: true, count: successCount, failCount, details };
+
     } catch (error: any) {
         console.error('Bulk excel update failed:', error);
         return { success: false, error: error.message || 'Excel update failed' };
