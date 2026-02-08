@@ -173,14 +173,19 @@ export async function getSmartStoreGroups() {
     // 2. CURATED: S급만 (날짜 무관)
     const curatedItems = products.filter(p => {
       if (usedIds.has(p.id)) return false;
-      const condition = (p.condition || '').toUpperCase();
-      if (condition.includes('S')) {
+      const condition = (p.condition || '').toUpperCase().trim();
+      // S급만 정확히 매칭 (S, S급, S+, S-, SS 등)
+      const isSGrade = /^S[+\-]?$|^S급$|^SS$/.test(condition) || condition === 'S';
+      if (isSGrade) {
         p.score += 10; // 카테고리 점수 추가
         usedIds.add(p.id);
         return true;
       }
       return false;
     });
+
+    console.log(`CURATED 후보: ${products.filter(p => !usedIds.has(p.id)).length}개`);
+    console.log(`CURATED 선택: ${curatedItems.length}개`);
 
     // 3. ARCHIVE 분류 - 키워드 기반
     const militaryArchive: any[] = [];
@@ -190,6 +195,7 @@ export async function getSmartStoreGroups() {
     const britishArchive: any[] = [];
 
     const archiveCandidates = products.filter(p => !usedIds.has(p.id));
+    console.log(`ARCHIVE 후보: ${archiveCandidates.length}개`);
 
     archiveCandidates.forEach(product => {
       const category = fallbackClassification(product);
@@ -217,6 +223,13 @@ export async function getSmartStoreGroups() {
         }
       }
     });
+
+    console.log(`ARCHIVE 분류 결과:`);
+    console.log(`- MILITARY: ${militaryArchive.length}개`);
+    console.log(`- WORKWEAR: ${workwearArchive.length}개`);
+    console.log(`- JAPAN: ${japanArchive.length}개`);
+    console.log(`- EUROPE: ${heritageEurope.length}개`);
+    console.log(`- BRITISH: ${britishArchive.length}개`);
 
     // 4. CLEARANCE: Created > 30 days ago AND NOT in any other category
     const clearanceItems = products.filter(p => {
