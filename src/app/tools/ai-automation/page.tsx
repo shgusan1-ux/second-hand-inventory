@@ -53,8 +53,10 @@ export default function AIAutomationPage() {
 
     // 기본 AI 분석
     const handleBasicAnalyze = async () => {
-        if (!imageUrl || !productName) {
-            toast.error('이미지 URL과 상품명은 필수입니다');
+        const imagesToAnalyze = selectedImages.length > 0 ? selectedImages : (imageUrl ? [imageUrl] : []);
+
+        if (imagesToAnalyze.length === 0 || !productName) {
+            toast.error('이미지와 상품명은 필수입니다');
             return;
         }
 
@@ -68,14 +70,15 @@ export default function AIAutomationPage() {
                     name: productName,
                     brand,
                     category,
-                    imageUrl,
+                    imageUrl: imagesToAnalyze[0], // 첫 번째 이미지를 메인으로
+                    imageUrls: imagesToAnalyze, // 모든 선택된 이미지
                     price_consumer: parseInt(priceConsumer) || 0
                 })
             });
 
             const data = await response.json();
             setBasicResult(data);
-            toast.success('AI 분석 완료!');
+            toast.success(`AI 분석 완료! (${imagesToAnalyze.length}개 이미지 분석)`);
         } catch (error) {
             toast.error('분석 중 오류가 발생했습니다');
             console.error(error);
@@ -86,8 +89,10 @@ export default function AIAutomationPage() {
 
     // MD-SOGAE 분석
     const handleMDSogaeAnalyze = async () => {
-        if (!imageUrl || !category) {
-            toast.error('이미지 URL과 카테고리는 필수입니다');
+        const imagesToAnalyze = selectedImages.length > 0 ? selectedImages : (imageUrl ? [imageUrl] : []);
+
+        if (imagesToAnalyze.length === 0 || !category) {
+            toast.error('이미지와 카테고리는 필수입니다');
             return;
         }
 
@@ -99,13 +104,17 @@ export default function AIAutomationPage() {
             const response = await fetch('/api/md-sogae/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageUrl, category })
+                body: JSON.stringify({
+                    imageUrl: imagesToAnalyze[0], // 첫 번째 이미지를 메인으로
+                    imageUrls: imagesToAnalyze, // 모든 선택된 이미지
+                    category
+                })
             });
 
             const data = await response.json();
             setMdSogaeResult(data);
             setShowMetadataCard(true);
-            toast.success('MD-SOGAE 분석 완료!');
+            toast.success(`MD-SOGAE 분석 완료! (${imagesToAnalyze.length}개 이미지 분석)`);
         } catch (error) {
             toast.error('분석 중 오류가 발생했습니다');
             console.error(error);
@@ -169,17 +178,46 @@ export default function AIAutomationPage() {
         }
     };
 
+    // 상품 이미지 관리
+    const [allImages, setAllImages] = useState<string[]>([]);
+    const [selectedImages, setSelectedImages] = useState<string[]>([]);
+
     // 상품 불러오기
     const handleLoadProduct = (product: any) => {
         setProductId(product.id);
         setProductName(product.name);
         setBrand(product.brand || '');
         setCategory(product.category || '');
-        setImageUrl(product.image_url || '');
         setPriceConsumer(product.price_consumer?.toString() || '');
+
+        // 여러 이미지 처리
+        const imageUrls = product.image_url
+            ? product.image_url.split(',').map((url: string) => url.trim()).filter((url: string) => url)
+            : [];
+
+        setAllImages(imageUrls);
+        setSelectedImages(imageUrls); // 기본적으로 모든 이미지 선택
+        setImageUrl(imageUrls[0] || ''); // 첫 번째 이미지를 기본값으로
+
         setSearchQuery(product.name);
         setShowSearchResults(false);
-        toast.success(`상품 "${product.name}" 불러오기 완료!`);
+
+        if (imageUrls.length > 1) {
+            toast.success(`상품 "${product.name}" 불러오기 완료! (이미지 ${imageUrls.length}개)`);
+        } else {
+            toast.success(`상품 "${product.name}" 불러오기 완료!`);
+        }
+    };
+
+    // 이미지 선택 토글
+    const toggleImageSelection = (imageUrl: string) => {
+        setSelectedImages(prev => {
+            if (prev.includes(imageUrl)) {
+                return prev.filter(url => url !== imageUrl);
+            } else {
+                return [...prev, imageUrl];
+            }
+        });
     };
 
     // 검색어 변경 시 자동 검색
@@ -316,6 +354,77 @@ export default function AIAutomationPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* 이미지 선택 UI (여러 이미지가 있을 때만 표시) */}
+            {allImages.length > 1 && (
+                <Card className="border-amber-200 bg-amber-50/30">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-amber-900">
+                            <ImageIcon className="h-5 w-5" />
+                            상품 이미지 선택 ({selectedImages.length}/{allImages.length}개 선택됨)
+                        </CardTitle>
+                        <CardDescription>
+                            AI 분석에 사용할 이미지를 선택하세요. 여러 이미지를 선택하면 더 정확한 분석이 가능합니다.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {allImages.map((imgUrl, index) => (
+                                <div
+                                    key={index}
+                                    onClick={() => toggleImageSelection(imgUrl)}
+                                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${selectedImages.includes(imgUrl)
+                                        ? 'border-amber-500 ring-2 ring-amber-200'
+                                        : 'border-slate-200 hover:border-amber-300'
+                                        }`}
+                                >
+                                    <img
+                                        src={imgUrl}
+                                        alt={`Product ${index + 1}`}
+                                        className="w-full h-32 object-cover rounded-lg"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src = '/placeholder.jpg';
+                                        }}
+                                    />
+                                    {selectedImages.includes(imgUrl) && (
+                                        <div className="absolute top-2 right-2 bg-amber-500 text-white rounded-full p-1">
+                                            <CheckCircle2 className="h-4 w-4" />
+                                        </div>
+                                    )}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs py-1 text-center rounded-b-lg">
+                                        이미지 {index + 1}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-2 mt-4">
+                            <Button
+                                onClick={() => setSelectedImages(allImages)}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                            >
+                                전체 선택
+                            </Button>
+                            <Button
+                                onClick={() => setSelectedImages([])}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                            >
+                                선택 해제
+                            </Button>
+                        </div>
+
+                        {selectedImages.length === 0 && (
+                            <p className="text-sm text-amber-600 mt-3 text-center">
+                                ⚠️ 최소 1개 이상의 이미지를 선택해주세요
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* 기본 AI 분석 탭 */}
             {activeTab === 'basic' && (
