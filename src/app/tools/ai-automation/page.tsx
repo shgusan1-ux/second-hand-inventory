@@ -208,8 +208,8 @@ export default function AIAutomationPage() {
                 <button
                     onClick={() => setActiveTab('basic')}
                     className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors ${activeTab === 'basic'
-                            ? 'border-purple-600 text-purple-600'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-purple-600 text-purple-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
                         }`}
                 >
                     <div className="flex items-center gap-2">
@@ -220,8 +220,8 @@ export default function AIAutomationPage() {
                 <button
                     onClick={() => setActiveTab('mdsogae')}
                     className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors ${activeTab === 'mdsogae'
-                            ? 'border-indigo-600 text-indigo-600'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
                         }`}
                 >
                     <div className="flex items-center gap-2">
@@ -262,17 +262,16 @@ export default function AIAutomationPage() {
                         {showSearchResults && searchResults.length > 0 && (
                             <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
                                 {searchResults.map((product) => (
-                                    <button
+                                    <div
                                         key={product.id}
-                                        onClick={() => handleLoadProduct(product)}
-                                        className="w-full px-4 py-3 text-left hover:bg-indigo-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                                        className="px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors"
                                     >
                                         <div className="flex items-start gap-3">
                                             {product.image_url && (
                                                 <img
                                                     src={product.image_url}
                                                     alt={product.name}
-                                                    className="w-12 h-12 object-cover rounded border"
+                                                    className="w-16 h-16 object-cover rounded border"
                                                 />
                                             )}
                                             <div className="flex-1 min-w-0">
@@ -295,8 +294,16 @@ export default function AIAutomationPage() {
                                                     ID: {product.id}
                                                 </p>
                                             </div>
+                                            <Button
+                                                onClick={() => handleLoadProduct(product)}
+                                                size="sm"
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
+                                            >
+                                                <Package className="h-3 w-3 mr-1" />
+                                                불러오기
+                                            </Button>
                                         </div>
-                                    </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -520,8 +527,8 @@ function BasicAITab({ productId, setProductId, imageUrl, setImageUrl, productNam
                                     등급 판정
                                 </h3>
                                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${result.grade === 'S급' ? 'bg-purple-100 text-purple-700' :
-                                        result.grade === 'A급' ? 'bg-blue-100 text-blue-700' :
-                                            'bg-slate-100 text-slate-700'
+                                    result.grade === 'A급' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-slate-100 text-slate-700'
                                     }`}>
                                     {result.grade}
                                 </span>
@@ -805,8 +812,8 @@ function MDSogaeTab({ imageUrl, setImageUrl, category, setCategory, isAnalyzing,
                                 <div>
                                     <p className="text-xs text-slate-500">등급</p>
                                     <Badge className={`${result.careLabel.grade === 'S' ? 'bg-purple-600' :
-                                            result.careLabel.grade === 'A' ? 'bg-blue-600' :
-                                                'bg-slate-600'
+                                        result.careLabel.grade === 'A' ? 'bg-blue-600' :
+                                            'bg-slate-600'
                                         }`}>
                                         {result.careLabel.grade}급
                                     </Badge>
