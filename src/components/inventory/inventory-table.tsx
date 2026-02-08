@@ -186,22 +186,25 @@ export function InventoryTable({
                         {selectedIds.length}개 상품 선택됨
                     </span>
                     <div className="flex gap-2">
-                        <Button size="sm" variant="destructive" onClick={handleBulkDelete} className="h-8 text-xs font-semibold hover:bg-red-600 transition-colors">
-                            선택 삭제
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setBulkEditOpen(true)} className="h-8 text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-colors">
-                            <Edit className="w-3 h-3 mr-2" />
-                            일괄 수정
-                        </Button>
-                        <BulkAiUpdateDialog selectedIds={selectedIds} onSuccess={() => {
-                            setSelectedIds([]);
-                            if (isBulkMode) {
-                                // For bulk mode, ideally we should refresh parent state.
-                                // But since Dialog is fake for now, we just clear selection.
-                            } else {
-                                router.refresh();
-                            }
-                        }} />
+                        {isEditable && (
+                            <>
+                                <Button size="sm" variant="destructive" onClick={handleBulkDelete} className="h-8 text-xs font-semibold hover:bg-red-600 transition-colors">
+                                    선택 삭제
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={() => setBulkEditOpen(true)} className="h-8 text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-colors">
+                                    <Edit className="w-3 h-3 mr-2" />
+                                    일괄 수정
+                                </Button>
+                                <BulkAiUpdateDialog selectedIds={selectedIds} onSuccess={() => {
+                                    setSelectedIds([]);
+                                    if (isBulkMode) {
+                                        // For bulk mode, ideally we should refresh parent state.
+                                    } else {
+                                        router.refresh();
+                                    }
+                                }} />
+                            </>
+                        )}
                         <Button size="sm" variant="secondary" onClick={() => handleDownloadExcel('selected')} className="h-8 text-xs font-semibold hover:bg-blue-500 hover:text-white transition-colors">
                             <Download className="w-3 h-3 mr-2" />
                             선택 엑셀

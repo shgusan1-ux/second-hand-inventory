@@ -160,8 +160,8 @@ export default async function InventoryPage({
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-1">
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">재고 목록</h1>
-                <p className="text-sm font-medium text-slate-500">원하는 상품을 빠르게 찾을 수 있는 페이지입니다.</p>
+                <h1 className="text-3xl font-bold tracking-tight text-blue-900">재고 목록 (조회 전용)</h1>
+                <p className="text-sm font-medium text-blue-600">빠른 상품 검색과 조회만을 위한 페이지입니다. (수정/삭제 불가)</p>
             </div>
 
             <InventoryFilter brands={brands} />
