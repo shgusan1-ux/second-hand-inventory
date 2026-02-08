@@ -145,77 +145,17 @@ export async function getSmartStoreGroups() {
       return false;
     });
 
-    // 3. ARCHIVE 분류 - AI Vision 기반 (이미지가 있는 상품만)
-    const archiveCandidates = products.filter(p => {
-      if (usedIds.has(p.id)) return false;
-      return p.image_url && p.image_url.trim() !== '';
-    });
-
-    // AI 분류 결과를 저장할 배열
+    // 3. ARCHIVE 분류 - 키워드 기반
     const militaryArchive: any[] = [];
     const workwearArchive: any[] = [];
     const japanArchive: any[] = [];
     const heritageEurope: any[] = [];
     const britishArchive: any[] = [];
 
-    // AI 분류 실행 (병렬 처리, 최대 50개까지만)
-    const classificationPromises = archiveCandidates.slice(0, 50).map(async (product) => {
-      try {
-        const imageUrl = product.image_url.split(',')[0].trim(); // 첫 번째 이미지만 사용
+    // 아카이브 후보 (NEW, CURATED 제외)
+    const archiveCandidates = products.filter(p => !usedIds.has(p.id));
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/smartstore/classify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageUrl,
-            productName: product.name,
-            brand: product.brand
-          })
-        });
-
-        if (!response.ok) {
-          // AI 분류 실패 시 키워드 기반 폴백
-          return { product, category: fallbackClassification(product) };
-        }
-
-        const data = await response.json();
-        return { product, category: data.classification.category };
-      } catch (error) {
-        // 에러 발생 시 키워드 기반 폴백
-        return { product, category: fallbackClassification(product) };
-      }
-    });
-
-    const classificationResults = await Promise.all(classificationPromises);
-
-    // 분류 결과를 각 카테고리에 배정
-    classificationResults.forEach(({ product, category }) => {
-      usedIds.add(product.id);
-
-      switch (category) {
-        case 'MILITARY':
-          militaryArchive.push(product);
-          break;
-        case 'WORKWEAR':
-          workwearArchive.push(product);
-          break;
-        case 'JAPAN':
-          japanArchive.push(product);
-          break;
-        case 'EUROPE':
-          heritageEurope.push(product);
-          break;
-        case 'BRITISH':
-          britishArchive.push(product);
-          break;
-      }
-    });
-
-    // 나머지 상품은 키워드 기반으로 분류
-    const remainingArchiveCandidates = archiveCandidates.slice(50);
-    remainingArchiveCandidates.forEach(product => {
-      if (usedIds.has(product.id)) return;
-
+    archiveCandidates.forEach(product => {
       const category = fallbackClassification(product);
       usedIds.add(product.id);
 
@@ -234,6 +174,10 @@ export async function getSmartStoreGroups() {
           break;
         case 'BRITISH':
           britishArchive.push(product);
+          break;
+        case 'NONE':
+          // 어떤 카테고리에도 속하지 않음 - usedIds에서 제거
+          usedIds.delete(product.id);
           break;
       }
     });
@@ -304,6 +248,6 @@ function fallbackClassification(product: any): string {
     return 'BRITISH';
   }
 
-  // 기본값: WORKWEAR
-  return 'WORKWEAR';
+  // 기본값: 어떤 카테고리에도 속하지 않음
+  return 'NONE';
 }
