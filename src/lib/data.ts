@@ -110,7 +110,6 @@ export async function getSmartStoreGroups() {
     `);
 
     const products = allProducts.rows;
-    const usedIds = new Set<string>();
 
     // 경과일 계산 함수
     const calculateDaysSince = (date: string | Date) => {
@@ -123,10 +122,48 @@ export async function getSmartStoreGroups() {
       p.days_since_registration = calculateDaysSince(p.created_at);
     });
 
+    // 점수 계산 함수
+    const calculateScore = (product: any) => {
+      let score = 0;
+
+      // 1. 신선도 점수 (0-40점)
+      const days = product.days_since_registration;
+      if (days <= 7) score += 40;
+      else if (days <= 14) score += 30;
+      else if (days <= 21) score += 20;
+      else if (days <= 30) score += 10;
+
+      // 2. 등급 점수 (0-30점)
+      const condition = (product.condition || '').toUpperCase();
+      if (condition.includes('S')) score += 30;
+      else if (condition.includes('A')) score += 20;
+      else if (condition.includes('B')) score += 10;
+
+      // 3. 가격대 점수 (0-20점) - 회전율 고려
+      const price = product.price_sell || 0;
+      if (price >= 30000 && price <= 100000) score += 20; // 최적 가격대
+      else if (price >= 10000 && price < 30000) score += 15;
+      else if (price >= 100000 && price <= 200000) score += 10;
+      else score += 5;
+
+      // 4. 카테고리 점수 (0-10점) - 나중에 추가
+      // 분류 후 카테고리별로 점수 추가
+
+      return score;
+    };
+
+    // 모든 상품에 점수 부여
+    products.forEach(p => {
+      p.score = calculateScore(p);
+    });
+
+    const usedIds = new Set<string>();
+
     // 1. NEW: Created within 7 days
     const newItems = products.filter(p => {
       const createdAt = new Date(p.created_at);
       if (createdAt >= sevenDaysAgo) {
+        p.score += 6; // 카테고리 점수 추가
         usedIds.add(p.id);
         return true;
       }
@@ -137,8 +174,8 @@ export async function getSmartStoreGroups() {
     const curatedItems = products.filter(p => {
       if (usedIds.has(p.id)) return false;
       const condition = (p.condition || '').toUpperCase();
-      // S급만 선택 (S, S급, S+, S- 등 모두 포함)
       if (condition.includes('S')) {
+        p.score += 10; // 카테고리 점수 추가
         usedIds.add(p.id);
         return true;
       }
@@ -152,33 +189,32 @@ export async function getSmartStoreGroups() {
     const heritageEurope: any[] = [];
     const britishArchive: any[] = [];
 
-    // 아카이브 후보 (NEW, CURATED 제외)
     const archiveCandidates = products.filter(p => !usedIds.has(p.id));
 
     archiveCandidates.forEach(product => {
       const category = fallbackClassification(product);
-      usedIds.add(product.id);
 
-      switch (category) {
-        case 'MILITARY':
-          militaryArchive.push(product);
-          break;
-        case 'WORKWEAR':
-          workwearArchive.push(product);
-          break;
-        case 'JAPAN':
-          japanArchive.push(product);
-          break;
-        case 'EUROPE':
-          heritageEurope.push(product);
-          break;
-        case 'BRITISH':
-          britishArchive.push(product);
-          break;
-        case 'NONE':
-          // 어떤 카테고리에도 속하지 않음 - usedIds에서 제거
-          usedIds.delete(product.id);
-          break;
+      if (category !== 'NONE') {
+        product.score += 8; // 아카이브 카테고리 점수
+        usedIds.add(product.id);
+
+        switch (category) {
+          case 'MILITARY':
+            militaryArchive.push(product);
+            break;
+          case 'WORKWEAR':
+            workwearArchive.push(product);
+            break;
+          case 'JAPAN':
+            japanArchive.push(product);
+            break;
+          case 'EUROPE':
+            heritageEurope.push(product);
+            break;
+          case 'BRITISH':
+            britishArchive.push(product);
+            break;
+        }
       }
     });
 
@@ -186,18 +222,44 @@ export async function getSmartStoreGroups() {
     const clearanceItems = products.filter(p => {
       if (usedIds.has(p.id)) return false;
       const createdAt = new Date(p.created_at);
-      return createdAt <= thirtyDaysAgo;
+      if (createdAt <= thirtyDaysAgo) {
+        p.score += 3; // 클리어런스 점수
+        return true;
+      }
+      return false;
     });
 
+    // 점수순으로 정렬
+    newItems.sort((a, b) => b.score - a.score);
+    curatedItems.sort((a, b) => b.score - a.score);
+    militaryArchive.sort((a, b) => b.score - a.score);
+    workwearArchive.sort((a, b) => b.score - a.score);
+    japanArchive.sort((a, b) => b.score - a.score);
+    heritageEurope.sort((a, b) => b.score - a.score);
+    britishArchive.sort((a, b) => b.score - a.score);
+    clearanceItems.sort((a, b) => b.score - a.score);
+
+    // 스마트스토어 300개 제한 - 카테고리별 할당
+    const limits = {
+      new: 50,
+      curated: 100,
+      military: 25,
+      workwear: 25,
+      japan: 25,
+      europe: 25,
+      british: 20,
+      clearance: 30
+    };
+
     return {
-      newItems,
-      curatedItems,
-      militaryArchive,
-      workwearArchive,
-      japanArchive,
-      heritageEurope,
-      britishArchive,
-      clearanceItems,
+      newItems: newItems.slice(0, limits.new),
+      curatedItems: curatedItems.slice(0, limits.curated),
+      militaryArchive: militaryArchive.slice(0, limits.military),
+      workwearArchive: workwearArchive.slice(0, limits.workwear),
+      japanArchive: japanArchive.slice(0, limits.japan),
+      heritageEurope: heritageEurope.slice(0, limits.europe),
+      britishArchive: britishArchive.slice(0, limits.british),
+      clearanceItems: clearanceItems.slice(0, limits.clearance),
     };
   } catch (error) {
     console.error('Database Error:', error);
