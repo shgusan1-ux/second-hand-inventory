@@ -31,7 +31,6 @@ const inventoryManagement = [
 
 // 3. AI Automation Tools
 const aiTools = [
-    { name: 'MD-SOGAE v2.9', href: '/tools/md-sogae', icon: Shield },
     { name: 'AI 자동화', href: '/tools/ai-automation', icon: Sparkles },
 ];
 
