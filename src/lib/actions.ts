@@ -409,6 +409,7 @@ export async function updateProduct(id: string, formData: FormData) {
     const condition = formData.get('condition') as string;
     const size = formData.get('size') as string || '';
     const md_comment = formData.get('md_comment') as string;
+    const fabric = formData.get('fabric') as string || '';
 
     // Images handling
     const images: string[] = [];
@@ -424,14 +425,14 @@ export async function updateProduct(id: string, formData: FormData) {
     try {
         // Simple update approach for dynamic params
         let finalQuery = '';
-        const finalParams: any[] = [name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size];
+        const finalParams: any[] = [name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size, fabric];
 
         if (status === '판매완료') {
-            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, sold_at=$12 WHERE id=$13`;
+            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, sold_at=$13 WHERE id=$14`;
             finalParams.push(sold_at, id);
         } else {
             // If going back to selling, clear sold_at
-            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, sold_at=NULL WHERE id=$12`;
+            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, sold_at=NULL WHERE id=$13`;
             finalParams.push(id);
         }
 
@@ -498,7 +499,7 @@ export async function getUsers() {
     }
 
     try {
-        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at FROM users ORDER BY created_at DESC');
+        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at, can_view_accounting FROM users ORDER BY created_at DESC');
         return result.rows;
     } catch (e) {
         console.error('Failed to get users:', e);
@@ -823,6 +824,29 @@ export async function bulkUpdateProducts(ids: string[], updates: any) {
     }
 }
 
+export async function addMemoComment(memoId: number, content: string) {
+    const session = await getSession();
+    const author = session ? session.name : '익명';
+
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS memo_comments (
+                id SERIAL PRIMARY KEY,
+                memo_id INTEGER,
+                content TEXT NOT NULL,
+                author_name VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await db.query('INSERT INTO memo_comments (memo_id, content, author_name) VALUES ($1, $2, $3)', [memoId, content, author]);
+        revalidatePath('/');
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: '댓글 등록 실패' };
+    }
+}
+
 export async function getMemos() {
     try {
         await db.query(`
@@ -834,8 +858,39 @@ export async function getMemos() {
             )
         `);
 
+        // Fetch Memos
         const res = await db.query('SELECT * FROM memos ORDER BY created_at DESC LIMIT 20');
-        return res.rows;
+        const memos = res.rows;
+
+        // Fetch Comments for these memos
+        if (memos.length > 0) {
+            const memoIds = memos.map((m: any) => m.id);
+            // SQLite doesn't support ANY($1), iterate or IN clause construction
+            // But we are using 'pg', right? db.ts uses 'pg' or 'better-sqlite3'?
+            // "c:\prj\second-hand-inventory\src\lib\db.ts" is the file.
+            // Assume Postgres for now based on Vercel Postgres context. Vercel Postgres supports ANY.
+
+            // Check if comments table exists first (lazy)
+            try {
+                const commentRes = await db.query(`
+SELECT * FROM memo_comments 
+                    WHERE memo_id = ANY($1) 
+                    ORDER BY created_at ASC
+                `, [memoIds]);
+
+                const comments = commentRes.rows;
+
+                // Attach to memos
+                memos.forEach((m: any) => {
+                    m.comments = comments.filter((c: any) => c.memo_id === m.id);
+                });
+            } catch (e) {
+                // Table might not exist yet, ignore
+                memos.forEach((m: any) => m.comments = []);
+            }
+        }
+
+        return memos;
     } catch (e) {
         return [];
     }
@@ -859,11 +914,11 @@ export async function bulkUpdateProductsAI(ids: string[], options: { grade: bool
                 // Mock AI Logic: Set a high grade for demonstration.
                 // Using PostgreSQL random if available, or just static for simplicity if DB compatibility varies.
                 // Safest to toggle between A and S based on ID hash or random.
-                updates.push(`condition = CASE WHEN (FLOOR(RANDOM() * 10) > 5) THEN 'S급' ELSE 'A급' END`);
+                updates.push(`condition = CASE WHEN(FLOOR(RANDOM() * 10) > 5) THEN 'S급' ELSE 'A급' END`);
             }
             if (options.price) {
                 // Mock AI Logic: Set random price.
-                updates.push(`price_sell = (FLOOR(RANDOM() * 90) + 10)::int * 1000`);
+                updates.push(`price_sell = (FLOOR(RANDOM() * 90) + 10):: int * 1000`);
             }
             if (options.description) {
                 updates.push(`md_comment = 'AI가 분석한 추천 상품입니다. 상태가 우수하며 가격 경쟁력이 있습니다. (AI 생성)'`);

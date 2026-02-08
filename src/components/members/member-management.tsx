@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { updateUserPermissions, getMemberAttendanceStats } from '@/lib/member-actions';
 import { deleteUser as deleteUserAction } from '@/lib/actions';
 import { UserCog, CalendarClock, Shield, Trash2, LayoutList, Network } from 'lucide-react';
@@ -18,7 +19,8 @@ interface User {
     role: string;
     created_at: string;
     permissions: string[];
-    email?: string; // Added optional email
+    email?: string;
+    can_view_accounting?: boolean; // Added
 }
 
 const CATEGORIES = [
@@ -90,6 +92,28 @@ export function MemberManagement({ users }: { users: User[] }) {
         }
     };
 
+    // Job Title Edit
+    const [jobTitleModalUser, setJobTitleModalUser] = useState<User | null>(null);
+    const [newJobTitle, setNewJobTitle] = useState('');
+
+    const openJobTitleModal = (user: User) => {
+        setJobTitleModalUser(user);
+        setNewJobTitle(user.job_title);
+    };
+
+    const handleUpdateJobTitle = async () => {
+        if (!jobTitleModalUser || !newJobTitle) return;
+        const { updateUserJobTitle } = await import('@/lib/member-actions'); // Dynamic import to avoid server action issue check if needed, mostly fine
+        const res = await updateUserJobTitle(jobTitleModalUser.id, newJobTitle);
+        if (res.success) {
+            alert('직책이 변경되었습니다.');
+            setJobTitleModalUser(null);
+            window.location.reload();
+        } else {
+            alert('실패: ' + res.error);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-end gap-2">
@@ -148,16 +172,44 @@ export function MemberManagement({ users }: { users: User[] }) {
                                                 <span className="text-xs text-slate-400">권한 없음</span>
                                             )}
                                         </div>
+
+                                        <div className="pt-2 border-t border-slate-50">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-xs font-medium text-slate-500">매출/매입 열람</span>
+                                                {['대표자'].includes(user.job_title) ? (
+                                                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100">자동 승인</Badge>
+                                                ) : (
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="sr-only peer"
+                                                            checked={!!user.can_view_accounting}
+                                                            onChange={async (e) => {
+                                                                if (!confirm(`${user.name}님의 매출 열람 권한을 ${e.target.checked ? '부여' : '해제'}하시겠습니까?`)) return;
+                                                                const { toggleAccountingPermission } = await import('@/lib/accounting-actions');
+                                                                const res = await toggleAccountingPermission(user.id, e.target.checked);
+                                                                if (res.success) window.location.reload();
+                                                                else alert('실패');
+                                                            }}
+                                                        />
+                                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                                    </label>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="flex gap-2 pt-2">
                                         <Button variant="outline" size="sm" className="flex-1" onClick={() => openPermissionModal(user)}>
-                                            <Shield className="w-3 h-3 mr-1" /> 권한 관리
+                                            <Shield className="w-3 h-3 mr-1" /> 권한
                                         </Button>
                                         <Button variant="outline" size="sm" className="flex-1" onClick={() => openAttendanceModal(user)}>
-                                            <CalendarClock className="w-3 h-3 mr-1" /> 근태 관리
+                                            <CalendarClock className="w-3 h-3 mr-1" /> 근태
                                         </Button>
                                     </div>
+                                    <Button variant="outline" size="sm" className="w-full" onClick={() => openJobTitleModal(user)}>
+                                        <UserCog className="w-3 h-3 mr-1" /> 직책 변경
+                                    </Button>
 
                                     {!['대표자', '경영지원'].includes(user.job_title) && (
                                         <Button variant="ghost" size="sm" className="w-full text-red-400 hover:text-red-600 h-6" onClick={() => handleDeleteUser(user)}>
@@ -260,6 +312,35 @@ export function MemberManagement({ users }: { users: User[] }) {
                             </table>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+            {/* Job Title Modal */}
+            <Dialog open={!!jobTitleModalUser} onOpenChange={(open) => !open && setJobTitleModalUser(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{jobTitleModalUser?.name} 직책 변경</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">새로운 직책</label>
+                            <Select onValueChange={(val) => setNewJobTitle(val)} defaultValue={jobTitleModalUser?.job_title}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="직책 선택" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="대표자">대표자</SelectItem>
+                                    <SelectItem value="경영지원">경영지원</SelectItem>
+                                    <SelectItem value="점장">점장</SelectItem>
+                                    <SelectItem value="매니저">매니저</SelectItem>
+                                    <SelectItem value="팀원">팀원</SelectItem>
+                                    <SelectItem value="아르바이트">아르바이트</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleUpdateJobTitle}>변경 저장</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

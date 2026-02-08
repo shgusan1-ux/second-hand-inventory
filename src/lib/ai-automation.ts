@@ -24,34 +24,54 @@ export interface AIAnalysisResult {
     mdDescription: string;
     keywords: string[];
     confidence: number;
+    // New fields
+    suggestedName: string;
+    suggestedBrand: string;
+    suggestedSize: string;
+    suggestedFabric: string;
 }
 
 /**
- * 1. 등급(GRADE) 자동 판정
- * 이미지를 분석하여 상품 상태 등급 자동 판정
+ * 1. 이미지 종합 분석 (등급, 상품명, 브랜드, 사이즈, 원단)
+ * 이미지를 분석하여 상품의 상세 정보를 추출합니다.
  */
-export async function analyzeProductGrade(imageUrl: string, productName: string): Promise<{
+export async function analyzeProductImage(imageUrl: string, currentName: string): Promise<{
     grade: 'S급' | 'A급' | 'B급';
     reason: string;
     confidence: number;
+    suggestedName: string;
+    suggestedBrand: string;
+    suggestedSize: string;
+    suggestedFabric: string;
 }> {
     try {
         const prompt = `
 당신은 중고 의류 전문 감정사입니다. 
-이미지를 보고 상품의 상태를 정확하게 판정해주세요.
+이미지를 정밀하게 분석하여 다음 정보를 JSON 형식으로 추출해주세요.
 
-상품명: ${productName}
+입력된 상품명 참고: ${currentName}
 
-등급 기준:
-- S급 (새상품급): 거의 새것, 사용감 없음, 오염/손상 전혀 없음
-- A급 (사용감 적음): 약간의 사용감, 미세한 오염 가능, 전반적으로 양호
-- B급 (사용감 있음): 눈에 띄는 사용감, 오염/변색/손상 있음
+추출 항목:
+1. grade: 상태 등급 
+   - S급 (새상품급): 사용감 없음, 오염/손상 없음
+   - A급 (사용감 적음): 미세한 사용감, 상태 양호
+   - B급 (사용감 있음): 눈에 띄는 사용감, 오염/손상 존재
+2. reason: 등급 판정 근거 (구체적)
+3. confidence: 신뢰도 (0-100)
+4. suggestedName: 상품명 (브랜드 + 카테고리 + 특징 조합하여 간결하게, 예: "나이키 스우시 후드티")
+5. suggestedBrand: 브랜드명 (로고나 텍스트로 식별, 식별 불가시 "Generic" 또는 공란)
+6. suggestedSize: 사이즈 (라벨에 적힌 표기 "M", "95", "100" 등, 식별 불가시 공란)
+7. suggestedFabric: 원단/소재 (라벨 텍스트 또는 재질감 추정, 예: "면 100%", "폴리에스터 혼방")
 
 다음 JSON 형식으로만 답변하세요:
 {
   "grade": "S급" | "A급" | "B급",
-  "reason": "판정 근거 (구체적으로)",
-  "confidence": 0-100 (신뢰도)
+  "reason": "...",
+  "confidence": 85,
+  "suggestedName": "...",
+  "suggestedBrand": "...",
+  "suggestedSize": "...",
+  "suggestedFabric": "..."
 }
 `;
 
@@ -81,15 +101,28 @@ export async function analyzeProductGrade(imageUrl: string, productName: string)
         }
 
         const text = data.candidates[0].content.parts[0].text;
-        const result = JSON.parse(text.replace(/```json\n?|\n?```/g, ''));
+        const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
+        const result = JSON.parse(jsonStr);
 
-        return result;
+        return {
+            grade: result.grade || 'A급',
+            reason: result.reason || '',
+            confidence: result.confidence || 0,
+            suggestedName: result.suggestedName || currentName,
+            suggestedBrand: result.suggestedBrand || '',
+            suggestedSize: result.suggestedSize || '',
+            suggestedFabric: result.suggestedFabric || ''
+        };
     } catch (error) {
-        console.error('Grade analysis error:', error);
+        console.error('Image analysis error:', error);
         return {
             grade: 'A급',
             reason: '자동 판정 실패 - 수동 확인 필요',
-            confidence: 0
+            confidence: 0,
+            suggestedName: currentName,
+            suggestedBrand: '',
+            suggestedSize: '',
+            suggestedFabric: ''
         };
     }
 }
@@ -194,6 +227,7 @@ export async function generateMDDescription(product: {
     category: string;
     condition: string;
     size?: string;
+    fabric?: string;
     imageUrl?: string;
 }): Promise<string> {
     try {
@@ -206,6 +240,15 @@ export async function generateMDDescription(product: {
 카테고리: ${product.category}
 등급: ${product.condition}
 사이즈: ${product.size || '미기재'}
+소재/원단: ${product.fabric || '상세설명 참조'}
+
+요구사항:
+1. 3-5문장으로 간결하게
+2. 브랜드의 특징과 가치 강조
+3. 소재의 장점(착용감, 관리 등)과 상품의 활용도 설명
+4. 구매 욕구를 자극하는 표현 사용
+5. 이모지 적절히 활용
+6. HTML 태그 사용 (p, strong, br 등)
 
 요구사항:
 1. 3-5문장으로 간결하게
@@ -325,43 +368,48 @@ export async function analyzeProductComplete(product: {
 }): Promise<AIAnalysisResult> {
     console.log(`🤖 AI 분석 시작: ${product.id}`);
 
-    // 병렬 처리로 속도 향상
-    const [gradeResult, priceResult, mdDescription] = await Promise.all([
-        analyzeProductGrade(product.imageUrl, product.name),
-        suggestPrice({
-            name: product.name,
-            brand: product.brand,
-            category: product.category,
-            condition: 'A급', // 초기값
-            price_consumer: product.price_consumer
-        }),
-        generateMDDescription({
-            name: product.name,
-            brand: product.brand,
-            category: product.category,
-            condition: 'A급', // 초기값
-            size: product.size,
-            imageUrl: product.imageUrl
-        })
-    ]);
+    // 1. 이미지 분석 (Grade + Metadata Extraction)
+    const imageAnalysisResult = await analyzeProductImage(product.imageUrl, product.name);
 
-    // 재가격 추천 (등급 반영)
-    const finalPriceResult = await suggestPrice({
-        name: product.name,
-        brand: product.brand,
+    // 2. 가격 및 MD Desc 병렬 생성 (이미지 분석 결과를 일부 활용 가능하지만, 속도를 위해 병렬 처리하되, 가격은 나중에 보정)
+    // 하지만 정확도를 위해 먼저 이미지 분석을 끝내고 가격을 산정하는 것이 좋음.
+
+    // MD Description
+    const mdDescriptionPromise = generateMDDescription({
+        name: imageAnalysisResult.suggestedName || product.name,
+        brand: imageAnalysisResult.suggestedBrand || product.brand,
         category: product.category,
-        condition: gradeResult.grade,
+        condition: imageAnalysisResult.grade,
+        size: imageAnalysisResult.suggestedSize || product.size,
+        fabric: imageAnalysisResult.suggestedFabric,
+        imageUrl: product.imageUrl
+    });
+
+    // Price Suggestion
+    const priceSuggestionPromise = suggestPrice({
+        name: imageAnalysisResult.suggestedName || product.name,
+        brand: imageAnalysisResult.suggestedBrand || product.brand,
+        category: product.category,
+        condition: imageAnalysisResult.grade,
         price_consumer: product.price_consumer
     });
 
+    const [mdDescription, finalPriceResult] = await Promise.all([mdDescriptionPromise, priceSuggestionPromise]);
+
     return {
-        grade: gradeResult.grade,
-        gradeReason: gradeResult.reason,
+        grade: imageAnalysisResult.grade,
+        gradeReason: imageAnalysisResult.reason,
         suggestedPrice: finalPriceResult.suggestedPrice,
         priceReason: finalPriceResult.reason,
         mdDescription,
-        keywords: extractKeywords(product.name),
-        confidence: gradeResult.confidence
+        keywords: extractKeywords(imageAnalysisResult.suggestedName || product.name),
+        confidence: imageAnalysisResult.confidence,
+
+        // New columns
+        suggestedName: imageAnalysisResult.suggestedName,
+        suggestedBrand: imageAnalysisResult.suggestedBrand,
+        suggestedSize: imageAnalysisResult.suggestedSize,
+        suggestedFabric: imageAnalysisResult.suggestedFabric
     };
 }
 

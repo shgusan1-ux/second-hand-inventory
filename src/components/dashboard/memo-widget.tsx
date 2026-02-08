@@ -75,20 +75,77 @@ export function MemoWidget({ memos }: { memos: any[] }) {
                             </div>
                         ) : (
                             memos.map((memo) => (
-                                <div key={memo.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm text-sm">
-                                    <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{memo.content}</p>
-                                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50">
-                                        <span className="text-slate-500 text-xs font-semibold">{memo.author_name}</span>
-                                        <span className="text-slate-400 text-[10px]">
-                                            {new Date(memo.created_at).toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
+                                <MemoItem key={memo.id} memo={memo} />
                             ))
                         )}
                     </div>
                 </ScrollArea>
             </CardContent>
         </Card>
+    );
+}
+
+import { addMemoComment } from '@/lib/actions';
+
+function MemoItem({ memo }: { memo: any }) {
+    const [showComments, setShowComments] = useState(false);
+    const [comment, setComment] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const router = useRouter();
+
+    const handleAddComment = async () => {
+        if (!comment.trim()) return;
+        setIsSubmitting(true);
+        const res = await addMemoComment(memo.id, comment);
+        setIsSubmitting(false);
+        if (res.success) {
+            setComment('');
+            router.refresh();
+        } else {
+            toast.error('댓글 등록 실패');
+        }
+    };
+
+    return (
+        <div className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm text-sm">
+            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{memo.content}</p>
+            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50">
+                <span className="text-slate-500 text-xs font-semibold">{memo.author_name}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-slate-400 text-[10px]">
+                        {new Date(memo.created_at).toLocaleString()}
+                    </span>
+                    <Button variant="ghost" size="sm" className="h-6 px-1 text-slate-400" onClick={() => setShowComments(!showComments)}>
+                        댓글 {memo.comments ? memo.comments.length : 0}
+                    </Button>
+                </div>
+            </div>
+            {/* Comments Section */}
+            {showComments && (
+                <div className="mt-3 pl-2 border-l-2 border-slate-100 space-y-2">
+                    {memo.comments && memo.comments.map((c: any) => (
+                        <div key={c.id} className="bg-slate-50 p-2 rounded text-xs">
+                            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                                <span>{c.author_name}</span>
+                                <span>{new Date(c.created_at).toLocaleString()}</span>
+                            </div>
+                            <p className="text-slate-700">{c.content}</p>
+                        </div>
+                    ))}
+                    <div className="flex gap-2 mt-2">
+                        <input
+                            className="flex-1 text-xs border rounded px-2 py-1"
+                            placeholder="댓글 작성..."
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddComment(); }}
+                        />
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleAddComment} disabled={isSubmitting}>
+                            <Send className="w-3 h-3" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

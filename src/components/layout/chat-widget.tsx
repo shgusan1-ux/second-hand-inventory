@@ -8,6 +8,7 @@ import { heartbeat, getOnlineUsers, getMessages, sendMessage } from '@/lib/chat-
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
+import { toast } from 'sonner';
 
 export function ChatWidget({ currentUser }: { currentUser: any }) {
     const [open, setOpen] = useState(false);
@@ -31,14 +32,30 @@ export function ChatWidget({ currentUser }: { currentUser: any }) {
         }
     }, [currentUser]);
 
-    // Poll Messages when open
+    // Poll Messages
     useEffect(() => {
-        if (open) {
-            fetchMessages();
-            const timer = setInterval(fetchMessages, 3000); // 3s polling
-            return () => clearInterval(timer);
-        }
-    }, [open]);
+        // Initial fetch
+        fetchMessages();
+
+        const timer = setInterval(async () => {
+            const msgs = await getMessages();
+            setMessages(prev => {
+                // Check if new message
+                if (msgs.length > prev.length && prev.length > 0) {
+                    const lastMsg = msgs[msgs.length - 1];
+                    if (lastMsg.sender_id !== currentUser.id && !open) {
+                        try {
+                            toast.info(`새 메시지: ${lastMsg.content ? lastMsg.content.substring(0, 20) : '사진'}...`);
+                            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                            audio.play().catch(() => { });
+                        } catch (e) { }
+                    }
+                }
+                return msgs;
+            });
+        }, 3000);
+        return () => clearInterval(timer);
+    }, [open, currentUser.id]); // Removed open dependency to poll always
 
     // Auto-scroll
     useEffect(() => {

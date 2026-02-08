@@ -111,7 +111,7 @@ export async function getSmartStoreGroups() {
         SELECT * FROM products 
         WHERE created_at >= $1
         AND status = '판매중'
-        ORDER BY created_at DESC LIMIT 50
+        ORDER BY created_at DESC
         `, [sevenDaysAgoStr]);
 
     // 2. CURATED: Price >= 50000 AND Condition IN ('S', 'A급', 'A')
@@ -120,7 +120,7 @@ export async function getSmartStoreGroups() {
         WHERE price_sell >= 50000 
         AND (condition LIKE '%S%' OR condition = 'A급' OR condition = 'A')
         AND status = '판매중'
-        ORDER BY price_sell DESC LIMIT 50
+        ORDER BY price_sell DESC
         `);
 
     // 3. ARCHIVE: Brand/Name contains 'Vintage' OR Condition contains 'V'
@@ -128,7 +128,7 @@ export async function getSmartStoreGroups() {
         SELECT * FROM products 
         WHERE (name LIKE '%Vintage%' OR brand LIKE '%Vintage%' OR condition LIKE '%V%')
         AND status = '판매중'
-        ORDER BY created_at DESC LIMIT 50
+        ORDER BY created_at DESC
         `);
 
     // 4. CLEARANCE: Created > 30 days ago
@@ -137,7 +137,7 @@ export async function getSmartStoreGroups() {
         SELECT * FROM products 
         WHERE created_at <= $1
         AND status = '판매중'
-        ORDER BY created_at ASC LIMIT 50
+        ORDER BY created_at ASC
         `, [thirtyDaysAgoStr]);
 
     return {

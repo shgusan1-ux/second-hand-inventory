@@ -163,3 +163,17 @@ export async function getMemberAttendanceStats(userId: string, month: string) { 
         return [];
     }
 }
+
+export async function updateUserJobTitle(targetUserId: string, newJobTitle: string) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+
+    try {
+        await db.query('UPDATE users SET job_title = $1 WHERE id = $2', [newJobTitle, targetUserId]);
+        await logAction('UPDATE_JOB_TITLE', 'user', targetUserId, `Updated job title to ${newJobTitle}`);
+        revalidatePath('/members');
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: 'Failed to update job title' };
+    }
+}

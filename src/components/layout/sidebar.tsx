@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AttendanceWidget } from './attendance-widget';
 import { ClockWidget } from './clock-widget';
 import { ChatWidget } from './chat-widget';
-import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Sparkles } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,12 @@ const inventoryManagement = [
     { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
     { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
     { name: '통계', href: '/statistics', icon: BarChart3 },
+];
+
+// 3. AI Automation Tools
+const aiTools = [
+    { name: 'MD-SOGAE v2.9', href: '/tools/md-sogae', icon: Shield },
+    { name: 'AI 자동화', href: '/tools/ai-automation', icon: Sparkles },
 ];
 
 // 4. Admin & Business Support (User skipped 3?)
@@ -87,6 +93,35 @@ export function Sidebar({ user }: { user?: any }) {
                             isActive = pathname === '/inventory' || (pathname.startsWith('/inventory/') && !['/inventory/manage', '/inventory/new', '/inventory/discarded'].some(p => pathname.startsWith(p)));
                         }
 
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={cn(
+                                    'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                                    isActive
+                                        ? 'bg-slate-800 text-emerald-400'
+                                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                )}
+                            >
+                                <item.icon
+                                    className={cn(
+                                        'mr-3 h-5 w-5 flex-shrink-0',
+                                        isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white'
+                                    )}
+                                    aria-hidden="true"
+                                />
+                                {item.name}
+                            </Link>
+                        );
+                    })}
+                </div>
+
+                {/* 3. AI Automation Tools */}
+                <div className="pt-4 pb-2">
+                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">AI 도구</div>
+                    {aiTools.map((item) => {
+                        const isActive = pathname.startsWith(item.href);
                         return (
                             <Link
                                 key={item.name}

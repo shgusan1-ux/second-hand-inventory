@@ -6,14 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Mock Weather Data
 const CITIES = [
-    { id: 'seoul', name: '서울', x: 30, y: 20, temp: 22, condition: 'Sunny' },
-    { id: 'incheon', name: '인천', x: 20, y: 22, temp: 21, condition: 'Cloudy' },
+    { id: 'seoul', name: '서울', x: 28, y: 22, temp: 22, condition: 'Sunny' },
+    { id: 'incheon', name: '인천', x: 18, y: 22, temp: 21, condition: 'Cloudy' },
     { id: 'daejeon', name: '대전', x: 35, y: 45, temp: 24, condition: 'Sunny' },
-    { id: 'daegu', name: '대구', x: 60, y: 55, temp: 27, condition: 'Sunny' },
-    { id: 'gwangju', name: '광주', x: 30, y: 70, temp: 25, condition: 'Rainy' },
-    { id: 'busan', name: '부산', x: 70, y: 75, temp: 26, condition: 'Cloudy' },
-    { id: 'ulsan', name: '울산', x: 75, y: 65, temp: 25, condition: 'Cloudy' },
-    { id: 'jeju', name: '제주', x: 25, y: 90, temp: 28, condition: 'Sunny' },
+    { id: 'daegu', name: '대구', x: 65, y: 58, temp: 27, condition: 'Sunny' },
+    { id: 'gwangju', name: '광주', x: 30, y: 75, temp: 25, condition: 'Rainy' },
+    { id: 'busan', name: '부산', x: 75, y: 78, temp: 26, condition: 'Cloudy' },
+    { id: 'ulsan', name: '울산', x: 82, y: 68, temp: 25, condition: 'Cloudy' },
+    { id: 'jeju', name: '제주', x: 25, y: 92, temp: 28, condition: 'Sunny' },
     { id: 'gangneung', name: '강릉', x: 65, y: 25, temp: 20, condition: 'Windy' },
 ];
 
@@ -52,17 +52,19 @@ export function KoreaWeatherMap() {
             </CardHeader>
             <CardContent className="h-[400px] relative p-0 flex items-center justify-center bg-blue-50/50">
                 {/* Simplified Korea Map Background using CSS Shapes/SVG */}
-                <div className="relative w-[300px] h-[400px] opacity-90 scale-90 md:scale-100">
-                    {/* Abstract Map Shape (SVG) */}
-                    <svg className="absolute inset-0 w-full h-full drop-shadow-xl" viewBox="0 0 400 600">
+                <div className="relative w-[300px] h-[400px] scale-90 md:scale-100">
+                    {/* More Accurate Korea Map Shape */}
+                    <svg className="absolute inset-0 w-full h-full drop-shadow-md opacity-80" viewBox="0 0 300 450">
                         <path
-                            d="M180,50 L220,60 L240,100 L280,120 L270,180 L300,220 L280,260 L320,300 L300,350 L250,450 L200,480 L180,450 L150,420 L120,380 L100,300 L120,200 L180,150 Z"
+                            d="M130,20 L150,25 L160,50 L180,60 L170,90 L200,100 L220,130 L230,200 L210,250 L240,280 L230,320 L240,350 L200,380 L160,390 L130,400 L80,380 L60,350 L90,300 L70,250 L80,200 L60,150 L80,100 L70,60 L100,40 Z"
                             fill="#cbd5e1"
                             stroke="white"
                             strokeWidth="2"
                         />
-                        {/* Jeju */}
-                        <ellipse cx="120" cy="550" rx="30" ry="15" fill="#cbd5e1" stroke="white" strokeWidth="2" />
+                        {/* Jeju Island */}
+                        <ellipse cx="80" cy="420" rx="25" ry="12" fill="#cbd5e1" stroke="white" strokeWidth="2" />
+                        {/* Dokdo / Ulleungdo (simplified) */}
+                        <circle cx="260" cy="180" r="5" fill="#cbd5e1" stroke="white" strokeWidth="1" />
                     </svg>
 
                     {weatherData.map((city) => (

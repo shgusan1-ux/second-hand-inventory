@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { SmartStoreButton } from '@/components/inventory/smartstore-button';
 import { DiscardButton } from '@/components/inventory/discard-button';
 import { Button } from '@/components/ui/button';
-import { Edit, ChevronLeft, ChevronRight, CheckSquare, Square, Download } from 'lucide-react';
+import { Edit, ChevronLeft, ChevronRight, CheckSquare, Square, Download, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getInventoryForExport, bulkDeleteProducts } from '@/lib/actions';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { ProductEditDialog } from '@/components/inventory/product-edit-dialog';
 import { BulkEditDialog } from '@/components/inventory/bulk-edit-dialog';
 import * as XLSX from 'xlsx';
 import { BulkAiUpdateDialog } from '@/components/inventory/bulk-ai-update-dialog';
+import { ProductDetailPreview } from '@/components/inventory/product-detail-preview';
 
 interface InventoryTableProps {
     products: any[];
@@ -42,6 +43,7 @@ export function InventoryTable({
     const router = useRouter();
     const searchParams = useSearchParams();
     const [editingProduct, setEditingProduct] = useState<any>(null);
+    const [previewProduct, setPreviewProduct] = useState<any>(null);
     const [bulkEditOpen, setBulkEditOpen] = useState(false);
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -263,6 +265,7 @@ export function InventoryTable({
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">사이즈</th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden md:table-cell">카테고리</th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">마스터등록일</th>
+
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('price_sell')}>
                                 <div className="flex items-center hover:text-slate-900">
                                     판매가 <SortIcon col="price_sell" />
@@ -333,14 +336,27 @@ export function InventoryTable({
                                             {product.id}
                                         </span>
                                     </td>
-                                    <td className="p-3 align-middle font-medium max-w-[200px] truncate" title={product.name}>
-                                        {isEditable ? (
-                                            <button onClick={() => setEditingProduct(product)} className="hover:underline text-left">
-                                                {product.name}
-                                            </button>
-                                        ) : (
-                                            product.name
-                                        )}
+                                    <td className="p-3 align-middle font-medium max-w-[200px]" title={product.name}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="truncate">
+                                                {isEditable ? (
+                                                    <button onClick={() => setEditingProduct(product)} className="hover:underline text-left">
+                                                        {product.name}
+                                                    </button>
+                                                ) : (
+                                                    product.name
+                                                )}
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 shrink-0"
+                                                onClick={() => setPreviewProduct(product)}
+                                                title="상세페이지 미리보기"
+                                            >
+                                                <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                                            </Button>
+                                        </div>
                                     </td>
                                     <td className="p-3 align-middle text-slate-600">{product.brand}</td>
                                     <td className="p-3 align-middle text-center">
@@ -353,7 +369,40 @@ export function InventoryTable({
                                         </span>
                                     </td>
                                     <td className="p-3 align-middle text-slate-500 text-xs">{product.size}</td>
-                                    <td className="p-3 align-middle text-slate-500 hidden md:table-cell text-xs">{product.category}</td>
+                                    <td className="p-3 align-middle hidden md:table-cell">
+                                        {(() => {
+                                            // Find matching category
+                                            const categoryValue = product.category || '';
+                                            const matchedCategory = categories.find(c =>
+                                                c.id === categoryValue ||
+                                                c.name === categoryValue ||
+                                                c.id === categoryValue.toUpperCase()
+                                            );
+
+                                            const classification = matchedCategory?.classification || '기타';
+                                            const displayName = matchedCategory?.name || categoryValue || '-';
+
+                                            // Style based on classification
+                                            let badgeStyle = 'bg-slate-50 text-slate-600 border-slate-200';
+                                            if (classification === 'MAN') badgeStyle = 'bg-blue-50 text-blue-700 border-blue-100';
+                                            else if (classification === 'WOMAN') badgeStyle = 'bg-pink-50 text-pink-700 border-pink-100';
+                                            else if (classification === 'KIDS') badgeStyle = 'bg-yellow-50 text-yellow-700 border-yellow-100';
+                                            else if (classification === '악세사리') badgeStyle = 'bg-purple-50 text-purple-700 border-purple-100';
+
+                                            return (
+                                                <div className="flex items-center gap-2">
+                                                    {categoryValue !== '' && (
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border min-w-[2.5rem] text-center shrink-0 ${badgeStyle}`}>
+                                                            {classification}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs text-slate-600 font-medium truncate max-w-[120px]" title={displayName}>
+                                                        {displayName}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
                                     <td className="p-3 align-middle text-slate-500 text-xs">
                                         {product.master_reg_date ? new Date(product.master_reg_date).toLocaleDateString('ko-KR') : '-'}
                                     </td>
@@ -388,6 +437,13 @@ export function InventoryTable({
                     </tbody>
                 </table>
             </div>
+
+            {/* Detail Preview Dialog */}
+            <ProductDetailPreview
+                open={!!previewProduct}
+                onClose={() => setPreviewProduct(null)}
+                product={previewProduct}
+            />
 
             {/* Edit Dialog */}
             {

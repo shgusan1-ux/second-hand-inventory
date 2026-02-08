@@ -1,0 +1,158 @@
+// Shared HTML generation functions for product detail pages
+export function generateProductDetailHTML(product: any): string {
+  const imageUrls = product.image_url ? product.image_url.split(',').map((url: string) => url.trim()) : [];
+  const mainImage = imageUrls[0] || '';
+
+  const measurements = parseMeasurements(product);
+  const mdComment = generateMDComment(product);
+  const gradeInfo = getGradeInfo(product.condition || 'A급');
+  const fabric = product.fabric || '케어라벨 미부착으로 확인불가';
+
+  return `<div style="max-width:860px; margin:0 auto; font-family:'나눔스퀘어','NanumSquare','Malgun Gothic',sans-serif; color:#333; line-height:1.75; letter-spacing:-0.3px;">
+  <div style="margin:0 0 30px;">
+    <img src="${mainImage}" style="width:100%; height:auto; display:block; margin:0 auto 18px; max-width:860px; border-radius:8px;" />
+  </div>
+
+  <div style="text-align:center; margin:60px 0 60px; padding:0 10px;">
+    <table align="center" border="0" cellpadding="0" cellspacing="0" style="width:100%; max-width:860px; border-collapse:separate; border-spacing:0;">
+      <tbody>
+        <tr>
+          <td style="background:#F8F7F2; border:1px solid #EAE8DF; border-radius:16px; padding:35px 16px; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.10);">
+            <div style="font-size:18px; font-weight:900; margin:0 0 14px; color:#1A4D3E; letter-spacing:0.2px;">
+              <span style="font-size:22px; vertical-align:middle;">👕</span> <span style="vertical-align:middle;">MD's Pick</span>
+            </div>
+            <div style="text-align:center; margin:0 auto; font-size:15px; color:#555; line-height:1.9;">
+              ${mdComment}
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="padding:0 12px; margin:0 0 50px; text-align:center;">
+    <h3 style="font-size:19px; font-weight:900; color:#1A4D3E; margin:0 0 20px; letter-spacing:0.8px;">PRODUCT INFO</h3>
+    <div style="display:inline-block; text-align:left; width:100%; max-width:520px;">
+      <ul style="list-style:none; padding:0; font-size:14px; line-height:2.0; margin:0;">
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">BRAND</strong> <b>${product.brand || '-'}</b></li>
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${product.size || '-'}</li>
+        <li><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">FABRIC</strong> ${fabric}</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="padding: 0 15px; margin-bottom: 60px;">
+    <div style="background-color: #F8F7F2; border: 1px solid #1A4D3E; border-radius: 8px; padding: 30px 20px; text-align: center;">
+      <h3 style="font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #1A4D3E;">📏 SIZE GUIDE (cm)</h3>
+      <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 16px; color: #555;">
+        ${measurements.map(m => `
+        <div style="background: white; border: 1px solid #1A4D3E; border-radius: 6px; padding: 10px 20px; min-width: 120px;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 4px;">${m.label}</div>
+          <div style="font-size: 18px; font-weight: bold; color: #1A4D3E;">${m.value}</div>
+        </div>
+        `).join('')}
+      </div>
+      <p style="margin-top: 20px; font-size: 13px; color: #888; letter-spacing: -0.5px;">* 측정 방법 및 위치에 따라 1~2cm 오차가 발생할 수 있습니다.</p>
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 60px;">
+    <h3 style="font-size: 22px; font-weight: bold; color: #1A4D3E; margin-bottom: 35px; letter-spacing: 1px;">DETAIL VIEW</h3>
+    ${(() => {
+      // [MUST FOLLOW] DETAIL VIEW 이미지 절대 규칙
+      // Rule 4: vert.jpg 예외 처리 - vert.jpg가 있으면 다른 모든 상세 이미지 무시
+      const hasVert = imageUrls.some((url: string) => url.toLowerCase().includes('vert.jpg'));
+
+      let detailImages = [];
+      if (hasVert) {
+        // vert.jpg만 출력 (다른 모든 상세 이미지 무시, 중복 방지)
+        const vertImage = imageUrls.find((url: string) => url.toLowerCase().includes('vert.jpg'));
+        if (vertImage) detailImages.push(vertImage);
+      } else {
+        // Rule 1: 모든 이미지 URL을 각각 개별 <img> 태그로 변환하여 나열
+        // Rule 2: 요약 및 생략 금지 - 모든 이미지를 하나도 누락 없이 출력
+        // Rule 3: 입력 개수 = 출력 개수 (구조적 매칭)
+        detailImages = imageUrls;
+      }
+
+      // Rule 5: 태그 형식 유지 - 정확한 형식으로 한 줄에 하나씩 출력
+      // [FINAL CHECK] 출력 전 검수: detailImages.length 확인
+      return detailImages.map((url: string) => `
+    <img alt="" src="${url}" style="width:100%; height:auto; display:block; margin:0 auto 18px;" />
+    `).join('');
+    })()}
+  </div>
+
+  <div style="padding:35px 18px; background:#F8F7F2; margin:0 0 60px; text-align:center; border-radius:12px; border:1px solid #EAE8DF;">
+    <h3 style="font-size:18px; font-weight:900; margin:0 0 22px; color:#1A4D3E;">✨ CONDITION CHECK</h3>
+    <div style="display:inline-block; padding:12px 25px; background:#1A4D3E; color:#fff; font-size:16px; font-weight:900; border-radius:10px; margin-bottom:12px; box-shadow:0 2px 5px rgba(26,77,62,0.18);">GRADE : ${product.condition || 'A급'}</div>
+    <p style="font-size:14px; color:#555; line-height:1.6; margin:0;">${gradeInfo}</p>
+  </div>
+</div>`;
+}
+
+function parseMeasurements(product: any): Array<{ label: string; value: string }> {
+  const measurements: Array<{ label: string; value: string }> = [];
+
+  const measurementFields = [
+    { key: 'shoulder', label: '어깨' },
+    { key: 'chest', label: '가슴' },
+    { key: 'waist', label: '허리' },
+    { key: 'sleeve', label: '소매' },
+    { key: 'length', label: '총장' },
+    { key: 'hem', label: '밑단' },
+    { key: 'rise', label: '밑위' },
+    { key: 'thigh', label: '허벅지' },
+    { key: 'inseam', label: '안쪽기장' },
+  ];
+
+  measurementFields.forEach(({ key, label }) => {
+    if (product[key]) {
+      let value = product[key];
+
+      if (key === 'waist' && !isNaN(value)) {
+        const cm = parseFloat(value);
+        const inches = Math.round((cm * 2) / 2.54);
+        value = `${cm}cm (${inches}in)`;
+      } else if (!isNaN(value)) {
+        value = `${value}cm`;
+      }
+
+      measurements.push({ label, value });
+    }
+  });
+
+  return measurements;
+}
+
+function generateMDComment(product: any): string {
+  const brand = product.brand || '브랜드';
+  const condition = product.condition || 'A급';
+  const category = product.category || '아이템';
+
+  const comments = [
+    `${brand}의 ${condition} 상품으로, 깔끔한 상태의 ${category}입니다. 실측 사이즈를 꼭 확인해주세요.`,
+    `${brand} 정품 ${category}입니다. ${condition} 등급으로 상태가 우수하며, 디테일 사진을 참고해주세요.`,
+    `${brand}의 시그니처 ${category}로, ${condition} 컨디션의 제품입니다. 실물 사진 확인 후 구매 부탁드립니다.`,
+    `깔끔한 ${condition} 상태의 ${brand} ${category}입니다. 사이즈 가이드를 참고하여 선택해주세요.`,
+  ];
+
+  // Use product ID or name length for deterministic selection (avoid Math.random for SSR)
+  const index = product.id ? (product.id.length % comments.length) : 0;
+  return comments[index];
+}
+
+function getGradeInfo(condition: string): string {
+  const gradeMap: Record<string, string> = {
+    'S': '새상품 수준의 최상급 컨디션입니다.',
+    'S급': '새상품 수준의 최상급 컨디션입니다.',
+    'A': '매우 우수한 상태로, 사용감이 거의 없습니다.',
+    'A급': '매우 우수한 상태로, 사용감이 거의 없습니다.',
+    'B': '일부 데미지나 하자가 있을 수 있으니 사진을 꼭 참조해주세요.',
+    'B급': '일부 데미지나 하자가 있을 수 있으니 사진을 꼭 참조해주세요.',
+    'V': '빈티지 특성상 사용감이 존재하며, 이것이 제품의 매력입니다.',
+    'V급': '빈티지 특성상 사용감이 존재하며, 이것이 제품의 매력입니다.',
+  };
+
+  return gradeMap[condition] || '상태는 사진을 참고해주세요.';
+}
