@@ -147,6 +147,7 @@ export async function bulkDeleteProducts(ids: string[]) {
 
         await logAction('BULK_DELETE', 'product', 'bulk', `Deleted ${ids.length} items`);
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         return { success: true };
     } catch (e) {
         console.error('Bulk delete failed:', e);
@@ -296,6 +297,7 @@ export async function bulkCreateProducts(products: any[]) {
 
         await logAction('BULK_CREATE_PRODUCTS', 'product', 'bulk', `${products.length} items`);
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         revalidatePath('/');
         return { success: true, count: products.length };
     } catch (error: any) {
@@ -410,6 +412,7 @@ export async function createProduct(formData: FormData) {
         await logAction('CREATE_PRODUCT', 'product', id, name);
 
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         revalidatePath('/');
     } catch (error) {
         console.error('Failed to create product:', error);
@@ -460,6 +463,7 @@ export async function updateProduct(id: string, formData: FormData) {
         await logAction('UPDATE_PRODUCT', 'product', id, `${name} (${status})`);
 
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         revalidatePath('/');
     } catch (error) {
         console.error('Failed to update product:', error);
@@ -529,6 +533,7 @@ export async function bulkUpdateFromExcel(products: any[]) {
 
         await logAction('BULK_UPDATE_EXCEL', 'product', 'bulk', `Updated ${successCount} items, Failed ${failCount}`);
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         revalidatePath('/');
 
         return { success: true, count: successCount, failCount, details };
@@ -547,6 +552,7 @@ export async function deleteProduct(id: string) {
         await db.query('UPDATE products SET status = $1 WHERE id = $2', ['폐기', id]);
         await logAction('DISCARD_PRODUCT', 'product', id, 'Moved to trash');
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         revalidatePath('/');
     } catch (error) {
         console.error('Failed to discard product', error);
@@ -559,6 +565,7 @@ export async function restoreProduct(id: string) {
         await logAction('RESTORE_PRODUCT', 'product', id, 'Restored from trash');
         revalidatePath('/inventory');
         revalidatePath('/inventory/discarded');
+        revalidatePath('/smartstore');
         revalidatePath('/');
     } catch (error) {
         console.error('Failed to restore product', error);
@@ -914,6 +921,7 @@ export async function bulkUpdateProducts(ids: string[], updates: any) {
 
         await logAction('BULK_UPDATE', 'product', 'bulk', `Updated ${ids.length} items: ${fieldsToUpdate.join(', ')}`);
         revalidatePath('/inventory');
+        revalidatePath('/smartstore');
         return { success: true };
     } catch (e: any) {
         console.error('Bulk update failed:', e);
@@ -1030,6 +1038,7 @@ export async function bulkUpdateProductsAI(ids: string[], options: { grade: bool
         if (successCount > 0) {
             await logAction('BULK_AI_UPDATE', 'product', 'bulk', `AI Updated ${successCount} items`);
             revalidatePath('/inventory');
+            revalidatePath('/smartstore');
             return { success: true, count: successCount };
         } else {
             return { success: false, error: '선택된 AI 작업이 없습니다.' };
