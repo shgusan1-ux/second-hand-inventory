@@ -372,6 +372,7 @@ export async function createProduct(formData: FormData) {
     const condition = formData.get('condition') as string;
     const size = formData.get('size') as string || '';
     const md_comment = formData.get('md_comment') as string;
+    const master_reg_date = formData.get('master_reg_date') as string || new Date().toISOString().split('T')[0];
 
     // Images handling
     const images: string[] = [];
@@ -384,9 +385,9 @@ export async function createProduct(formData: FormData) {
 
     try {
         await db.query(`
-           INSERT INTO products (id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, images, size)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        `, [id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size]);
+           INSERT INTO products (id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, images, size, master_reg_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `, [id, name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size, master_reg_date]);
 
         await logAction('CREATE_PRODUCT', 'product', id, name);
 
@@ -410,6 +411,7 @@ export async function updateProduct(id: string, formData: FormData) {
     const size = formData.get('size') as string || '';
     const md_comment = formData.get('md_comment') as string;
     const fabric = formData.get('fabric') as string || '';
+    const master_reg_date = formData.get('master_reg_date') as string || null;
 
     // Images handling
     const images: string[] = [];
@@ -425,14 +427,14 @@ export async function updateProduct(id: string, formData: FormData) {
     try {
         // Simple update approach for dynamic params
         let finalQuery = '';
-        const finalParams: any[] = [name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size, fabric];
+        const finalParams: any[] = [name, brand, category, price_consumer, price_sell, status, condition, image_url, md_comment, imagesJson, size, fabric, master_reg_date];
 
         if (status === '판매완료') {
-            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, sold_at=$13 WHERE id=$14`;
+            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), sold_at=$14 WHERE id=$15`;
             finalParams.push(sold_at, id);
         } else {
             // If going back to selling, clear sold_at
-            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, sold_at=NULL WHERE id=$13`;
+            finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), sold_at=NULL WHERE id=$14`;
             finalParams.push(id);
         }
 
@@ -446,6 +448,53 @@ export async function updateProduct(id: string, formData: FormData) {
     }
 
     redirect('/inventory');
+}
+
+export async function bulkUpdateFromExcel(products: any[]) {
+    if (!products || products.length === 0) return { success: true, count: 0 };
+
+    try {
+        let count = 0;
+
+        // Use a transaction for safety? or just update one by one for better error handling per row?
+        // Bulk update via valid SQL is better. 
+        // We will loop deeply for now as it allows flexible field sets.
+
+        for (const item of products) {
+            if (!item.id) continue;
+
+            // Build dynamic update query based on present fields
+            const updates: string[] = [];
+            const params: any[] = [];
+            let pIdx = 1;
+
+            if (item.name !== undefined) { updates.push(`name = $${pIdx++}`); params.push(item.name); }
+            if (item.brand !== undefined) { updates.push(`brand = $${pIdx++}`); params.push(item.brand); }
+            if (item.category !== undefined) { updates.push(`category = $${pIdx++}`); params.push(item.category); }
+            if (item.price_consumer !== undefined) { updates.push(`price_consumer = $${pIdx++}`); params.push(Number(item.price_consumer)); }
+            if (item.price_sell !== undefined) { updates.push(`price_sell = $${pIdx++}`); params.push(Number(item.price_sell)); }
+            if (item.status !== undefined) { updates.push(`status = $${pIdx++}`); params.push(item.status); }
+            if (item.condition !== undefined) { updates.push(`condition = $${pIdx++}`); params.push(item.condition); }
+            if (item.size !== undefined) { updates.push(`size = $${pIdx++}`); params.push(item.size); }
+            if (item.master_reg_date !== undefined) { updates.push(`master_reg_date = $${pIdx++}`); params.push(item.master_reg_date || null); }
+
+            // Only update if there are fields to update
+            if (updates.length > 0) {
+                params.push(item.id);
+                // Use a simpler query without joins
+                await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id = $${pIdx}`, params);
+                count++;
+            }
+        }
+
+        await logAction('BULK_UPDATE_EXCEL', 'product', 'bulk', `Updated ${count} items from Excel`);
+        revalidatePath('/inventory');
+        revalidatePath('/');
+        return { success: true, count };
+    } catch (error: any) {
+        console.error('Bulk excel update failed:', error);
+        return { success: false, error: error.message || 'Excel update failed' };
+    }
 }
 
 

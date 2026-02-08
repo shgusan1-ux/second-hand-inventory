@@ -47,9 +47,10 @@ export function ProductForm({ categories }: { categories: Category[] }) {
         if (rows.length === 0) return;
 
         const preview = rows.map((cols, i) => {
-            // [ID] [Name] [Brand] [Category] [PriceSell] [Size/Condition?]
+            // [ID] [Name] [Brand] [Category] [PriceSell] [Condition] [MasterRegDate?]
             const productName = cols[1]?.trim() || '이름 없음';
             const brandFromPaste = cols[2]?.trim() || '';
+            const masterRegDate = cols[7]?.trim() || ''; // 8번째 컬럼
 
             return {
                 id: cols[0]?.trim() || `AUTO-${Date.now()}-${i}`,
@@ -59,6 +60,7 @@ export function ProductForm({ categories }: { categories: Category[] }) {
                 price_consumer: parseInt(cols[4]?.replace(/,/g, '') || '0'),
                 price_sell: parseInt(cols[5]?.replace(/,/g, '') || '0'),
                 condition: cols[6]?.trim() || 'A급',
+                master_reg_date: masterRegDate || null,
                 status: '판매중',
                 image_url: '',
                 md_comment: '',
@@ -171,6 +173,19 @@ export function ProductForm({ categories }: { categories: Category[] }) {
                             </div>
 
                             <div className="space-y-2">
+                                <label className="text-sm font-medium text-blue-600">마스터 등록일 (선택)</label>
+                                <Input
+                                    name="master_reg_date"
+                                    type="date"
+                                    className="border-blue-300"
+                                    placeholder="YYYY-MM-DD"
+                                />
+                                <p className="text-xs text-slate-500">
+                                    * 비워두면 오늘 날짜로 자동 설정됩니다.
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
                                 <label className="text-sm font-medium">이미지 URL (최대 5개)</label>
                                 <div className="space-y-2">
                                     {[0, 1, 2, 3, 4].map((i) => (
@@ -203,7 +218,7 @@ export function ProductForm({ categories }: { categories: Category[] }) {
                         </CardTitle>
                         <p className="text-sm text-slate-500">
                             엑셀에서 데이터를 복사(Ctrl+C)하여 아래에 붙여넣기(Ctrl+V) 하세요.<br />
-                            순서: <strong>[ID] [상품명] [브랜드] [카테고리] [정상가] [판매가] [상태]</strong>
+                            순서: <strong>[ID] [상품명] [브랜드] [카테고리] [정상가] [판매가] [상태] [마스터등록일(선택)]</strong>
                         </p>
                     </CardHeader>
                     <CardContent>

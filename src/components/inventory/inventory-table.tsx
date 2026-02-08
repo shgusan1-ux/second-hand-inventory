@@ -16,6 +16,7 @@ import { BulkEditDialog } from '@/components/inventory/bulk-edit-dialog';
 import * as XLSX from 'xlsx';
 import { BulkAiUpdateDialog } from '@/components/inventory/bulk-ai-update-dialog';
 import { ProductDetailPreview } from '@/components/inventory/product-detail-preview';
+import { BulkUpdateExcelDialog } from '@/components/inventory/bulk-update-excel-dialog';
 
 interface InventoryTableProps {
     products: any[];
@@ -232,8 +233,9 @@ export function InventoryTable({
 
                     <Button variant="outline" size="sm" onClick={() => handleDownloadExcel('all')} className="h-8 text-xs bg-white hover:bg-slate-50">
                         <Download className="w-3 h-3 mr-2 text-slate-500" />
-                        전체 엑셀
+                        전체 엑셀 (다운로드)
                     </Button>
+                    <BulkUpdateExcelDialog />
                 </div>
             </div>
 

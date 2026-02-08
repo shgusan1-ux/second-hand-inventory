@@ -403,6 +403,21 @@ export function ProductEditDialog({ open, onClose, product, categories }: Produc
                                 </div>
 
                                 <div className="space-y-2">
+                                    <label className="text-sm font-medium text-blue-600">마스터 등록일</label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="date"
+                                            name="master_reg_date"
+                                            defaultValue={product.master_reg_date ? new Date(product.master_reg_date).toISOString().split('T')[0] : ''}
+                                            className="border-blue-200"
+                                        />
+                                        <div className="text-xs text-slate-400 flex items-center">
+                                            * 수정 시 적용됩니다
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
                                     <label className="text-sm font-medium">상품상세내용 (MD 코멘트)</label>
                                     <textarea
                                         name="md_comment"
