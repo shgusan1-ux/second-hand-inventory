@@ -76,8 +76,7 @@ function ProductList({ items, tag, color, discount, categoryName }: { items: any
                                         : originalPrice;
 
                                     const masterDate = item.master_reg_date ? new Date(item.master_reg_date) : null;
-                                    const today = new Date();
-                                    const elapsedDays = masterDate ? Math.floor((today.getTime() - masterDate.getTime()) / (1000 * 60 * 60 * 24)) : '-';
+                                    const elapsedDays = item.days_since_registration || '-';
 
                                     return (
                                         <tr key={item.id} className="transition-colors hover:bg-slate-50">

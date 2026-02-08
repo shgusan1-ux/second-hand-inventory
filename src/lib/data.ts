@@ -91,19 +91,16 @@ export async function getRecentProducts(limit = 5): Promise<Product[]> {
 }
 
 export async function getSmartStoreGroups() {
-  // noStore(); // remove if not defined or import it, usually revalidatePath handles it, or 'export const dynamic'
   try {
     const now = new Date();
 
     // 7 days ago
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
 
     // 30 days ago
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(now.getDate() - 30);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
     // 모든 판매중 상품 가져오기
     const allProducts = await db.query(`
@@ -115,6 +112,17 @@ export async function getSmartStoreGroups() {
     const products = allProducts.rows;
     const usedIds = new Set<string>();
 
+    // 경과일 계산 함수
+    const calculateDaysSince = (date: string | Date) => {
+      const regDate = new Date(date);
+      return Math.floor((now.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
+    };
+
+    // 모든 상품에 경과일 추가
+    products.forEach(p => {
+      p.days_since_registration = calculateDaysSince(p.created_at);
+    });
+
     // 1. NEW: Created within 7 days
     const newItems = products.filter(p => {
       const createdAt = new Date(p.created_at);
@@ -125,85 +133,114 @@ export async function getSmartStoreGroups() {
       return false;
     });
 
-    // 2. CURATED: Price >= 50000 AND Condition IN ('S', 'A급', 'A')
+    // 2. CURATED: S급만 (날짜 무관)
     const curatedItems = products.filter(p => {
       if (usedIds.has(p.id)) return false;
-      const condition = p.condition || '';
-      if (p.price_sell >= 50000 && (condition.includes('S') || condition === 'A급' || condition === 'A')) {
+      const condition = (p.condition || '').toUpperCase();
+      // S급만 선택 (S, S급, S+, S- 등 모두 포함)
+      if (condition.includes('S')) {
         usedIds.add(p.id);
         return true;
       }
       return false;
     });
 
-    // 3. ARCHIVE 분류 (5개 서브카테고리)
-
-    // 3-1. MILITARY ARCHIVE
-    const militaryKeywords = ['M65', 'MA-1', 'MA1', 'BDU', 'CARGO', '카고', 'MILITARY', '밀리터리', 'ARMY', 'NAVY', 'AIR FORCE', 'USMC', 'ALPHA', 'ROTHCO', 'PROPPER'];
-    const militaryArchive = products.filter(p => {
+    // 3. ARCHIVE 분류 - AI Vision 기반 (이미지가 있는 상품만)
+    const archiveCandidates = products.filter(p => {
       if (usedIds.has(p.id)) return false;
-      const searchText = `${p.name} ${p.brand}`.toUpperCase();
-      if (militaryKeywords.some(kw => searchText.includes(kw.toUpperCase()))) {
-        usedIds.add(p.id);
-        return true;
-      }
-      return false;
+      return p.image_url && p.image_url.trim() !== '';
     });
 
-    // 3-2. WORKWEAR ARCHIVE
-    const workwearKeywords = ['CARHARTT', 'DICKIES', 'DENIM', '데님', 'WORKWEAR', '워크웨어', 'COVERALL', 'OVERALLS', 'PAINTER', 'MECHANIC', 'WORK JACKET', 'WORK PANTS'];
-    const workwearArchive = products.filter(p => {
-      if (usedIds.has(p.id)) return false;
-      const searchText = `${p.name} ${p.brand}`.toUpperCase();
-      if (workwearKeywords.some(kw => searchText.includes(kw.toUpperCase()))) {
-        usedIds.add(p.id);
-        return true;
+    // AI 분류 결과를 저장할 배열
+    const militaryArchive: any[] = [];
+    const workwearArchive: any[] = [];
+    const japanArchive: any[] = [];
+    const heritageEurope: any[] = [];
+    const britishArchive: any[] = [];
+
+    // AI 분류 실행 (병렬 처리, 최대 50개까지만)
+    const classificationPromises = archiveCandidates.slice(0, 50).map(async (product) => {
+      try {
+        const imageUrl = product.image_url.split(',')[0].trim(); // 첫 번째 이미지만 사용
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/smartstore/classify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl,
+            productName: product.name,
+            brand: product.brand
+          })
+        });
+
+        if (!response.ok) {
+          // AI 분류 실패 시 키워드 기반 폴백
+          return { product, category: fallbackClassification(product) };
+        }
+
+        const data = await response.json();
+        return { product, category: data.classification.category };
+      } catch (error) {
+        // 에러 발생 시 키워드 기반 폴백
+        return { product, category: fallbackClassification(product) };
       }
-      return false;
     });
 
-    // 3-3. JAPAN ARCHIVE
-    const japanBrands = ['VISVIM', 'KAPITAL', 'NEIGHBORHOOD', 'WTAPS', 'UNDERCOVER', 'COMME DES GARCONS', 'YOHJI YAMAMOTO', 'ISSEY MIYAKE', 'NANAMICA', 'ENGINEERED GARMENTS', 'NEEDLES', 'PORTER', 'BEAMS', 'UNITED ARROWS'];
-    const japanArchive = products.filter(p => {
-      if (usedIds.has(p.id)) return false;
-      const brand = (p.brand || '').toUpperCase();
-      const name = (p.name || '').toUpperCase();
-      if (japanBrands.some(jb => brand.includes(jb) || name.includes(jb))) {
-        usedIds.add(p.id);
-        return true;
+    const classificationResults = await Promise.all(classificationPromises);
+
+    // 분류 결과를 각 카테고리에 배정
+    classificationResults.forEach(({ product, category }) => {
+      usedIds.add(product.id);
+
+      switch (category) {
+        case 'MILITARY':
+          militaryArchive.push(product);
+          break;
+        case 'WORKWEAR':
+          workwearArchive.push(product);
+          break;
+        case 'JAPAN':
+          japanArchive.push(product);
+          break;
+        case 'EUROPE':
+          heritageEurope.push(product);
+          break;
+        case 'BRITISH':
+          britishArchive.push(product);
+          break;
       }
-      return false;
     });
 
-    // 3-4. HERITAGE EUROPE
-    const europeBrands = ['BARBOUR', 'BURBERRY', 'AQUASCUTUM', 'LAVENHAM', 'MACKINTOSH', 'DAKS', 'GRENFELL', 'JOHN SMEDLEY', 'PRINGLE', 'LYLE & SCOTT'];
-    const heritageEurope = products.filter(p => {
-      if (usedIds.has(p.id)) return false;
-      const brand = (p.brand || '').toUpperCase();
-      const name = (p.name || '').toUpperCase();
-      if (europeBrands.some(eb => brand.includes(eb) || name.includes(eb))) {
-        usedIds.add(p.id);
-        return true;
-      }
-      return false;
-    });
+    // 나머지 상품은 키워드 기반으로 분류
+    const remainingArchiveCandidates = archiveCandidates.slice(50);
+    remainingArchiveCandidates.forEach(product => {
+      if (usedIds.has(product.id)) return;
 
-    // 3-5. BRITISH ARCHIVE
-    const britishBrands = ['FRED PERRY', 'BEN SHERMAN', 'BARACUTA', 'CLARKS', 'DR. MARTENS', 'DR MARTENS', 'PAUL SMITH', 'MARGARET HOWELL', 'SUNSPEL', 'PRIVATE WHITE'];
-    const britishArchive = products.filter(p => {
-      if (usedIds.has(p.id)) return false;
-      const brand = (p.brand || '').toUpperCase();
-      const name = (p.name || '').toUpperCase();
-      if (britishBrands.some(bb => brand.includes(bb) || name.includes(bb))) {
-        usedIds.add(p.id);
-        return true;
+      const category = fallbackClassification(product);
+      usedIds.add(product.id);
+
+      switch (category) {
+        case 'MILITARY':
+          militaryArchive.push(product);
+          break;
+        case 'WORKWEAR':
+          workwearArchive.push(product);
+          break;
+        case 'JAPAN':
+          japanArchive.push(product);
+          break;
+        case 'EUROPE':
+          heritageEurope.push(product);
+          break;
+        case 'BRITISH':
+          britishArchive.push(product);
+          break;
       }
-      return false;
     });
 
     // 4. CLEARANCE: Created > 30 days ago AND NOT in any other category
     const clearanceItems = products.filter(p => {
-      if (usedIds.has(p.id)) return false; // 다른 카테고리에 이미 포함된 상품 제외
+      if (usedIds.has(p.id)) return false;
       const createdAt = new Date(p.created_at);
       return createdAt <= thirtyDaysAgo;
     });
@@ -231,4 +268,42 @@ export async function getSmartStoreGroups() {
       clearanceItems: []
     };
   }
+}
+
+// 키워드 기반 폴백 분류 함수
+function fallbackClassification(product: any): string {
+  const searchText = `${product.name} ${product.brand}`.toUpperCase();
+
+  // MILITARY
+  const militaryKeywords = ['M65', 'MA-1', 'MA1', 'BDU', 'CARGO', '카고', 'MILITARY', '밀리터리', 'ARMY', 'NAVY', 'AIR FORCE', 'USMC', 'ALPHA', 'ROTHCO', 'PROPPER'];
+  if (militaryKeywords.some(kw => searchText.includes(kw.toUpperCase()))) {
+    return 'MILITARY';
+  }
+
+  // WORKWEAR
+  const workwearKeywords = ['CARHARTT', 'DICKIES', 'DENIM', '데님', 'WORKWEAR', '워크웨어', 'COVERALL', 'OVERALLS', 'PAINTER', 'MECHANIC'];
+  if (workwearKeywords.some(kw => searchText.includes(kw.toUpperCase()))) {
+    return 'WORKWEAR';
+  }
+
+  // JAPAN
+  const japanBrands = ['VISVIM', 'KAPITAL', 'NEIGHBORHOOD', 'WTAPS', 'UNDERCOVER', 'COMME DES GARCONS', 'YOHJI YAMAMOTO', 'ISSEY MIYAKE', 'NANAMICA', 'ENGINEERED GARMENTS', 'NEEDLES'];
+  if (japanBrands.some(jb => searchText.includes(jb))) {
+    return 'JAPAN';
+  }
+
+  // EUROPE
+  const europeBrands = ['BARBOUR', 'BURBERRY', 'AQUASCUTUM', 'LAVENHAM', 'MACKINTOSH', 'DAKS', 'GRENFELL'];
+  if (europeBrands.some(eb => searchText.includes(eb))) {
+    return 'EUROPE';
+  }
+
+  // BRITISH
+  const britishBrands = ['FRED PERRY', 'BEN SHERMAN', 'BARACUTA', 'CLARKS', 'DR. MARTENS', 'DR MARTENS', 'PAUL SMITH', 'MARGARET HOWELL'];
+  if (britishBrands.some(bb => searchText.includes(bb))) {
+    return 'BRITISH';
+  }
+
+  // 기본값: WORKWEAR
+  return 'WORKWEAR';
 }
