@@ -28,6 +28,7 @@ interface InventoryTableProps {
     onSort?: (key: string) => void;
     onPageChange?: (page: number) => void;
     isBulkMode?: boolean;
+    onExportAll?: () => void;
 }
 
 export function InventoryTable({
@@ -39,7 +40,8 @@ export function InventoryTable({
     categories = [],
     onSort,
     onPageChange,
-    isBulkMode = false
+    isBulkMode = false,
+    onExportAll
 }: InventoryTableProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -80,7 +82,16 @@ export function InventoryTable({
         let dataToExport: any[] = [];
         const fileName = `inventory_${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
-        if (type === 'selected') {
+        if (type === 'all') {
+            if (isBulkMode && onExportAll) {
+                onExportAll();
+                return;
+            }
+
+            // Download All (Filtered)
+            const params = Object.fromEntries(searchParams.entries());
+            dataToExport = await getInventoryForExport(params);
+        } else {
             if (selectedIds.length === 0) {
                 toast.error('선택된 상품이 없습니다.');
                 return;
@@ -89,10 +100,6 @@ export function InventoryTable({
             // If we tracked only IDs, we can only export visible items. 
             // For better UX, we should export visible selected items.
             dataToExport = products.filter(p => selectedIds.includes(p.id));
-        } else {
-            // Download All (Filtered)
-            const params = Object.fromEntries(searchParams.entries());
-            dataToExport = await getInventoryForExport(params);
         }
 
         if (dataToExport.length === 0) {

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { InventoryFilter } from '@/components/inventory/inventory-filter';
 import { InventoryTable } from '@/components/inventory/inventory-table';
 import { useRouter, useSearchParams } from 'next/navigation';
+import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 
 interface InventoryManagerProps {
     initialProducts: any[];
@@ -25,8 +27,8 @@ export function InventoryManager({
     const [isBulkMode, setIsBulkMode] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [bulkPage, setBulkPage] = useState(1);
-
     const [isLoading, setIsLoading] = useState(false);
+
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -40,9 +42,7 @@ export function InventoryManager({
 
     const handleBulkSearch = async (codes: string[]) => {
         if (codes.length === 0) {
-            setIsBulkMode(false);
-            setProducts(initialProducts);
-            setTotalCount(initialTotalCount);
+            handleReset();
             return;
         }
 
@@ -61,10 +61,11 @@ export function InventoryManager({
             const data = await response.json();
             setProducts(data.products);
             setTotalCount(data.totalCount);
+            setBulkPage(1); // Reset bulk page
         } catch (error) {
             console.error('Bulk search error:', error);
-            alert('대량 검색 중 오류가 발생했습니다.');
-            setIsBulkMode(false); // Revert on error
+            toast.error('대량 검색 중 오류가 발생했습니다.');
+            setIsBulkMode(false);
         } finally {
             setIsLoading(false);
         }
@@ -76,16 +77,35 @@ export function InventoryManager({
         setTotalCount(initialTotalCount);
         setSortConfig(null);
         setBulkPage(1);
-        router.push('/inventory/manage');
+
+        // If we are on a filtered URL, maybe we should reset that too?
+        // But 'Reset' usually means reset the bulk search mode back to normal view.
+        // It currently keeps URL state which is fine.
     };
 
+    const handleExportAll = () => {
+        if (!products || products.length === 0) {
+            toast.error('다운로드할 데이터가 없습니다.');
+            return;
+        }
 
+        const fileName = `inventory_bulk_all_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+        // Use standard XLSX utils
+        const worksheet = XLSX.utils.json_to_sheet(products);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+        XLSX.writeFile(workbook, fileName);
+        toast.success(`${products.length}개 상품 다운로드 완료`);
+    };
 
     // Client-side Sorting & Pagination Logic for Bulk Mode
     let visibleProducts = products;
-    let currentTotal = totalCount;
     let currentLimit = parseInt(searchParams.get('limit') || initialLimit.toString(), 10);
-    let currentPageNum = currentPage;
+    // In bulk mode, we use client-side pagination 'bulkPage'
+    // In normal mode, we use server-side 'currentPage' prop
+    let currentPageNum = isBulkMode ? bulkPage : currentPage;
+    let currentTotal = isBulkMode ? products.length : totalCount;
 
     if (isBulkMode) {
         // 1. Sort
@@ -94,7 +114,6 @@ export function InventoryManager({
                 const aValue = a[sortConfig.key];
                 const bValue = b[sortConfig.key];
 
-                // Handle null/undefined
                 if (!aValue && !bValue) return 0;
                 if (!aValue) return 1;
                 if (!bValue) return -1;
@@ -106,14 +125,6 @@ export function InventoryManager({
         }
 
         // 2. Paginate
-        // Use the current limit setting (or default 50). 
-        // Note: Changing limit via Select triggers reload, which resets bulk mode.
-        // User should set limit BEFORE bulk search for best experience, 
-        // OR we need to intercept limit change too (but that's complex).
-        // For now, allow pagination within the current limit.
-        currentTotal = products.length;
-        currentPageNum = bulkPage;
-
         const startIndex = (bulkPage - 1) * currentLimit;
         visibleProducts = visibleProducts.slice(startIndex, startIndex + currentLimit);
     }
@@ -157,7 +168,7 @@ export function InventoryManager({
 
             <div className="flex items-center justify-between px-1">
                 <div className="text-sm text-slate-600">
-                    검색 결과: <span className="font-bold text-slate-900">{totalCount.toLocaleString()}</span>개
+                    검색 결과: <span className="font-bold text-slate-900">{currentTotal.toLocaleString()}</span>개
                     {isBulkMode && <span className="ml-2 text-xs text-emerald-600 font-medium">(대량 검색 모드)</span>}
                 </div>
 
@@ -165,7 +176,7 @@ export function InventoryManager({
                     <span className="text-xs text-slate-500">출력:</span>
                     <select
                         className="h-8 text-xs border rounded px-2 bg-white outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                        value={searchParams.get('limit') || initialLimit.toString()}
+                        value={currentLimit}
                         onChange={(e) => {
                             const params = new URLSearchParams(searchParams.toString());
                             params.set('limit', e.target.value);
@@ -184,7 +195,7 @@ export function InventoryManager({
 
             <InventoryTable
                 products={visibleProducts}
-                totalCount={isBulkMode ? currentTotal : totalCount}
+                totalCount={currentTotal}
                 limit={currentLimit}
                 currentPage={currentPageNum}
                 isEditable={true}
@@ -192,6 +203,7 @@ export function InventoryManager({
                 onSort={handleSort}
                 onPageChange={handlePageChange}
                 isBulkMode={isBulkMode}
+                onExportAll={isBulkMode ? handleExportAll : undefined}
             />
 
             {isLoading && (
