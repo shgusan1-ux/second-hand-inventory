@@ -52,6 +52,12 @@ export async function addPassword(data: any) {
             VALUES ($1, $2, $3, $4, $5, $6)
         `, [data.site, data.url, data.id_val, data.pw, data.desc, session.name]);
 
+        // Log to security_logs
+        await db.query(`
+           INSERT INTO security_logs (user_id, user_name, action, details)
+           VALUES ($1, $2, 'ADD_SHARED_ACCOUNT', $3)
+        `, [session.id, session.name, `Added account via Security Center: ${data.site}`]);
+
         revalidatePath('/security');
         return { success: true };
     } catch (e) {
@@ -70,6 +76,12 @@ export async function updatePassword(id: number, data: any) {
             WHERE id=$7
         `, [data.site, data.url, data.id_val, data.pw, data.desc, session.name, id]);
 
+        // Log to security_logs
+        await db.query(`
+           INSERT INTO security_logs (user_id, user_name, action, details)
+           VALUES ($1, $2, 'UPDATE_SHARED_ACCOUNT', $3)
+        `, [session.id, session.name, `Updated account: ${data.site} (ID: ${id})`]);
+
         revalidatePath('/security');
         return { success: true };
     } catch (e) {
@@ -82,7 +94,18 @@ export async function deletePassword(id: number) {
     if (!session) return { success: false, error: 'Unauthorized' };
 
     try {
+        // Fetch name before delete for logging
+        const check = await db.query('SELECT site_name FROM password_accounts WHERE id=$1', [id]);
+        const siteName = check.rows[0]?.site_name || 'Unknown';
+
         await db.query('DELETE FROM password_accounts WHERE id = $1', [id]);
+
+        // Log to security_logs
+        await db.query(`
+           INSERT INTO security_logs (user_id, user_name, action, details)
+           VALUES ($1, $2, 'DELETE_SHARED_ACCOUNT', $3)
+        `, [session.id, session.name, `Deleted account: ${siteName} (ID: ${id})`]);
+
         revalidatePath('/security');
         return { success: true };
     } catch (e) {

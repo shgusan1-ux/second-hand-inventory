@@ -159,14 +159,14 @@ export function PasswordManager({ initialPasswords }: { initialPasswords: any[] 
                                     </div>
                                 </div>
                                 <div className="flex gap-2 ml-4 border-l pl-4">
-                                    <Button variant="ghost" size="sm" onClick={() => {
+                                    <Button variant="ghost" size="icon" onClick={() => {
                                         setEditingItem(item);
                                         setIsEditOpen(true);
-                                    }} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
-                                        <Pencil className="w-4 h-4" />
+                                    }} className="h-10 w-10 text-blue-600 hover:bg-blue-100 rounded-full">
+                                        <Pencil className="w-5 h-5" />
                                     </Button>
-                                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)} className="h-8 w-8 text-red-500 hover:bg-red-50">
-                                        <Trash2 className="w-4 h-4" />
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)} className="h-10 w-10 text-red-500 hover:bg-red-100 rounded-full">
+                                        <Trash2 className="w-5 h-5" />
                                     </Button>
                                 </div>
                             </div>
