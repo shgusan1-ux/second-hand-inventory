@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { db } from '@/lib/db';
 import { InventoryManager } from '@/components/inventory/inventory-manager';
 import { getCategories } from '@/lib/data';
@@ -186,13 +187,15 @@ export default async function InventoryManagePage({
                 <p className="text-sm font-medium text-emerald-600">상품 정보를 수정, 삭제하거나 대량 업데이트할 수 있는 관리자 페이지입니다.</p>
             </div>
 
-            <InventoryManager
-                initialProducts={products}
-                initialTotalCount={totalCount}
-                initialLimit={safeLimit}
-                currentPage={page}
-                categories={categories}
-            />
+            <Suspense fallback={<div className="h-40 bg-slate-100 animate-pulse rounded-lg"></div>}>
+                <InventoryManager
+                    initialProducts={products}
+                    initialTotalCount={totalCount}
+                    initialLimit={safeLimit}
+                    currentPage={page}
+                    categories={categories}
+                />
+            </Suspense>
         </div>
     );
 }

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { db } from '@/lib/db';
 import { Card, CardContent } from '@/components/ui/card';
 import { InventoryFilter } from '@/components/inventory/inventory-filter';
@@ -189,7 +190,9 @@ export default async function InventoryPage({
                 <p className="text-sm font-medium text-blue-600">빠른 상품 검색과 조회만을 위한 페이지입니다. (수정/삭제 불가)</p>
             </div>
 
-            <InventoryFilter brands={brands} />
+            <Suspense fallback={<div className="h-20 bg-slate-100 animate-pulse rounded-lg"></div>}>
+                <InventoryFilter brands={brands} />
+            </Suspense>
 
             {/* Render Client Component Table */}
             <InventoryTable
