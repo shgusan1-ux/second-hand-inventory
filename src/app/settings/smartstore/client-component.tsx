@@ -1,7 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
-import { saveSmartStoreConfig } from '@/lib/actions';
+import { useActionState, useState } from 'react';
+import { saveSmartStoreConfig, testSmartStoreConnection } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,24 @@ export function ClientComponent({
         }
         return result;
     }, null);
+
+    const [isTesting, setIsTesting] = useState(false);
+
+    const handleTest = async () => {
+        setIsTesting(true);
+        try {
+            const result = await testSmartStoreConnection();
+            if (result.success) {
+                toast.success(result.message);
+            } else {
+                toast.error(result.error);
+            }
+        } catch (e) {
+            toast.error('테스트 중 오류가 발생했습니다.');
+        } finally {
+            setIsTesting(false);
+        }
+    };
 
     return (
         <form action={formAction} className="space-y-6">
@@ -64,9 +82,14 @@ export function ClientComponent({
                 />
             </div>
 
-            <Button type="submit" className="w-full" disabled={isPending}>
-                {isPending ? '저장 중...' : '설정 저장하기'}
-            </Button>
+            <div className="flex gap-2">
+                <Button type="button" variant="secondary" className="flex-1" onClick={handleTest} disabled={isTesting || isPending}>
+                    {isTesting ? '연동 테스트 중...' : '연동 테스트 (토큰 확인)'}
+                </Button>
+                <Button type="submit" className="flex-1" disabled={isPending || isTesting}>
+                    {isPending ? '저장 중...' : '설정 저장하기'}
+                </Button>
+            </div>
         </form>
     );
 }

@@ -1218,3 +1218,26 @@ export async function getSmartStoreConfig() {
         return null;
     }
 }
+
+export async function testSmartStoreConnection() {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    try {
+        const { createSmartStoreClient } = await import('./smartstore');
+        const client = await createSmartStoreClient();
+        if (!client) {
+            return { success: false, error: 'API 설정이 완료되지 않았습니다.' };
+        }
+
+        const token = await client.getAccessToken();
+        if (token) {
+            return { success: true, message: '연동 성공! 토큰이 발급되었습니다.' };
+        } else {
+            return { success: false, error: '연동 실패. Client ID와 Secret을 확인해주세요.' };
+        }
+    } catch (e: any) {
+        console.error('Connection test failed:', e);
+        return { success: false, error: e.message || '연동 테스트 중 오류가 발생했습니다.' };
+    }
+}
