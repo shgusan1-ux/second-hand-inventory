@@ -1,0 +1,185 @@
+﻿
+> second-hand-inventory@0.1.0 build
+> next build
+
+node.exe : ⚠ `eslint` configu
+ration in next.config.ts is n
+o longer supported. See more 
+info here: https://nextjs.org
+/docs/app/api-reference/cli/n
+ext#next-lint-options
+At line:1 char:1
++ & "C:\Program Files\nodejs/
+node.exe" "C:\Program Files\n
+odejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (⚠ `esli  
+  nt` conf...xt-lint-optio   
+ ns:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+⚠ Invalid next.config.ts opti
+ons detected: 
+⚠     Unrecognized key(s) in 
+object: 'eslint'
+⚠ See more info here: https:/
+/nextjs.org/docs/messages/inv
+alid-next-config
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local, .env.production
+
+⚠ The "middleware" file conve
+ntion is deprecated. Please u
+se "proxy" instead. Learn mor
+e: https://nextjs.org/docs/me
+ssages/middleware-to-proxy
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed
+ with 1 errors:
+./src/components/smartstore/p
+roduct-table.tsx:13:1
+Module not found: Can't resol
+ve '@/components/ui/tooltip'
+[0m [90m 11 |[39m     [33
+mChevronRight[39m[33m,[39m
+ [33mInfo[39m
+ [90m 12 |[39m } [36mfrom
+[39m [32m"lucide-react"[39m
+[33m;[39m
+[31m[1m>[22m[39m[90m 13 
+|[39m [36mimport[39m {
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m
+[31m[1m>[22m[39m[90m 14 
+|[39m     [33mTooltip[39m
+[33m,[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 15 
+|[39m     [33mTooltipConten
+t[39m[33m,[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 16 
+|[39m     [33mTooltipProvid
+er[39m[33m,[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 17 
+|[39m     [33mTooltipTrigge
+r[39m[33m,[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+[31m[1m>[22m[39m[90m 18 
+|[39m } [36mfrom[39m [32m
+"@/components/ui/tooltip"[39
+m[33m;[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m
+ [90m 19 |[39m [36mimport
+[39m { toast } [36mfrom[39m
+ [32m'sonner'[39m[33m;[39
+m
+ [90m 20 |[39m
+ [90m 21 |[39m [36minterfa
+ce[39m [33mProductTableProp
+s[39m {[0m
+
+Import map: aliased to relati
+ve './src/components/ui/toolt
+ip' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./src/components/smartsto
+re/product-table.tsx [Client 
+Component Browser]
+    ./src/app/smartstore/page
+.tsx [Client Component Browse
+r]
+    ./src/app/smartstore/page
+.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/smartsto
+re/product-table.tsx [Client 
+Component SSR]
+    ./src/app/smartstore/page
+.tsx [Client Component SSR]
+    ./src/app/smartstore/page
+.tsx [Server Component]
+
+https://nextjs.org/docs/messa
+ges/module-not-found
+
+
+    at <unknown> (./src/compo
+nents/smartstore/product-tabl
+e.tsx:13:1)
+    at <unknown> (https://nex
+tjs.org/docs/messages/module-
+not-found)

@@ -1,70 +1,67 @@
 import { NextResponse } from 'next/server';
-import { naverRequest } from '@/lib/naver/client';
+import { searchProducts } from '@/lib/naver-api-client';
+import { classifyProduct } from '@/lib/product-classifier';
 import { db } from '@vercel/postgres';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const size = parseInt(searchParams.get('size') || '50');
+    const size = parseInt(searchParams.get('size') || '20');
     const name = searchParams.get('name') || '';
 
     try {
-        // 1. Fetch from Naver
-        const naverRes = await naverRequest('/v1/products/search', {
-            method: 'POST',
-            body: JSON.stringify({
-                page: page,
-                size: size,
-                searchKeyword: name,
-            }),
-        });
+        // 1. Fetch from Naver via Proxy
+        const naverRes = await searchProducts(page, size, { searchKeyword: name });
 
         if (!naverRes || !naverRes.contents) {
             return NextResponse.json({ success: true, data: naverRes });
         }
 
-        // 2. Extract seller codes for DB lookup
-        const sellerCodes = naverRes.contents
-            .map((item: any) => item.channelProducts?.[0]?.sellerManagementCode)
-            .filter(Boolean);
+        // 2. Fetch Overrides from DB
+        const ids = naverRes.contents.map((item: any) => item.originProductNo.toString());
+        let overridesMap: Record<string, any> = {};
 
-        let dbProductsMap: Record<string, any> = {};
-
-        if (sellerCodes.length > 0) {
-            try {
-                const client = await db.connect();
-                const { rows } = await client.query(
-                    'SELECT id, master_reg_date, archive FROM products WHERE id = ANY($1)',
-                    [sellerCodes]
-                );
-                dbProductsMap = rows.reduce((acc: any, row: any) => {
-                    acc[row.id] = row;
-                    return acc;
-                }, {});
-            } catch (dbErr) {
-                console.error('DB enrichment failed:', dbErr);
-            }
+        try {
+            const { rows } = await db.query(
+                'SELECT id, override_date, internal_category FROM product_overrides WHERE id = ANY($1)',
+                [ids]
+            );
+            overridesMap = rows.reduce((acc: any, row: any) => {
+                acc[row.id] = row;
+                return acc;
+            }, {});
+        } catch (dbErr) {
+            console.warn('Overrides DB lookup failed, proceeding without overrides:', dbErr);
         }
 
-        // 3. Flatten and Enrichment
-        const enrichedContents = naverRes.contents.map((item: any) => {
+        // 3. Classify and Enrich
+        const contents = naverRes.contents.map((item: any) => {
             const cp = item.channelProducts?.[0] || {};
-            const dbData = dbProductsMap[cp.sellerManagementCode] || {};
+            const override = overridesMap[item.originProductNo] || {};
 
-            // Priority: Local DB master_reg_date > Naver regDate
-            const finalRegDate = dbData.master_reg_date || cp.regDate;
+            // Build temporary product object for classifier
+            const productInfo = {
+                name: cp.name,
+                regDate: cp.regDate,
+                overrideDate: override.override_date,
+                sellerManagementCode: cp.sellerManagementCode,
+            };
+
+            const classification = classifyProduct(productInfo);
 
             return {
-                originProductNo: item.originProductNo?.toString(),
+                originProductNo: item.originProductNo.toString(),
                 channelProductNo: cp.channelProductNo?.toString(),
                 name: cp.name,
                 sellerManagementCode: cp.sellerManagementCode,
-                regDate: finalRegDate, // This will be used for both display and days calculation
+                regDate: cp.regDate,
+                overrideDate: override.override_date,
                 salePrice: cp.salePrice,
                 stockQuantity: cp.stockQuantity,
                 images: { representativeImage: { url: cp.representativeImage?.url } },
                 exhibitionCategoryIds: item.exhibitionCategoryIds || [],
-                dbArchive: dbData.archive
+                recommendation: classification,
+                currentInternalCategory: override.internal_category
             };
         });
 
@@ -72,14 +69,12 @@ export async function GET(request: Request) {
             success: true,
             data: {
                 ...naverRes,
-                contents: enrichedContents
+                contents
             }
         });
+
     } catch (error: any) {
-        console.error('Failed to fetch Naver products:', error);
-        return NextResponse.json({
-            success: false,
-            error: error.message
-        }, { status: 500 });
+        console.error('API Error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
