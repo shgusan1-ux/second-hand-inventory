@@ -49,11 +49,11 @@ export default async function InventoryManagePage({
         const statuses = statusParam.split(',').map(s => s.trim()).filter(Boolean);
         if (statuses.length > 0) {
             const placeholders = statuses.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`status IN (${placeholders.join(', ')})`);
+            sqlConditions.push(`p.status IN (${placeholders.join(', ')})`);
             params.push(...statuses);
         }
     } else {
-        sqlConditions.push(`status != '폐기'`);
+        sqlConditions.push(`p.status != '폐기'`);
     }
 
     // Category Filter
@@ -61,7 +61,7 @@ export default async function InventoryManagePage({
         const cats = categoriesParam.split(',').map(s => s.trim()).filter(Boolean);
         if (cats.length > 0) {
             const placeholders = cats.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`category IN (${placeholders.join(', ')})`);
+            sqlConditions.push(`p.category IN (${placeholders.join(', ')})`);
             params.push(...cats);
         }
     }
@@ -71,7 +71,7 @@ export default async function InventoryManagePage({
         const conds = conditionsParam.split(',').map(s => s.trim()).filter(Boolean);
         if (conds.length > 0) {
             const placeholders = conds.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`condition IN (${placeholders.join(', ')})`);
+            sqlConditions.push(`p.condition IN (${placeholders.join(', ')})`);
             params.push(...conds);
         }
     }
@@ -81,7 +81,7 @@ export default async function InventoryManagePage({
         const sizes = sizesParam.split(',').map(s => s.trim()).filter(Boolean);
         if (sizes.length > 0) {
             const placeholders = sizes.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`size IN (${placeholders.join(', ')})`);
+            sqlConditions.push(`p.size IN (${placeholders.join(', ')})`);
             params.push(...sizes);
         }
     }
@@ -96,23 +96,24 @@ export default async function InventoryManagePage({
             if (terms.length <= 100) {
                 // Small batch: Use Safe Parameter Binding
                 const placeholders = terms.map(() => `$${paramIndex++}`);
-                sqlConditions.push(`id IN (${placeholders.join(', ')})`);
+                sqlConditions.push(`p.id IN (${placeholders.join(', ')})`);
                 params.push(...terms);
             } else {
                 // Large batch (100+): Use Sanitized Literals
                 const sanitizedTerms = terms.map(t => `'${t.replace(/'/g, "''")}'`);
-                sqlConditions.push(`id IN (${sanitizedTerms.join(', ')})`);
+                sqlConditions.push(`p.id IN (${sanitizedTerms.join(', ')})`);
             }
         } else {
             // Single Search Logic
             if (searchField === 'name') {
-                sqlConditions.push(`name LIKE $${paramIndex}`);
+                sqlConditions.push(`p.name LIKE $${paramIndex}`);
             } else if (searchField === 'id') {
-                sqlConditions.push(`id LIKE $${paramIndex}`);
+                sqlConditions.push(`p.id LIKE $${paramIndex}`);
             } else if (searchField === 'brand') {
-                sqlConditions.push(`brand LIKE $${paramIndex}`);
+                sqlConditions.push(`p.brand LIKE $${paramIndex}`);
             } else {
-                sqlConditions.push(`(name LIKE $${paramIndex} OR id LIKE $${paramIndex} OR brand LIKE $${paramIndex})`);
+                // Include Category Name and Classification in search
+                sqlConditions.push(`(p.name LIKE $${paramIndex} OR p.id LIKE $${paramIndex} OR p.brand LIKE $${paramIndex} OR c.name LIKE $${paramIndex} OR c.classification LIKE $${paramIndex})`);
             }
             params.push(`%${query.trim()}%`);
             paramIndex++;
@@ -124,20 +125,20 @@ export default async function InventoryManagePage({
         const excludes = excludeCode.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         if (excludes.length > 0) {
             const placeholders = excludes.map(() => `$${paramIndex++}`);
-            sqlConditions.push(`id NOT IN (${placeholders.join(', ')})`);
+            sqlConditions.push(`p.id NOT IN (${placeholders.join(', ')})`);
             params.push(...excludes);
         }
     }
 
     // Date Range
     if (startDate) {
-        sqlConditions.push(`created_at >= $${paramIndex}`);
+        sqlConditions.push(`p.created_at >= $${paramIndex}`);
         params.push(`${startDate} 00:00:00`);
         paramIndex++;
     }
 
     if (endDate) {
-        sqlConditions.push(`created_at <= $${paramIndex}`);
+        sqlConditions.push(`p.created_at <= $${paramIndex}`);
         params.push(`${endDate} 23:59:59`);
         paramIndex++;
     }
@@ -150,12 +151,24 @@ export default async function InventoryManagePage({
     let products = [];
 
     try {
-        const countSql = `SELECT COUNT(*) as count FROM products ${whereClause}`;
+        const countSql = `
+            SELECT COUNT(*) as count 
+            FROM products p
+            LEFT JOIN categories c ON p.category = c.id
+            ${whereClause}
+        `;
         const countResult = await db.query(countSql, params);
         totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
 
         // 2. Fetch Data
-        const dataSql = `SELECT * FROM products ${whereClause} ORDER BY created_at DESC LIMIT ${safeLimit} OFFSET ${offset}`;
+        const dataSql = `
+            SELECT p.*, c.name as category_name, c.classification as category_classification 
+            FROM products p
+            LEFT JOIN categories c ON p.category = c.id
+            ${whereClause} 
+            ORDER BY p.created_at DESC 
+            LIMIT ${safeLimit} OFFSET ${offset}
+        `;
         result = await db.query(dataSql, params);
         products = result.rows;
     } catch (error) {

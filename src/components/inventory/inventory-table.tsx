@@ -383,7 +383,30 @@ export function InventoryTable({
                                     <td className="p-3 align-middle text-slate-500 text-xs">{product.size}</td>
                                     <td className="p-3 align-middle hidden md:table-cell">
                                         {(() => {
-                                            // Find matching category
+                                            // 1. Use joined data from DB (Preferred)
+                                            if (product.category_classification && product.category_name) {
+                                                const classification = product.category_classification;
+                                                const displayName = product.category_name;
+
+                                                let badgeStyle = 'bg-slate-50 text-slate-600 border-slate-200';
+                                                if (classification === 'MAN') badgeStyle = 'bg-blue-50 text-blue-700 border-blue-100';
+                                                else if (classification === 'WOMAN') badgeStyle = 'bg-pink-50 text-pink-700 border-pink-100';
+                                                else if (classification === 'KIDS') badgeStyle = 'bg-yellow-50 text-yellow-700 border-yellow-100';
+                                                else if (classification === '악세사리') badgeStyle = 'bg-purple-50 text-purple-700 border-purple-100';
+
+                                                return (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border min-w-[2.5rem] text-center shrink-0 ${badgeStyle}`}>
+                                                            {classification}
+                                                        </span>
+                                                        <span className="text-xs text-slate-600 font-medium truncate max-w-[120px]" title={displayName}>
+                                                            {displayName}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            }
+
+                                            // 2. Fallback: Find matching category locally
                                             const categoryValue = product.category || '';
                                             const matchedCategory = categories.find(c =>
                                                 c.id === categoryValue ||
@@ -403,13 +426,14 @@ export function InventoryTable({
 
                                             return (
                                                 <div className="flex items-center gap-2">
-                                                    {categoryValue !== '' && (
+                                                    {categoryValue !== '' && classification !== '기타' && (
                                                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border min-w-[2.5rem] text-center shrink-0 ${badgeStyle}`}>
                                                             {classification}
                                                         </span>
                                                     )}
                                                     <span className="text-xs text-slate-600 font-medium truncate max-w-[120px]" title={displayName}>
                                                         {displayName}
+                                                        {classification === '기타' && categoryValue && ` (${categoryValue})`}
                                                     </span>
                                                 </div>
                                             );
