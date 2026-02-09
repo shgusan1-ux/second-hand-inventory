@@ -1118,3 +1118,69 @@ export async function bulkUpdateProductsAI(ids: string[], options: { grade: bool
         return { success: false, error: e.message || 'AI 일괄 작업 실패' };
     }
 }
+
+// --- SmartStore Integration Actions ---
+
+export async function saveSmartStoreConfig(formData: FormData) {
+    const session = await getSession();
+    if (!session || (session.job_title !== '대표자' && session.job_title !== '경영지원' && session.job_title !== '총매니저')) {
+        return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const sellerId = formData.get('sellerId') as string;
+    const clientId = formData.get('clientId') as string;
+    const clientSecret = formData.get('clientSecret') as string;
+
+    if (!sellerId || !clientId || !clientSecret) {
+        return { success: false, error: '모든 필드를 입력해주세요.' };
+    }
+
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key VARCHAR(50) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Upsert configuration
+        const config = { sellerId, clientId, clientSecret };
+        const query = `
+            INSERT INTO system_settings (key, value) VALUES ('smartstore_config', $1)
+            ON CONFLICT(key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+        `;
+        await db.query(query, [JSON.stringify(config)]);
+
+        await logAction('UPDATE_CONFIG', 'system', 'smartstore', 'Updated API credentials');
+        revalidatePath('/settings/smartstore');
+        return { success: true };
+    } catch (e) {
+        console.error('Save config failed:', e);
+        return { success: false, error: '설정 저장 실패' };
+    }
+}
+
+export async function getSmartStoreConfig() {
+    const session = await getSession();
+    if (!session) return null;
+
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key VARCHAR(50) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        const res = await db.query("SELECT value FROM system_settings WHERE key = 'smartstore_config'");
+        if (res.rows.length > 0) {
+            return JSON.parse(res.rows[0].value);
+        }
+        return null; // No config found
+    } catch (e) {
+        console.error('Get config failed:', e);
+        return null;
+    }
+}

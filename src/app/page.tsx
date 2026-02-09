@@ -47,6 +47,12 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Link href="/settings/smartstore">
+            <Button variant="outline" className="text-slate-600 border-slate-300 hover:bg-slate-50">
+              <span className="mr-2">🔧</span>
+              스토어 API 연동
+            </Button>
+          </Link>
           <Link href="/inventory/new">
             <Button className="bg-emerald-600 hover:bg-emerald-700">
               <Package className="mr-2 h-4 w-4" />
