@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Pencil, Plus, ShieldAlert, Key } from 'lucide-react';
+import { Trash2, Pencil, Plus } from 'lucide-react';
 import { createUser, updateUser, deleteUser } from '@/lib/actions';
 import { toast } from 'sonner';
 
@@ -31,6 +31,10 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
     const [editingUser, setEditingUser] = useState<any>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    // Refs for manual form submission handling
+    const createFormRef = useRef<HTMLFormElement>(null);
+    const updateFormRef = useRef<HTMLFormElement>(null);
 
     // Job Titles
     const JOB_TITLES = ['대표자', '총매니저', '경영지원', '실장', '과장', '주임', '사원', '아르바이트'];
@@ -42,18 +46,25 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
             if (res.success) {
                 toast.success(res.message);
                 setIsAddOpen(false);
-                // Refresh is automatic via revalidatePath if this was a server component, 
-                // but for client state update without full reload, we rely on page refresh or router.refresh() if needed.
-                // However, actions revalidatePath refreshes the underlying data.
-                // To see changes immediately, we should ideally refresh router.
                 window.location.reload();
             } else {
                 toast.error(res.error);
+                alert(res.error); // Fallback alert
             }
-        } catch (e) {
+        } catch (e: any) {
             toast.error('등록 중 오류 발생');
+            alert('오류 발생: ' + e.message);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleCreateClick = () => {
+        if (createFormRef.current) {
+            if (createFormRef.current.reportValidity()) {
+                const formData = new FormData(createFormRef.current);
+                handleCreate(formData);
+            }
         }
     };
 
@@ -68,11 +79,22 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                 window.location.reload();
             } else {
                 toast.error(res.error);
+                alert(res.error);
             }
-        } catch (e) {
+        } catch (e: any) {
             toast.error('수정 중 오류 발생');
+            alert('오류 발생: ' + e.message);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleUpdateClick = () => {
+        if (updateFormRef.current) {
+            if (updateFormRef.current.reportValidity()) {
+                const formData = new FormData(updateFormRef.current);
+                handleUpdate(formData);
+            }
         }
     };
 
@@ -100,7 +122,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                         <DialogHeader>
                             <DialogTitle>새 사용자 등록</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleCreate(formData); }} className="space-y-4 mt-4">
+                        <form ref={createFormRef} onSubmit={(e) => e.preventDefault()} className="space-y-4 mt-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="name">이름</Label>
                                 <Input id="name" name="name" required placeholder="이름 입력" />
@@ -140,7 +162,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                                 />
                             </div>
                             <DialogFooter>
-                                <Button type="submit" disabled={isLoading}>
+                                <Button type="button" onClick={handleCreateClick} disabled={isLoading}>
                                     {isLoading ? '등록 중...' : '등록하기'}
                                 </Button>
                             </DialogFooter>
@@ -226,7 +248,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                         <DialogTitle>사용자 정보 수정</DialogTitle>
                     </DialogHeader>
                     {editingUser && (
-                        <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleUpdate(formData); }} className="space-y-4 mt-4">
+                        <form ref={updateFormRef} onSubmit={(e) => e.preventDefault()} className="space-y-4 mt-4">
                             <input type="hidden" name="id" value={editingUser.id} />
 
                             <div className="grid gap-2">
@@ -269,7 +291,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                                 />
                             </div>
                             <DialogFooter>
-                                <Button type="submit" disabled={isLoading}>
+                                <Button type="button" onClick={handleUpdateClick} disabled={isLoading}>
                                     {isLoading ? '저장 중...' : '저장하기'}
                                 </Button>
                             </DialogFooter>
