@@ -174,7 +174,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             <CardContent className="p-4 space-y-4">
                 <div className="flex flex-col md:flex-row gap-4">
                     {/* Main Search */}
-                    <div className="flex-1 relative flex gap-2">
+                    <div className="flex-1 relative flex flex-wrap md:flex-nowrap gap-2 items-center">
                         {/* Search Field Select */}
                         <div className="w-[120px] shrink-0">
                             <Select value={searchField} onValueChange={setSearchField}>
@@ -205,7 +205,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                             </Select>
                         </div>
 
-                        <div className="relative flex-1">
+                        <div className="relative flex-1 min-w-[200px] w-full md:w-auto">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                             <Input
                                 value={query}
@@ -213,7 +213,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                                 onKeyDown={handleKeyDown}
                                 onPaste={handlePaste}
                                 placeholder="상품명, 코드 검색... (엑셀 붙여넣기 가능)"
-                                className="pl-9 bg-white"
+                                className="pl-9 bg-white w-full"
                             />
                             {/* Code Counter */}
                             {query && (
@@ -226,12 +226,14 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </div>
                     </div>
 
-                    <Button onClick={resetFilters} variant="outline" size="icon" title="필터 초기화">
-                        <RotateCcw className="h-4 w-4" />
-                    </Button>
-                    <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-800">
-                        검색
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={resetFilters} variant="outline" size="icon" title="필터 초기화">
+                            <RotateCcw className="h-4 w-4" />
+                        </Button>
+                        <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-800 flex-1 md:flex-none">
+                            검색
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Additional Filters (Row 2) */}
