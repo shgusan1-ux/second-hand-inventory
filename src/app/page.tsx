@@ -11,6 +11,8 @@ import { DashboardChecklist } from '@/components/dashboard/checklist';
 import { checkSystemUpdates } from '@/lib/updates';
 import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
 import { MemoWidget } from '@/components/dashboard/memo-widget';
+import { OrgChart } from '@/components/dashboard/org-chart';
+import { getUsersForOrgChart } from '@/lib/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,7 @@ export default async function DashboardPage() {
 
   const tasks = await getDashboardTasks();
   const memos = await getMemos();
+  const orgUsers = await getUsersForOrgChart();
 
   return (
     <div className="space-y-8">
@@ -38,9 +41,9 @@ export default async function DashboardPage() {
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">대시보드</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">(주)에이치엠이커머스 SCM 시스템</h1>
           <p className="text-slate-500 mt-2">
-            오늘의 환경 보호 활동 현황입니다.
+            현재 직원들이 하고 있는 모든 작업에 대해서 여기서 가능하게 구현하는 것이 최종 목표입니다.
           </p>
         </div>
         <div className="flex gap-2">
@@ -129,13 +132,16 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* System Updates & Patch Logs + Memo Widget */}
-      <div className="grid gap-4 md:grid-cols-2 md:items-start">
+      {/* System Updates & Patch Logs + Memo Widget + Org Chart */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:items-start">
         {/* Update Log */}
         <UpdateLogWidget tasks={tasks} />
 
         {/* Shared Memo */}
         <MemoWidget memos={memos} />
+
+        {/* Organization Chart */}
+        <OrgChart users={orgUsers} />
       </div>
     </div>
   );

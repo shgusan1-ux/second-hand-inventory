@@ -122,20 +122,29 @@ function ProductList({ items, tag, color, discount, categoryName }: { items: any
 }
 
 export function SmartStoreDashboard({ groups }: { groups: any }) {
+    const totalCount = groups.newItems.length + groups.curatedItems.length +
+        groups.militaryArchive.length + groups.workwearArchive.length +
+        groups.japanArchive.length + groups.heritageEurope.length +
+        groups.britishArchive.length + groups.clearanceItems.length +
+        (groups.etcItems?.length || 0);
+
     return (
         <Tabs defaultValue="new" className="space-y-4 md:space-y-6">
             {/* 헤더 */}
             <div className="flex flex-col gap-3 md:gap-4">
                 <div>
-                    <h2 className="text-lg md:text-xl font-bold mb-1 md:mb-2">전략 카테고리 관리</h2>
+                    <h2 className="text-lg md:text-xl font-bold mb-1 md:mb-2 flex items-center gap-2">
+                        전략 카테고리 관리
+                        <Badge variant="outline" className="text-base font-normal">총 {totalCount}개 관리 중</Badge>
+                    </h2>
                     <p className="text-xs md:text-sm text-slate-500">
-                        각 전략에 따라 자동 분류 및 할인가가 적용됩니다. 상품코드를 복사하여 스마트스토어에 대량 등록하세요.
+                        각 전략에 따라 자동 분류 및 할인가가 적용됩니다. 모든 판매중 상품이 포함됩니다.
                     </p>
                 </div>
 
                 {/* 탭 리스트 - 반응형 */}
                 <div className="w-full overflow-x-auto pb-2">
-                    <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-4 lg:grid-cols-8 gap-1 h-auto">
+                    <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-5 lg:grid-cols-9 gap-1 h-auto">
                         <TabsTrigger value="new" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
                             NEW <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.newItems.length}</Badge>
                         </TabsTrigger>
@@ -159,6 +168,9 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </TabsTrigger>
                         <TabsTrigger value="clearance" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
                             CLEARANCE <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.clearanceItems.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="etc" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
+                            ETC <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.etcItems?.length || 0}</Badge>
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -296,6 +308,23 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
                         <ProductList items={groups.clearanceItems} tag="SALE" color="bg-red-600" discount={70} categoryName="CLEARANCE" />
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="etc" className="mt-0">
+                <Card>
+                    <CardHeader className="p-4 md:p-6">
+                        <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                            <Archive className="w-4 h-4 md:w-5 md:h-5 text-slate-600" />
+                            ETC (기타 분류) - 전략 미적용
+                        </CardTitle>
+                        <CardDescription className="text-xs md:text-sm">
+                            특별한 전략 카테고리에 속하지 않는 일반 판매 상품들입니다.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 md:p-6 pt-0">
+                        <ProductList items={groups.etcItems || []} tag="NORMAL" color="bg-slate-600" discount={0} categoryName="ETC" />
                     </CardContent>
                 </Card>
             </TabsContent>

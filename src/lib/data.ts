@@ -252,27 +252,27 @@ export async function getSmartStoreGroups() {
     britishArchive.sort((a, b) => b.score - a.score);
     clearanceItems.sort((a, b) => b.score - a.score);
 
-    // 스마트스토어 300개 제한 - 카테고리별 할당
-    const limits = {
-      new: 50,
-      curated: 100,
-      military: 25,
-      workwear: 25,
-      japan: 25,
-      europe: 25,
-      british: 20,
-      clearance: 30
-    };
+    // 5. ETC: 나머지 모든 상품
+    const etcItems = products.filter(p => !usedIds.has(p.id));
+    etcItems.forEach(p => {
+      p.score += 1; // 기본 점수
+    });
+    etcItems.sort((a, b) => b.score - a.score);
 
+    console.log(`ETC (미분류): ${etcItems.length}개`);
+    console.log(`TOTAL PROCESSED: ${newItems.length + curatedItems.length + militaryArchive.length + workwearArchive.length + japanArchive.length + heritageEurope.length + britishArchive.length + clearanceItems.length + etcItems.length} / ${products.length}`);
+
+    // 스마트스토어 제한 제거 - 모든 상품 반환
     return {
-      newItems: newItems.slice(0, limits.new),
-      curatedItems: curatedItems.slice(0, limits.curated),
-      militaryArchive: militaryArchive.slice(0, limits.military),
-      workwearArchive: workwearArchive.slice(0, limits.workwear),
-      japanArchive: japanArchive.slice(0, limits.japan),
-      heritageEurope: heritageEurope.slice(0, limits.europe),
-      britishArchive: britishArchive.slice(0, limits.british),
-      clearanceItems: clearanceItems.slice(0, limits.clearance),
+      newItems,
+      curatedItems,
+      militaryArchive,
+      workwearArchive,
+      japanArchive,
+      heritageEurope,
+      britishArchive,
+      clearanceItems,
+      etcItems, // 추가된 기타 카테고리
     };
   } catch (error) {
     console.error('Database Error:', error);
@@ -284,7 +284,8 @@ export async function getSmartStoreGroups() {
       japanArchive: [],
       heritageEurope: [],
       britishArchive: [],
-      clearanceItems: []
+      clearanceItems: [],
+      etcItems: []
     };
   }
 }

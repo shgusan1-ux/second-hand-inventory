@@ -605,6 +605,75 @@ export async function getUsers() {
     }
 }
 
+export async function getUsersForOrgChart() {
+    const session = await getSession();
+    if (!session) return [];
+
+    try {
+        // Anyone logged in can view the org chart
+        const result = await db.query('SELECT id, username, name, job_title, email, created_at FROM users ORDER BY CASE WHEN job_title = \'대표자\' THEN 1 WHEN job_title = \'총매니저\' THEN 2 WHEN job_title = \'경영지원\' THEN 3 WHEN job_title = \'실장\' THEN 4 WHEN job_title = \'과장\' THEN 5 WHEN job_title = \'주임\' THEN 6 ELSE 7 END, name ASC');
+        return result.rows;
+    } catch (e) {
+        console.error('Failed to get org chart users:', e);
+        return [];
+    }
+}
+
+export async function sendMessage(receiverId: string, content: string) {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    if (!content.trim()) return { success: false, error: '내용을 입력해주세요.' };
+
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                sender_id TEXT NOT NULL,
+                receiver_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await db.query(
+            'INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3)',
+            [session.id, receiverId, content]
+        );
+
+        revalidatePath('/');
+        return { success: true };
+    } catch (e) {
+        console.error('Send message failed:', e);
+        return { success: false, error: '메시지 전송 실패' };
+    }
+}
+
+export async function getUserUnreadMessageCount() {
+    const session = await getSession();
+    if (!session) return 0;
+
+    try {
+        // Check if table exists
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                sender_id TEXT NOT NULL,
+                receiver_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        const res = await db.query('SELECT COUNT(*) as count FROM messages WHERE receiver_id = $1 AND is_read = FALSE', [session.id]);
+        return parseInt(res.rows[0].count || '0');
+    } catch (e) {
+        return 0;
+    }
+}
+
 export async function deleteUser(targetId: string) {
     const session = await getSession();
     if (!session) return { success: false, error: 'Unauthorized' };
