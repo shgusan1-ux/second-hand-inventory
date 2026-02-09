@@ -597,11 +597,105 @@ export async function getUsers() {
     }
 
     try {
-        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at, can_view_accounting FROM users ORDER BY created_at DESC');
+        // Added security_memo to selection
+        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at, security_memo FROM users ORDER BY created_at DESC');
         return result.rows;
     } catch (e) {
         console.error('Failed to get users:', e);
         return [];
+    }
+}
+
+export async function createUser(prevState: any, formData: FormData) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) {
+        return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const username = formData.get('username') as string;
+    const password = formData.get('password') as string;
+    const name = formData.get('name') as string;
+    const jobTitle = formData.get('jobTitle') as string;
+    const email = formData.get('email') as string;
+    const securityMemo = formData.get('securityMemo') as string;
+
+    if (!username || !password || !name || !jobTitle) {
+        return { success: false, error: '필수 항목을 입력해주세요.' };
+    }
+
+    try {
+        const hashedPassword = await hashPassword(password);
+        const id = Math.random().toString(36).substring(2, 9);
+        const role = 'user'; // Default role
+        const passwordHint = 'Admin Created';
+
+        // Ensure columns exist (lazy check)
+        try {
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS security_memo TEXT`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
+        } catch (e) { }
+
+        await db.query(
+            'INSERT INTO users (id, username, password_hash, name, role, password_hint, job_title, email, security_memo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [id, username, hashedPassword, name, role, passwordHint, jobTitle, email || null, securityMemo || '']
+        );
+
+        await logAction('CREATE_USER', 'user', id, `Created by admin: ${username}`);
+        revalidatePath('/settings/users');
+        return { success: true, message: '사용자가 등록되었습니다.' };
+    } catch (e: any) {
+        console.error('Create user failed:', e);
+        if (e.message.includes('UNIQUE constraint') || e.message.includes('unique constraint')) {
+            return { success: false, error: '이미 존재하는 아이디입니다.' };
+        }
+        return { success: false, error: '사용자 등록 실패' };
+    }
+}
+
+export async function updateUser(prevState: any, formData: FormData) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) {
+        return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const id = formData.get('id') as string;
+    const name = formData.get('name') as string;
+    const jobTitle = formData.get('jobTitle') as string;
+    const email = formData.get('email') as string;
+    const securityMemo = formData.get('securityMemo') as string;
+    const newPassword = formData.get('newPassword') as string;
+
+    if (!id || !name || !jobTitle) {
+        return { success: false, error: '필수 항목을 입력해주세요.' };
+    }
+
+    try {
+        const updates: string[] = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
+        updates.push(`name = $${pIdx++}`); params.push(name);
+        updates.push(`job_title = $${pIdx++}`); params.push(jobTitle);
+        updates.push(`email = $${pIdx++}`); params.push(email || null);
+        updates.push(`security_memo = $${pIdx++}`); params.push(securityMemo || '');
+
+        if (newPassword && newPassword.trim()) {
+            const hashedPassword = await hashPassword(newPassword);
+            updates.push(`password_hash = $${pIdx++}`);
+            params.push(hashedPassword);
+        }
+
+        params.push(id);
+        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${pIdx}`;
+
+        await db.query(query, params);
+        await logAction('UPDATE_USER', 'user', id, `Updated by admin`);
+
+        revalidatePath('/settings/users');
+        return { success: true, message: '사용자 정보가 수정되었습니다.' };
+    } catch (e: any) {
+        console.error('Update user failed:', e);
+        return { success: false, error: '사용자 수정 실패' };
     }
 }
 
