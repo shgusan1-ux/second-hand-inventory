@@ -6,7 +6,7 @@ import { db } from '@vercel/postgres';
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const size = parseInt(searchParams.get('size') || '20');
+    const size = parseInt(searchParams.get('size') || '100');
     const name = searchParams.get('name') || '';
 
     try {

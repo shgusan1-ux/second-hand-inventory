@@ -41,7 +41,7 @@ export async function getNaverToken(): Promise<NaverTokenResponse> {
     return response.json();
 }
 
-export async function searchProducts(page: number = 1, size: number = 20, filters: any = {}) {
+export async function searchProducts(page: number = 1, size: number = 100, filters: any = {}) {
     const token = await getNaverToken();
     const response = await fetch(`${PROXY_URL}/v1/products/search`, {
         method: 'POST',
