@@ -172,13 +172,13 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     return (
         <Card className="mb-6 bg-slate-50 border-slate-200">
             <CardContent className="p-4 space-y-4">
-                <div className="flex flex-col gap-4">
-                    {/* Top Row: Search Inputs */}
-                    <div className="grid grid-cols-2 md:flex md:items-center gap-3">
+                <div className="flex flex-col md:flex-row gap-4">
+                    {/* Main Search */}
+                    <div className="flex-1 relative flex gap-2">
                         {/* Search Field Select */}
-                        <div className="col-span-1 md:w-[130px]">
+                        <div className="w-[120px] shrink-0">
                             <Select value={searchField} onValueChange={setSearchField}>
-                                <SelectTrigger className="bg-white w-full">
+                                <SelectTrigger className="bg-white">
                                     <SelectValue placeholder="검색 옵션" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -191,9 +191,9 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </div>
 
                         {/* Brand Select */}
-                        <div className="col-span-1 md:w-[160px]">
+                        <div className="w-[150px] shrink-0">
                             <Select value={selectedBrand} onValueChange={setSelectedBrand}>
-                                <SelectTrigger className="bg-white w-full">
+                                <SelectTrigger className="bg-white">
                                     <SelectValue placeholder="브랜드 전체" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px]">
@@ -205,47 +205,33 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                             </Select>
                         </div>
 
-                        {/* Search Input */}
-                        <div className="col-span-2 md:flex-1 relative">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                             <Input
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 onPaste={handlePaste}
-                                placeholder="상품명, 코드 검색 (엑셀 붙여넣기 가능)"
-                                className="pl-10 bg-white w-full h-10"
+                                placeholder="상품명, 코드 검색... (엑셀 붙여넣기 가능)"
+                                className="pl-9 bg-white"
                             />
                             {/* Code Counter */}
                             {query && (
-                                <div className="absolute right-3 top-3 text-xs text-slate-400">
+                                <div className="absolute right-3 top-2.5 text-xs text-slate-400">
                                     {query.split(/[\n,\s]+/).filter(Boolean).length > 1 &&
                                         `${query.split(/[\n,\s]+/).filter(Boolean).length}개`
                                     }
                                 </div>
                             )}
                         </div>
-
-                        {/* Buttons (Desktop) */}
-                        <div className="hidden md:flex gap-2">
-                            <Button onClick={resetFilters} variant="outline" size="icon" title="필터 초기화">
-                                <RotateCcw className="h-4 w-4" />
-                            </Button>
-                            <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-800">
-                                검색
-                            </Button>
-                        </div>
                     </div>
 
-                    {/* Buttons (Mobile Only) */}
-                    <div className="md:hidden flex gap-2">
-                        <Button onClick={resetFilters} variant="outline" className="w-12 shrink-0">
-                            <RotateCcw className="h-4 w-4" />
-                        </Button>
-                        <Button onClick={handleSearch} className="flex-1 bg-slate-900 text-white text-base py-5">
-                            검색하기
-                        </Button>
-                    </div>
+                    <Button onClick={resetFilters} variant="outline" size="icon" title="필터 초기화">
+                        <RotateCcw className="h-4 w-4" />
+                    </Button>
+                    <Button onClick={handleSearch} className="bg-slate-900 text-white hover:bg-slate-800">
+                        검색
+                    </Button>
                 </div>
 
                 {/* Additional Filters (Row 2) */}
