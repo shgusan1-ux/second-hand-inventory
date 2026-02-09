@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { AuroraBackground } from '@/components/ui/aurora-background';
 
 const QUOTES = [
     "성공은 종착점이 아니라 여정이다.",
@@ -44,8 +45,7 @@ export default function LoginPage() {
 
     if (showSplash) {
         return (
-            <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-900 text-white animate-in fade-in duration-700">
-                <div className="absolute inset-0 bg-[url('https://images.pexels.com/photos/1001682/pexels-photo-1001682.jpeg')] bg-cover bg-center opacity-30"></div>
+            <AuroraBackground className="fixed inset-0 z-[9999]">
                 <div className="z-10 text-center max-w-2xl px-6">
                     <div className="mb-8 opacity-0 animate-in slide-in-from-bottom-5 duration-1000 fill-mode-forwards">
                         <Image src="/brown_street.svg" alt="Brown Street" width={200} height={60} className="mx-auto invert brightness-0 filter" />
@@ -55,31 +55,15 @@ export default function LoginPage() {
                     </h2>
                     <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full opacity-0 animate-in expand duration-700 delay-700 fill-mode-forwards"></div>
                 </div>
-            </div>
+            </AuroraBackground>
         );
     }
 
     return (
-        <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 bg-slate-900 overflow-y-auto">
-            {/* Live Background Video */}
-            <div className="fixed inset-0 z-0">
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20 z-10"></div>
-                <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover opacity-80"
-                    poster="https://images.pexels.com/photos/1001682/pexels-photo-1001682.jpeg"
-                >
-                    <source src="https://videos.pexels.com/video-files/855018/855018-hd_1920_1080_30fps.mp4" type="video/mp4" />
-                    {/* Fallback Nature Video */}
-                </video>
-            </div>
-
-            <div className="w-full max-w-sm space-y-6 p-8 bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
+        <AuroraBackground className="min-h-screen w-full relative overflow-y-auto p-4 bg-slate-950">
+            <div className="w-full max-w-sm space-y-6 p-8 bg-black/40 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
                 <div className="space-y-2 text-center text-white">
-                    <div className="mx-auto w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/30">
+                    <div className="mx-auto w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/20">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                     </div>
                     <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
@@ -88,42 +72,41 @@ export default function LoginPage() {
                 </div>
                 <form action={formAction} className="space-y-5">
                     <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase text-white/70 tracking-wider">휴대폰 번호 (ID)</label>
+                        <label className="text-xs font-bold uppercase text-white/60 tracking-wider">휴대폰 번호 (ID)</label>
                         <Input
                             name="username"
                             required
                             type="tel"
                             pattern="[0-9]*"
-                            className="bg-white/20 border-white/10 text-white placeholder:text-white/40 focus:bg-white/30 focus:border-white/50 transition-all h-11"
+                            className="bg-white/5 border-white/5 text-white placeholder:text-white/30 focus:bg-white/10 focus:border-white/20 transition-all h-11"
                             placeholder="01012345678"
                             inputMode="numeric"
                         />
                     </div>
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <label className="text-xs font-bold uppercase text-white/70 tracking-wider">비밀번호</label>
-                            <Link href="/forgot-password" className="text-xs text-white/80 hover:text-white hover:underline">비밀번호 찾기</Link>
+                            <label className="text-xs font-bold uppercase text-white/60 tracking-wider">비밀번호</label>
+                            <Link href="/forgot-password" className="text-xs text-white/60 hover:text-white hover:underline">비밀번호 찾기</Link>
                         </div>
-                        <Input name="password" type="password" required className="bg-white/20 border-white/10 text-white placeholder:text-white/40 focus:bg-white/30 focus:border-white/50 transition-all h-11" placeholder="••••••••" />
+                        <Input name="password" type="password" required className="bg-white/5 border-white/5 text-white placeholder:text-white/30 focus:bg-white/10 focus:border-white/20 transition-all h-11" placeholder="••••••••" />
                     </div>
                     {state?.error && (
-                        <div className="text-sm font-semibold text-red-200 text-center bg-red-900/50 p-3 rounded-md animate-pulse border border-red-500/30 whitespace-pre-line">
+                        <div className="text-sm font-semibold text-red-200 text-center bg-red-900/40 p-3 rounded-md animate-pulse border border-red-500/20 whitespace-pre-line">
                             {state.error}
                         </div>
                     )}
-                    <Button type="submit" className="w-full h-12 text-base font-bold bg-white text-slate-900 hover:bg-slate-100 transform transition-all active:scale-95 shadow-lg">
+                    <Button type="submit" className="w-full h-12 text-base font-bold bg-white text-slate-950 hover:bg-slate-100 transform transition-all active:scale-95 shadow-xl">
                         로그인
                     </Button>
                 </form>
-                <div className="text-center text-sm font-medium text-white/60 mt-4">
+                <div className="text-center text-sm font-medium text-white/40 mt-4">
                     <Link href="/register" className="hover:text-white hover:underline transition-colors font-normal">임직원등록</Link>
                 </div>
             </div>
 
-            {/* Bottom Slogan & Logo - Removed per user request */}
             <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-4">
-                <p className="text-xs text-white/50 uppercase tracking-[0.5em] mb-4">Brown Street Inventory System</p>
+                <p className="text-xs text-white/30 uppercase tracking-[0.5em] mb-4">Brown Street Inventory System</p>
             </div>
-        </div>
+        </AuroraBackground>
     );
 }
