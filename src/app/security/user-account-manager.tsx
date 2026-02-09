@@ -9,7 +9,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter
 } from '@/components/ui/dialog';
 import {
@@ -25,7 +24,7 @@ import { Trash2, Pencil, Plus } from 'lucide-react';
 import { createUser, updateUser, deleteUser } from '@/lib/actions';
 import { toast } from 'sonner';
 
-export function UserManagement({ initialUsers, currentUserId }: { initialUsers: any[], currentUserId: string }) {
+export function UserAccountManager({ initialUsers, currentUserId }: { initialUsers: any[], currentUserId: string }) {
     const [users, setUsers] = useState(initialUsers);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
@@ -65,6 +64,9 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                 const formData = new FormData(createFormRef.current);
                 handleCreate(formData);
             }
+        } else {
+            console.error("Form ref is null");
+            alert("시스템 오류: 등록 양식을 찾을 수 없습니다.");
         }
     };
 
@@ -112,12 +114,11 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
     return (
         <div className="space-y-4">
             <div className="flex justify-end">
+                <Button className="flex gap-2" onClick={() => setIsAddOpen(true)}>
+                    <Plus className="h-4 w-4" /> 새 계정 등록
+                </Button>
+
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="flex gap-2">
-                            <Plus className="h-4 w-4" /> 새 계정 등록
-                        </Button>
-                    </DialogTrigger>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>새 사용자 등록</DialogTitle>
