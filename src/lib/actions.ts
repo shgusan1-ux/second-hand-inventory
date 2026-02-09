@@ -629,11 +629,13 @@ export async function createUser(prevState: any, formData: FormData) {
         const role = 'user'; // Default role
         const passwordHint = 'Admin Created';
 
-        // Ensure columns exist (lazy check)
+        // Ensure columns exist (Robust)
         try {
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS security_memo TEXT`);
+        } catch (e) { /* ignore */ }
+        try {
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
 
         await db.query(
             'INSERT INTO users (id, username, password_hash, name, role, password_hint, job_title, email, security_memo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -648,7 +650,7 @@ export async function createUser(prevState: any, formData: FormData) {
         if (e.message.includes('UNIQUE constraint') || e.message.includes('unique constraint')) {
             return { success: false, error: '이미 존재하는 아이디입니다.' };
         }
-        return { success: false, error: '사용자 등록 실패' };
+        return { success: false, error: '사용자 등록 실패: ' + e.message };
     }
 }
 

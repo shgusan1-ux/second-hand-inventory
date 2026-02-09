@@ -100,7 +100,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                         <DialogHeader>
                             <DialogTitle>새 사용자 등록</DialogTitle>
                         </DialogHeader>
-                        <form action={handleCreate} className="space-y-4 mt-4">
+                        <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleCreate(formData); }} className="space-y-4 mt-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="name">이름</Label>
                                 <Input id="name" name="name" required placeholder="이름 입력" />
@@ -226,7 +226,7 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
                         <DialogTitle>사용자 정보 수정</DialogTitle>
                     </DialogHeader>
                     {editingUser && (
-                        <form action={handleUpdate} className="space-y-4 mt-4">
+                        <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleUpdate(formData); }} className="space-y-4 mt-4">
                             <input type="hidden" name="id" value={editingUser.id} />
 
                             <div className="grid gap-2">
