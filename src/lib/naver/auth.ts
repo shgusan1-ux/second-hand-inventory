@@ -37,16 +37,15 @@ export async function getNaverAccessToken(): Promise<string> {
         return cachedToken.token;
     }
 
-    const bcrypt = await import('bcryptjs');
     const timestamp = Date.now();
+    // Naver Commerce API uses bcrypt where the clientSecret is the salt.
     const signature = bcrypt.hashSync(`${clientId}_${timestamp}`, clientSecret);
-    const encodedSignature = Buffer.from(signature).toString('base64');
 
     const body = {
         client_id: clientId,
         timestamp: timestamp.toString(),
         grant_type: 'client_credentials',
-        client_secret_sign: encodedSignature,
+        client_secret_sign: signature,
         type: 'SELF'
     };
 

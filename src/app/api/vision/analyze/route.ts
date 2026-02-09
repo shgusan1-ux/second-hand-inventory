@@ -1,28 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { analyzeImage, extractKeywords } from '@/lib/google-vision';
+import { NextResponse } from 'next/server';
+const vision = require('@google-cloud/vision');
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
     try {
-        const { imageUrl } = await req.json();
+        const body = await request.json();
+        const { imageUrl } = body;
 
         if (!imageUrl) {
-            return NextResponse.json({ error: 'Image URL is required' }, { status: 400 });
+            return NextResponse.json({ success: false, error: 'Missing image URL' }, { status: 400 });
         }
 
-        // Call Vision API helper
-        const analysis = await analyzeImage(imageUrl);
-        const keywords = extractKeywords(analysis);
+        const credentials = JSON.parse(process.env.GOOGLE_VISION_CREDENTIALS_JSON || '{}');
+        if (!credentials.project_id) {
+            throw new Error('Google Vision credentials missing or invalid');
+        }
+
+        const client = new vision.ImageAnnotatorClient({ credentials });
+
+        // Perform label detection, set object detection for clothing
+        const [result] = await client.annotateImage({
+            image: { source: { imageUri: imageUrl } },
+            features: [
+                { type: 'LABEL_DETECTION', maxResults: 10 },
+                { type: 'OBJECT_LOCALIZATION', maxResults: 10 },
+                { type: 'TEXT_DETECTION' }
+            ],
+        });
 
         return NextResponse.json({
             success: true,
-            analysis,
-            keywords,
+            data: {
+                labels: result.labelAnnotations || [],
+                objects: result.localizedObjectAnnotations || [],
+                text: result.fullTextAnnotation?.text || ''
+            }
         });
     } catch (error: any) {
-        console.error('Vision API Error:', error);
-        return NextResponse.json(
-            { error: error.message || 'Failed to analyze image' },
-            { status: 500 }
-        );
+        console.error('Vision API error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

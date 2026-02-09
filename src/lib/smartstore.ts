@@ -14,36 +14,32 @@ export class SmartStoreClient {
 
     async getAccessToken(): Promise<string | null> {
         try {
+            const proxyUrl = process.env.SMARTSTORE_PROXY_URL;
+            const proxyKey = process.env.SMARTSTORE_PROXY_KEY;
             const timestamp = Date.now();
 
-            // Generate Signature
-            // Naver Commerce API: client_secret_sign = bcrypt(client_secret, salt) 
-            // where salt is random (standard bcrypt).
-            // The server verifies by comparing the received hash against its stored client_secret.
-            // (If the doc says "salt=client_id+timestamp", it's likely describing their internal verification or a non-standard usage not supported by bcryptjs easily.
-            // Standard integration pattern: Hash the secret with a standard random salt.)
+            if (!proxyUrl) {
+                throw new Error('SMARTSTORE_PROXY_URL is missing.');
+            }
 
-            // Note: bcryptjs.hashSync string includes the salt, so server can verify it.
-            const sign = bcrypt.hashSync(this.clientSecret, 10);
+            // Correct Signature for Naver: bcrypt(clientId + "_" + timestamp, clientSecret)
+            const sign = bcrypt.hashSync(`${this.clientId}_${timestamp}`, this.clientSecret);
 
-            // Base64Url encoding might be needed if the standard bcrypt string contains sensitive chars?
-            // Standard bcrypt string uses ./A-Za-z0-9. It is URL safe except maybe '$'.
-            // Naver expects raw string or encoded? Usually raw if transmitted as form-data.
-            // BUT let's trust standard form-urlencoded.
+            const body = {
+                client_id: this.clientId,
+                timestamp: timestamp.toString(),
+                grant_type: 'client_credentials',
+                client_secret_sign: sign,
+                type: 'SELF'
+            };
 
-            const params = new URLSearchParams();
-            params.append('client_id', this.clientId);
-            params.append('timestamp', timestamp.toString());
-            params.append('grant_type', 'client_credentials');
-            params.append('client_secret_sign', sign);
-            params.append('type', 'SELF');
-
-            const response = await fetch('https://api.commerce.naver.com/external/v1/oauth2/token', {
+            const response = await fetch(`${proxyUrl}/naver/token`, {
                 method: 'POST',
-                body: params,
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+                    'Content-Type': 'application/json',
+                    'x-proxy-key': proxyKey || ''
+                },
+                body: JSON.stringify(body)
             });
 
             const data = await response.json();
