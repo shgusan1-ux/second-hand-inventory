@@ -87,16 +87,24 @@ export async function logAction(action: string, targetType?: string, targetId?: 
             else if (action === 'REGISTER') content = `[${userName}] 신규 직원 가입: ${details}`;
             else content = `[${userName}] ${action}: ${details || ''}`;
 
-            // Lazy ensure table exists (handled in actions.ts getDashTasks but safe to ignore error here)
+            // Ensure table exists
             try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS dashboard_tasks (
+                        id TEXT PRIMARY KEY,
+                        content TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_completed BOOLEAN DEFAULT FALSE,
+                        completed_at TIMESTAMP
+                    )
+                `);
+
                 await db.query(`
                     INSERT INTO dashboard_tasks (id, content, created_at, is_completed)
                     VALUES ($1, $2, CURRENT_TIMESTAMP, FALSE)
                 `, [taskId, content]);
             } catch (ignore) {
-                // Table might not exist yet if getDashboardTasks never ran, strictly speaking handled there
-                // ensuring table exists here might be safer but `getDashboardTasks` does it.
-                // We will assume actions.ts runs at least once or DB init script ran.
+                console.error("Failed to insert dashboard task:", ignore);
             }
         }
 

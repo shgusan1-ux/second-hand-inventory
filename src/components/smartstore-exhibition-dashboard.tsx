@@ -140,10 +140,23 @@ export function SmartStoreExhibitionDashboard() {
     }, []);
 
     const calculateDays = (dateStr: string) => {
-        const regDate = new Date(dateStr);
-        const now = new Date();
-        const diff = now.getTime() - regDate.getTime();
-        return Math.floor(diff / (1000 * 60 * 60 * 24));
+        if (!dateStr) return 0;
+        try {
+            // standardizing date parsing
+            const regDate = new Date(dateStr);
+            if (isNaN(regDate.getTime())) return 0;
+
+            const now = new Date();
+
+            // Set both to midnight for accurate day comparison
+            const d1 = new Date(regDate.getFullYear(), regDate.getMonth(), regDate.getDate());
+            const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            const diff = d2.getTime() - d1.getTime();
+            return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+        } catch (e) {
+            return 0;
+        }
     };
 
     const getRecommendation = (days: number) => {
@@ -328,7 +341,7 @@ export function SmartStoreExhibitionDashboard() {
                                         </TableHead>
                                         <TableHead className="w-20">이미지</TableHead>
                                         <TableHead>상품 정보</TableHead>
-                                        <TableHead>등록일 / 경과</TableHead>
+                                        <TableHead>상품등록일 / 경과</TableHead>
                                         <TableHead>상태 추천</TableHead>
                                         <TableHead className="text-right">전시 분류 액션</TableHead>
                                     </TableRow>
@@ -452,7 +465,7 @@ export function SmartStoreExhibitionDashboard() {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-sm">추천 요약 (계산 결과)</CardTitle>
+                        <CardTitle className="text-sm">상품등록일 기준 추천 요약</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <div className="flex justify-between text-xs"><span>0-30일: NEW</span><Badge variant="outline">추천 1순위</Badge></div>

@@ -786,22 +786,28 @@ export async function deleteUser(targetId: string) {
     try {
         await db.query('BEGIN');
 
-        // Delete related data first (Cascade manually if FK constraints exist without CASCADE)
+        // Delete related data first
         // 1. Attendance Logs
         await db.query('DELETE FROM attendance_logs WHERE user_id = $1', [targetId]);
 
-        // 2. Action Logs (Optional: Update to NULL if you want to keep logs, or delete)
-        // 2. Audit Logs (Fixed table name from action_logs to audit_logs)
+        // 2. Audit Logs
         await db.query('DELETE FROM audit_logs WHERE user_id = $1', [targetId]);
 
         // 3. Security Logs
         await db.query('DELETE FROM security_logs WHERE user_id = $1', [targetId]);
 
-        // 4. User Permissions (if exists)
+        // 4. Messages (Both sent and received)
+        await db.query('DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $2', [targetId, targetId]);
+
+        // 5. User Permissions
         await db.query('DELETE FROM user_permissions WHERE user_id = $1', [targetId]);
 
-        // 3. Delete User
-        await db.query('DELETE FROM users WHERE id = $1', [targetId]);
+        // 6. Delete User
+        const deleteRes = await db.query('DELETE FROM users WHERE id = $1', [targetId]);
+
+        if (deleteRes.rowCount === 0) {
+            throw new Error('User not found in database');
+        }
 
         await db.query('COMMIT');
 

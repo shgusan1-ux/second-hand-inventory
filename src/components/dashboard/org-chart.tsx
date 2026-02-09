@@ -51,44 +51,71 @@ export function OrgChart({ users }: OrgChartProps) {
         return phone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
     };
 
-    // Grouping for better layout (optional, or just single list)
-    // The query already sorts by hierarchy.
-    // Let's distinguish Executives/Managers/Staff visually if needed.
-    // For now, a clean grid is good.
+    // Hierarchy levels
+    const levels = [
+        { title: '대표자', titles: ['대표자'], color: 'bg-slate-900 border-slate-800' },
+        { title: '관리자', titles: ['총매니저', '경영지원'], color: 'bg-slate-800 border-slate-700' },
+        { title: '실무진', titles: ['실장', '과장', '주임'], color: 'bg-emerald-600 border-emerald-500' },
+        { title: '지원팀', titles: ['전산', 'MD', 'CS'], color: 'bg-blue-600 border-blue-500' }
+    ];
+
+    const groupedUsers = levels.map(level => ({
+        ...level,
+        members: users.filter(u => level.titles.includes(u.job_title))
+    })).filter(level => level.members.length > 0);
+
+    const otherMembers = users.filter(u => !levels.some(l => l.titles.includes(u.job_title)));
+    if (otherMembers.length > 0) {
+        groupedUsers.push({ title: '기타', titles: [], color: 'bg-slate-500 border-slate-400', members: otherMembers });
+    }
 
     return (
-        <Card className="h-full flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                    조직도 (SCM 팀)
+        <Card className="h-full flex flex-col bg-slate-50/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b">
+                <CardTitle className="text-lg font-bold text-slate-900">
+                    전직원 조직도
                 </CardTitle>
-                <Users className="h-4 w-4 text-slate-400" />
+                <Users className="h-5 w-5 text-indigo-500" />
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-4">
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {users.map((user) => (
-                        <div
-                            key={user.id}
-                            className="flex flex-col items-center p-3 rounded-lg border bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer text-center group"
-                            onClick={() => handleUserClick(user)}
-                        >
-                            <Avatar className="h-10 w-10 mb-2 border-2 border-white shadow-sm group-hover:scale-105 transition-transform">
-                                <AvatarFallback className={`${['대표자', '총매니저'].includes(user.job_title) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                                    {user.name[0]}
-                                </AvatarFallback>
-                            </Avatar>
-                            <span className="font-bold text-sm text-slate-900">{user.name}</span>
-                            <Badge variant="outline" className="mt-1 text-[10px] h-5 px-1 bg-white">
-                                {user.job_title}
-                            </Badge>
+            <CardContent className="flex-1 overflow-auto p-6 space-y-8">
+                {groupedUsers.map((group, idx) => (
+                    <div key={group.title} className="space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`h-1.5 w-8 rounded-full ${group.color.split(' ')[0]}`} />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{group.title}</h3>
+                            <div className="h-px flex-1 bg-slate-200" />
                         </div>
-                    ))}
-                    {users.length === 0 && (
-                        <div className="col-span-full text-center py-6 text-slate-400 text-sm">
-                            등록된 직원이 없습니다.
+                        <div className="flex flex-wrap justify-center gap-4">
+                            {group.members.map((user) => (
+                                <div
+                                    key={user.id}
+                                    className="flex flex-col items-center p-3 w-28 rounded-xl border bg-white shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer text-center group relative overflow-hidden"
+                                    onClick={() => handleUserClick(user)}
+                                >
+                                    <div className={`absolute top-0 left-0 w-full h-1 ${group.color.split(' ')[0]}`} />
+                                    <Avatar className="h-12 w-12 mb-2 border-2 border-white shadow-sm group-hover:scale-105 transition-transform mt-1">
+                                        <AvatarFallback className={`${group.color} text-white text-xs font-bold`}>
+                                            {user.name[0]}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-bold text-sm text-slate-900 truncate w-full">{user.name}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium">{user.job_title}</span>
+                                </div>
+                            ))}
                         </div>
-                    )}
-                </div>
+                        {idx < groupedUsers.length - 1 && (
+                            <div className="flex justify-center py-2">
+                                <div className="w-px h-8 bg-slate-200 dashed h-8 border-l border-dashed border-slate-300" />
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {users.length === 0 && (
+                    <div className="text-center py-20 text-slate-400 text-sm italic">
+                        나타낼 조직 구성원이 없습니다.
+                    </div>
+                )}
             </CardContent>
 
             {/* User Detail Dialog */}

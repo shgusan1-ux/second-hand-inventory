@@ -1,0 +1,39 @@
+{
+  "originProductNo": 13013660811,
+  "channelProducts": [
+    {
+      "originProductNo": 13013660811,
+      "channelProductNo": 13071647166,
+      "channelServiceType": "STOREFARM",
+      "categoryId": "50000837",
+      "name": "YVES SAINT LAURENT 입생로랑 아카이브 사토리얼 퓨어 울 싱글 블레이저 MAN-L",
+      "sellerManagementCode": "AAAAIH2065",
+      "statusType": "SALE",
+      "channelProductDisplayStatusType": "ON",
+      "salePrice": 98000,
+      "discountedPrice": 98000,
+      "mobileDiscountedPrice": 98000,
+      "stockQuantity": 1,
+      "knowledgeShoppingProductRegistration": true,
+      "deliveryAttributeType": "NORMAL",
+      "deliveryFee": 3500,
+      "returnFee": 3500,
+      "exchangeFee": 7000,
+      "sellerPurchasePoint": 5,
+      "sellerPurchasePointUnitType": "PERCENT",
+      "managerPurchasePoint": 1,
+      "freeInterest": 3,
+      "wholeCategoryName": "패션의류>남성의류>점퍼",
+      "wholeCategoryId": "50000000>50000169>50000837",
+      "representativeImage": {
+        "url": "https://shop-phinf.pstatic.net/20260206_216/1770305838220hz7jL_JPEG/104438760372546786_1961896374.jpeg"
+      },
+      "modelName": "LSH",
+      "brandName": "자체브랜드",
+      "manufacturerName": "자체제작",
+      "sellerTags": [],
+      "regDate": "2026-02-05T23:42:39.733+09:00",
+      "modifiedDate": "2026-02-06T00:37:19.139+09:00"
+    }
+  ]
+}

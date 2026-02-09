@@ -33,26 +33,6 @@ export default async function SettingsPage() {
                 <div className="space-y-6">
                     <PasswordChangeForm />
 
-                    {/* User Management (Admin Only) */}
-                    {isAdmin && (
-                        <Card className="border-emerald-200 bg-emerald-50">
-                            <CardHeader>
-                                <CardTitle className="text-emerald-800 flex items-center gap-2">
-                                    <Users className="h-5 w-5" />
-                                    회원 관리
-                                </CardTitle>
-                                <CardDescription className="text-emerald-600">
-                                    시스템 사용자 목록을 관리합니다.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Link href="/settings/users">
-                                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700">회원 관리 바로가기</Button>
-                                </Link>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     <Card className="opacity-75">
                         <CardHeader>
                             <CardTitle>시스템 정보</CardTitle>

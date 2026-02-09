@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { addCategory, deleteCategory, bulkCreateCategories, updateCategory } from '@/lib/actions';
-import { Trash2, Plus, FileSpreadsheet, Upload, Edit, Save, X } from 'lucide-react';
+import { Trash2, Plus, FileSpreadsheet, Upload, Edit, Save, X, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 
@@ -176,6 +176,15 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
         document.body.removeChild(link);
     };
 
+    // Search state
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredCategories = categories.filter(cat =>
+        cat.name.includes(searchTerm) ||
+        cat.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cat.classification?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
@@ -201,22 +210,36 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
 
             {mode === 'single' ? (
                 <>
-                    <form action={async (formData) => { await addCategory(formData); }} className="flex gap-2 items-center">
-                        <select name="classification" className="h-10 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                    <div className="relative mb-2">
+                        <Input
+                            placeholder="카테고리 검색 (이름 또는 코드)..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-8 bg-slate-50 border-slate-200 focus:bg-white"
+                        />
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                    </div>
+
+                    <form action={async (formData) => { await addCategory(formData); }} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <select name="classification" className="h-9 rounded-md border border-slate-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
                             {CLASSIFICATIONS.map(c => (
                                 <option key={c} value={c}>{c}</option>
                             ))}
                         </select>
-                        <Input name="id" placeholder="코드 (예: TSHIRT)" className="w-32" />
-                        <Input name="name" placeholder="카테고리명 (예: 티셔츠)" required className="flex-1" />
-                        <Button type="submit" size="icon" title="추가">
-                            <Plus className="h-4 w-4" />
+                        <Input name="id" placeholder="코드" className="w-24 h-9 text-xs" />
+                        <Input name="name" placeholder="카테고리명" required className="flex-1 h-9 text-xs" />
+                        <Button type="submit" size="sm" className="h-9 px-3">
+                            <Plus className="h-4 w-4 mr-1" /> 추가
                         </Button>
                     </form>
 
-                    <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto">
-                        {categories.map((cat) => (
-                            <div key={cat.id} className="flex items-center justify-between p-3">
+                    <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-white shadow-sm">
+                        {filteredCategories.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 text-sm">
+                                검색 결과가 없습니다.
+                            </div>
+                        ) : filteredCategories.map((cat) => (
+                            <div key={cat.id} className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors">
                                 {editingId === cat.id ? (
                                     <div className="flex items-center gap-2 w-full">
                                         <select

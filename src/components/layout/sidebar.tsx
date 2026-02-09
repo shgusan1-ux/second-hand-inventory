@@ -36,7 +36,7 @@ const aiTools = [
 
 // 4. Admin & Business Support (User skipped 3?)
 const adminSupport = [
-    { name: '회원관리 / 근태관리', href: '/members', icon: Users },
+    { name: '임직원 소통', href: '/members', icon: Users },
     { name: '경영지원', href: '/business', icon: Briefcase },
     { name: '보안/계정관리', href: '/security', icon: Lock },
     { name: '매출/매입관리', href: '/sales', icon: CreditCard },

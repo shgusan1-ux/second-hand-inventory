@@ -18,9 +18,9 @@ interface User {
     job_title: string;
     role: string;
     created_at: string;
-    permissions: string[];
+    permissions?: string[];
     email?: string;
-    can_view_accounting?: boolean; // Added
+    can_view_accounting?: boolean;
 }
 
 const CATEGORIES = [
@@ -33,11 +33,38 @@ const CATEGORIES = [
     { id: 'members', label: '회원 관리' },
 ];
 
-export function MemberManagement({ users }: { users: User[] }) {
+export function MemberManagement({ users, currentUser }: { users: User[], currentUser: any }) {
+    const isAdmin = currentUser && ['대표자', '경영지원'].includes(currentUser.job_title);
+
     const [viewMode, setViewMode] = useState<'list' | 'mindmap'>('list');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [permissionModalOpen, setPermissionModalOpen] = useState(false);
     const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+
+    // Message states
+    const [messageOpen, setMessageOpen] = useState(false);
+    const [messageContent, setMessageContent] = useState('');
+    const [messageSending, setMessageSending] = useState(false);
+
+    const openMessageModal = (user: User) => {
+        setSelectedUser(user);
+        setMessageOpen(true);
+    };
+
+    const handleSendMessage = async () => {
+        if (!selectedUser || !messageContent.trim()) return;
+        setMessageSending(true);
+        const { sendMessage } = await import('@/lib/actions');
+        const res = await sendMessage(selectedUser.id, messageContent);
+        setMessageSending(false);
+        if (res.success) {
+            alert('메시지를 보냈습니다.');
+            setMessageOpen(false);
+            setMessageContent('');
+        } else {
+            alert('실패: ' + res.error);
+        }
+    };
 
     // Permission State
     const [tempPermissions, setTempPermissions] = useState<string[]>([]);
@@ -161,10 +188,10 @@ export function MemberManagement({ users }: { users: User[] }) {
                                     <div>
                                         <div className="text-xs font-medium text-slate-500 mb-2">접근 권한</div>
                                         <div className="flex flex-wrap gap-1">
-                                            {user.permissions.includes('ALL') ? (
+                                            {user.permissions?.includes('ALL') ? (
                                                 <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200">전체 권한</Badge>
-                                            ) : user.permissions.length > 0 ? (
-                                                user.permissions.map(p => {
+                                            ) : (user.permissions?.length || 0) > 0 ? (
+                                                user.permissions?.map(p => {
                                                     const label = CATEGORIES.find(c => c.id === p)?.label || p;
                                                     return <Badge key={p} variant="outline" className="text-xs">{label}</Badge>;
                                                 })

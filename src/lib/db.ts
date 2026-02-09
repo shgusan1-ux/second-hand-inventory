@@ -21,8 +21,10 @@ function getSqliteDb() {
 // supports switching between SQLite (Local) and Vercel Postgres (Cloud)
 export const db = {
   query: async <T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> => {
-    // Checking environment - In a real scenario, check process.env.POSTGRES_URL
-    const isCloud = !!process.env.POSTGRES_URL && process.env.NODE_ENV === 'production';
+    // Priority: POSTGRES_URL exists -> Use Postgres (Vercel)
+    // Fallback: Use Local SQLite
+    // Use DB_TYPE=sqlite to force local even if POSTGRES_URL exists
+    const isCloud = !!process.env.POSTGRES_URL && process.env.DB_TYPE !== 'sqlite';
 
     if (isCloud) {
       // Lazy load @vercel/postgres to avoid install errors locally

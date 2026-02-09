@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## 🚀 실행 명령 가이드
 
-## Getting Started
-
-First, run the development server:
-
+### 1. 로컬 개발 (SQLite 사용)
+로컬 DB(`inventory.db`)를 사용하여 개발합니다.
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. 프로덕션 환경 테스트 (Postgres 사용)
+Vercel Postgres 실DB에 연결하여 스크립트나 API를 테스트합니다. 
+`.env.production` 파일이 필요합니다.
+```bash
+# DB 마이그레이션 실행
+npx tsx --env-file=.env.production scripts/migrate_postgres.ts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# 프로덕션 모드로 로컬 서버 실행
+npm run build && npx vercel dev --env .env.production
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠 DB 구조 (Schema)
+- `products`: 상품 정보 (id, name, brand, category, price_sell, status, created_at, archive, archive_locked 등)
+- `categories`: 카테고리 정보 (id, name, classification, sort_order)
+- `system_settings`: 시스템 설정 (smartstore_config 등)
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
