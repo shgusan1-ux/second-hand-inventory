@@ -19,6 +19,55 @@ function getSqliteDb() {
 
     console.log(`[DB] Initializing SQLite at: ${dbPath}`);
     sqliteDb = new Database(dbPath);
+
+    // Auto-initialize tables for SQLite
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS product_overrides (
+        id TEXT PRIMARY KEY,
+        override_date TIMESTAMP,
+        internal_category TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        job_title TEXT,
+        email TEXT,
+        password_hint TEXT,
+        security_memo TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS attendance_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS security_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        user_name TEXT,
+        action TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category);
+      CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date);
+      CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at);
+    `);
   }
   return sqliteDb;
 }
