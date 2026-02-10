@@ -1,95 +1,125 @@
+
 import { NextResponse } from 'next/server';
-import { searchProducts } from '@/lib/naver-api-client';
-import { classifyProduct } from '@/lib/product-classifier';
-import { db } from '@vercel/postgres';
+import { getNaverToken, searchProducts } from '@/lib/naver/client';
+import { calculateLifecycle } from '@/lib/classification/lifecycle';
+import { classifyArchive } from '@/lib/classification/archive';
+import { db } from '@/lib/db';
+import { handleApiError, handleAuthError, handleSuccess } from '@/lib/api-utils';
+import { ensureDbInitialized } from '@/lib/db-init';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const size = parseInt(searchParams.get('size') || '100');
+    const size = Math.min(parseInt(searchParams.get('size') || '20'), 100);
     const name = searchParams.get('name') || '';
-
-    console.log(`[API/Products] GET 요청 수신 - Name: ${name}, Page: ${page}, Size: ${size}`);
+    const stage = searchParams.get('stage') || 'ALL';
+    const subStage = searchParams.get('subStage') || 'ALL';
 
     try {
-        // 1. Fetch from Naver via Proxy (Internally handles token flow)
-        console.log('[API/Products] Naver API 호출 중...');
-        const naverRes = await searchProducts(page, size, { searchKeyword: name });
+        const fs = await import('fs');
+        const log = (msg: string) => fs.appendFileSync('api_debug.log', `[${new Date().toISOString()}] ${msg}\n`);
 
-        if (!naverRes || !naverRes.contents) {
-            console.warn('[API/Products] Naver 응답에 데이터가 없습니다.');
-            return NextResponse.json({ success: true, data: naverRes || { contents: [] } });
+        log(`[API/Products] Request received - Page: ${page}, Stage: ${stage}`);
+
+        // DB 초기화 (첫 호출 시에만 실행됨)
+        await ensureDbInitialized();
+
+        log('Authenticating with Naver...');
+        let tokenData;
+        try {
+            tokenData = await getNaverToken();
+            log('Token acquired successfully');
+        } catch (authError: any) {
+            log(`Auth Failed: ${authError.message}`);
+            return handleAuthError(authError);
         }
 
-        console.log(`[API/Products] ${naverRes.contents.length}개의 상품을 Naver로부터 가져왔습니다.`);
+        log(`Fetching products from Proxy (Term: ${name})...`);
+        const naverRes = await searchProducts(tokenData.access_token, page, size, {
+            searchKeyword: name || undefined,
+            searchType: name ? 'PRODUCT_NAME' : undefined
+        });
+        log(`Proxy returned ${naverRes?.contents?.length || 0} items`);
 
-        // 2. Fetch Overrides from DB
-        const ids = naverRes.contents.map((item: any) => item.originProductNo.toString());
-        let overridesMap: Record<string, any> = {};
+        if (!naverRes || !naverRes.contents || naverRes.contents.length === 0) {
+            console.log('[API/Products] No products found.');
+            return handleSuccess({
+                contents: [],
+                totalCount: naverRes?.totalCount || 0,
+                page,
+                size,
+                hasMore: false
+            });
+        }
+
+        console.log(`[API/Products] Found ${naverRes.contents.length} products. Merging with DB...`);
+
+        // Fetch DB overrides for these IDs (Compatible with both Postgres and SQLite)
+        const ids = naverRes.contents.map(p => p.originProductNo.toString()).filter(id => !!id);
+        let overrideMap: any = {};
 
         if (ids.length > 0) {
+            const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
             try {
-                const { rows } = await db.query(
-                    'SELECT id, override_date, internal_category FROM product_overrides WHERE id = ANY($1)',
-                    [ids]
+                const { rows: overrides } = await db.query(
+                    `SELECT * FROM product_overrides WHERE id IN (${placeholders})`,
+                    ids
                 );
-                overridesMap = rows.reduce((acc: any, row: any) => {
+                overrideMap = overrides.reduce((acc: any, row: any) => {
                     acc[row.id] = row;
                     return acc;
                 }, {});
-                console.log(`[API/Products] ${rows.length}개의 DB 오버라이드 정보를 매칭했습니다.`);
-            } catch (dbErr) {
-                console.warn('[API/Products] DB 오버라이드 조회 실패 (무시하고 계속):', dbErr);
+            } catch (dbError) {
+                console.warn('[API/Products] DB Query failed, continuing without overrides:', dbError);
             }
         }
 
-        // 3. Classify and Enrich
-        const contents = naverRes.contents.map((item: any) => {
-            const cp = item.channelProducts?.[0] || {};
-            const override = overridesMap[item.originProductNo] || {};
+        const processed = naverRes.contents.map(p => {
+            const cp = p.channelProducts?.[0];
+            if (!cp) return null;
 
-            // Build temporary product object for classifier
-            const productInfo = {
-                name: cp.name,
-                regDate: cp.regDate,
-                overrideDate: override.override_date,
-                sellerManagementCode: cp.sellerManagementCode,
-            };
+            const prodId = p.originProductNo?.toString();
+            const override = overrideMap[prodId] || {};
 
-            const classification = classifyProduct(productInfo);
+            // Defensive defaults for classification
+            const regDate = cp.regDate || new Date().toISOString();
+            const prodName = cp.name || 'Unknown Product';
+
+            const lifecycle = calculateLifecycle(regDate, override.override_date);
+            const archiveInfo = lifecycle.stage === 'ARCHIVE'
+                ? classifyArchive(prodName, [])
+                : null;
 
             return {
-                originProductNo: item.originProductNo.toString(),
-                channelProductNo: cp.channelProductNo?.toString(),
-                name: cp.name,
-                sellerManagementCode: cp.sellerManagementCode,
-                regDate: cp.regDate,
-                overrideDate: override.override_date,
-                salePrice: cp.salePrice,
-                stockQuantity: cp.stockQuantity,
-                images: { representativeImage: { url: cp.representativeImage?.url } },
-                exhibitionCategoryIds: item.exhibitionCategoryIds || [],
-                recommendation: classification,
-                currentInternalCategory: override.internal_category
+                ...cp,
+                originProductNo: prodId,
+                images: cp.images,
+                lifecycle,
+                archiveInfo,
+                internalCategory: override.internal_category || archiveInfo?.category || 'UNCATEGORIZED'
             };
-        });
+        }).filter(p => p !== null);
 
-        console.log('[API/Products] 데이터 가공 완료. 응답 전송.');
+        console.log(`[API/Products] Processing complete. Filtered: ${processed.length}`);
 
-        return NextResponse.json({
-            success: true,
-            data: {
-                ...naverRes,
-                contents
-            }
+        // Backend side filtering for stages if requested
+        let filtered = processed;
+        if (stage !== 'ALL') {
+            filtered = filtered.filter((p: any) => p.lifecycle.stage === stage);
+        }
+        if (subStage !== 'ALL') {
+            filtered = filtered.filter((p: any) => p.archiveInfo?.category === subStage);
+        }
+
+        return handleSuccess({
+            contents: filtered,
+            totalCount: naverRes.totalCount,
+            page: naverRes.page,
+            size: naverRes.size,
+            hasMore: naverRes.totalCount > (page * size)
         });
 
     } catch (error: any) {
-        console.error('[API/Products] 처리 오류:', error);
-        return NextResponse.json({
-            success: false,
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        }, { status: 500 });
+        return handleApiError(error, 'Products API');
     }
 }
