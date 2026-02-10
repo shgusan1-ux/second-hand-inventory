@@ -1,0 +1,75 @@
+﻿node.exe : Vercel CLI 50.12.
+3
+At C:\Users\Administrator\Ap
+pData\Roaming\npm\vercel.ps1
+:24 char:5
++     & "node$exe"  "$basedi
+r/node_modules/vercel/dist/v
+c.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Verce  
+  l CLI 50.12.3:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+Retrieving project…
+> Environment Variables foun
+d for hyunmoo-nohs-projects/
+second-hand-inventory [413ms
+]
+
+ name                               value               environments                created    
+ DB_TYPE                            Encrypted           Production                  21m ago    
+ SMARTSTORE_ARCHIVE_BRITISH_ID      Encrypted           Production                  57m ago    
+ SMARTSTORE_ARCHIVE_EUROPE_ID       Encrypted           Production                  57m ago    
+ SMARTSTORE_ARCHIVE_JAPAN_ID        Encrypted           Production                  57m ago    
+ SMARTSTORE_ARCHIVE_WORKWEAR_ID     Encrypted           Production                  57m ago    
+ SMARTSTORE_ARCHIVE_MILITARY_ID     Encrypted           Production                  57m ago    
+ SMARTSTORE_CLEARANCE_ID            Encrypted           Production                  57m ago    
+ SMARTSTORE_ARCHIVE_ROOT_ID         Encrypted           Production                  57m ago    
+ SMARTSTORE_CURATED_ID              Encrypted           Production                  57m ago    
+ SMARTSTORE_PROXY_KEY               Encrypted           Production                  57m ago    
+ SMARTSTORE_PROXY_URL               Encrypted           Production                  57m ago    
+ NEXT_PUBLIC_PROXY_URL              Encrypted           Production                  57m ago    
+ NAVER_CLIENT_SECRET                Encrypted           Production                  58m ago    
+ NAVER_CLIENT_ID                    Encrypted           Production                  58m ago    
+ GOOGLE_VISION_CREDENTIALS_JSON     Encrypted           Production                  58m ago    
+ GEMINI_API_KEY                     Encrypted           Production                  58m ago    
+ POSTGRES_USER                      Encrypted           Production                  58m ago    
+ POSTGRES_PRISMA_URL                Encrypted           Production                  58m ago    
+ POSTGRES_PASSWORD                  Encrypted           Production                  58m ago    
+ POSTGRES_HOST                      Encrypted           Production                  58m ago    
+ POSTGRES_DATABASE                  Encrypted           Production                  58m ago    
+ PGUSER                             Encrypted           Production                  58m ago    
+ PGPASSWORD                         Encrypted           Production                  58m ago    
+ PGHOST_UNPOOLED                    Encrypted           Production                  58m ago    
+ PGHOST                             Encrypted           Production                  58m ago    
+ PGDATABASE                         Encrypted           Production                  58m ago    
+ NEON_PROJECT_ID                    Encrypted           Production                  59m ago    
+ DATABASE_URL_UNPOOLED              Encrypted           Production                  59m ago    
+ DATABASE_URL                       Encrypted           Production                  59m ago    
+ NAVER_CLIENT_ID                    Encrypted           Preview, Development        21h ago    
+ NAVER_CLIENT_SECRET                Encrypted           Development, Preview        21h ago    
+ SMARTSTORE_PROXY_URL               Encrypted           Development, Preview        21h ago    
+ SMARTSTORE_PROXY_KEY               Encrypted           Development, Preview        21h ago    
+ POSTGRES_PRISMA_URL                Encrypted           Preview, Development        4d ago     
+ DATABASE_URL_UNPOOLED              Encrypted           Preview, Development        4d ago     
+ POSTGRES_URL_NO_SSL                Encrypted           Preview, Development        4d ago     
+ PGUSER                             Encrypted           Preview, Development        4d ago     
+ NEON_PROJECT_ID                    Encrypted           Preview, Development        4d ago     
+ POSTGRES_URL_NON_POOLING           Encrypted           Preview, Development        4d ago     
+ POSTGRES_URL                       Encrypted           Preview, Development        4d ago     
+ POSTGRES_DATABASE                  Encrypted           Preview, Development        4d ago     
+ PGDATABASE                         Encrypted           Preview, Development        4d ago     
+ PGHOST                             Encrypted           Preview, Development        4d ago     
+ PGPASSWORD                         Encrypted           Preview, Development        4d ago     
+ POSTGRES_PASSWORD                  Encrypted           Preview, Development        4d ago     
+ PGHOST_UNPOOLED                    Encrypted           Preview, Development        4d ago     
+ POSTGRES_HOST                      Encrypted           Preview, Development        4d ago     
+ DATABASE_URL                       Encrypted           Preview, Development        4d ago     
+ POSTGRES_USER                      Encrypted           Preview, Development        4d ago     
+

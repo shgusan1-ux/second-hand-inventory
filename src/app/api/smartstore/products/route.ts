@@ -16,30 +16,28 @@ export async function GET(request: Request) {
     const subStage = searchParams.get('subStage') || 'ALL';
 
     try {
-        const fs = await import('fs');
-        const log = (msg: string) => fs.appendFileSync('api_debug.log', `[${new Date().toISOString()}] ${msg}\n`);
+        console.log(`[API/Products] Request received - Page: ${page}, Stage: ${stage}`);
 
-        log(`[API/Products] Request received - Page: ${page}, Stage: ${stage}`);
-
-        // DB 초기화 (첫 호출 시에만 실행됨)
+        // DB 초기화
         await ensureDbInitialized();
 
-        log('Authenticating with Naver...');
+        console.log('Authenticating with Naver...');
+
         let tokenData;
         try {
             tokenData = await getNaverToken();
-            log('Token acquired successfully');
+            console.log('Token acquired successfully');
         } catch (authError: any) {
-            log(`Auth Failed: ${authError.message}`);
+            console.log(`Auth Failed: ${authError.message}`);
             return handleAuthError(authError);
         }
 
-        log(`Fetching products from Proxy (Term: ${name})...`);
+        console.log(`Fetching products from Proxy (Term: ${name})...`);
         const naverRes = await searchProducts(tokenData.access_token, page, size, {
             searchKeyword: name || undefined,
             searchType: name ? 'PRODUCT_NAME' : undefined
         });
-        log(`Proxy returned ${naverRes?.contents?.length || 0} items`);
+        console.log(`Proxy returned ${naverRes?.contents?.length || 0} items`);
 
         if (!naverRes || !naverRes.contents || naverRes.contents.length === 0) {
             console.log('[API/Products] No products found.');

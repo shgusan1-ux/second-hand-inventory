@@ -1,0 +1,78 @@
+﻿node.exe : Vercel CLI 50.12.
+3
+At C:\Users\Administrator\Ap
+pData\Roaming\npm\vercel.ps1
+:24 char:5
++     & "node$exe"  "$basedi
+r/node_modules/vercel/dist/v
+c.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Verce  
+  l CLI 50.12.3:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+Retrieving project…
+Fetching logs...
+TIME         HOST           
+            LEVEL           
+           STATUS  MESSAGE  
+                            
+        
+21:52:56.40  factory.brownst
+reet.co.kr  info   ε HEAD /l
+ogin       200     (no messa
+ge)                         
+        
+21:52:11.98  factory.brownst
+reet.co.kr  info   ε POST /l
+ogin       500     [DB] Init
+ializing SQLite at: /tmp/inv
+entory.…
+21:52:08.02  factory.brownst
+reet.co.kr  info   ε GET /lo
+gin        200     (no messa
+ge)                         
+        
+21:52:08.01  factory.brownst
+reet.co.kr  info   ε GET /re
+gister     200     (no messa
+ge)                         
+        
+21:52:07.97  factory.brownst
+reet.co.kr  info   ε GET /re
+gister     200     (no messa
+ge)                         
+        
+21:52:07.55  factory.brownst
+reet.co.kr  info   ε GET /re
+gister     200     (no messa
+ge)                         
+        
+21:52:07.40  factory.brownst
+reet.co.kr  info   ε GET /lo
+gin        200     (no messa
+ge)                         
+        
+21:52:07.40  factory.brownst
+reet.co.kr  info   ε GET /lo
+gin        200     (no messa
+ge)                         
+        
+21:52:07.40  factory.brownst
+reet.co.kr  info   ε GET /lo
+gin        200     (no messa
+ge)                         
+        
+21:52:06.85  factory.brownst
+reet.co.kr  info   ε GET /lo
+gin        200     (no messa
+ge)                         
+        
+Fetched 10 logs for hyunmoo-
+nohs-projects/second-hand-in
+ventory on branch main

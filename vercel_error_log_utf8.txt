@@ -1,0 +1,128 @@
+﻿node.exe : Vercel CLI 50.12.
+3
+At C:\Users\Administrator\Ap
+pData\Roaming\npm\vercel.ps1
+:24 char:5
++     & "node$exe"  "$basedi
+r/node_modules/vercel/dist/v
+c.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Verce  
+  l CLI 50.12.3:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+Retrieving project…
+Fetching logs...
+TIME         HOST           
+                            
+                       LEVEL
+                            
+         STATUS  MESSAGE   
+21:52:56.40  factory.brownst
+reet.co.kr                  
+                       info 
+  ε HEAD /login             
+         200     (no messa…
+21:52:11.98  factory.brownst
+reet.co.kr                  
+                       info 
+  ε POST /login             
+         500     [DB] Init…
+21:52:08.02  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:52:08.01  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /register           
+         200     (no messa…
+21:52:07.97  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /register           
+         200     (no messa…
+21:52:07.55  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /register           
+         200     (no messa…
+21:52:07.40  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:52:07.40  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:52:07.40  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:52:06.85  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:52:06.74  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /forgot-password    
+         307     (no messa…
+21:52:06.73  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /register           
+         200     (no messa…
+21:52:05.79  factory.brownst
+reet.co.kr                  
+                       info 
+  ε GET /login              
+         200     (no messa…
+21:48:35.84  factory.brownst
+reet.co.kr                  
+                       error
+  λ GET /api/smartstore/prod
+ucts     500     [API Erro…
+21:48:34.82  factory.brownst
+reet.co.kr                  
+                       error
+  λ GET /api/smartstore/prod
+ucts     500     [API Erro…
+21:47:22.17  second-hand-inv
+entory-i67fl95dn-hyunmoo-noh
+s-projects.vercel.app  info 
+  ε GET /login              
+         200     (no messa…
+21:47:22.12  second-hand-inv
+entory-i67fl95dn-hyunmoo-noh
+s-projects.vercel.app  info 
+  ε GET /login              
+         200     (no messa…
+21:47:22.12  second-hand-inv
+entory-i67fl95dn-hyunmoo-noh
+s-projects.vercel.app  info 
+  ε GET /login              
+         200     (no messa…
+21:47:22.11  second-hand-inv
+entory-i67fl95dn-hyunmoo-noh
+s-projects.vercel.app  info 
+  ε GET /login              
+         200     (no messa…
+21:47:22.10  second-hand-inv
+entory-i67fl95dn-hyunmoo-noh
+s-projects.vercel.app  info 
+  ε GET /login              
+         200     (no messa…
+Fetched 20 logs for hyunmoo-
+nohs-projects/second-hand-in
+ventory on branch main

@@ -57,17 +57,6 @@ export async function logSecurityAccess(page: string) {
 
     try {
         await db.query(`
-            CREATE TABLE IF NOT EXISTS security_logs (
-                id SERIAL PRIMARY KEY,
-                user_id TEXT,
-                user_name TEXT,
-                action TEXT,
-                details TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        await db.query(`
             INSERT INTO security_logs (user_id, user_name, action, details)
             VALUES ($1, $2, 'ACCESS', $3)
         `, [userId, userName, `Accessed ${page}`]);
@@ -112,9 +101,9 @@ export async function register(prevState: any, formData: FormData) {
         const id = Math.random().toString(36).substring(2, 9);
 
         // Lazy update for email column
-        try {
-            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
-        } catch (e) { /* Ignore */ }
+        // try {
+        //     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
+        // } catch (e) { /* Ignore */ }
 
         await db.query(
             'INSERT INTO users (id, username, password_hash, name, role, password_hint, job_title, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
@@ -630,12 +619,12 @@ export async function createUser(prevState: any, formData: FormData) {
         const passwordHint = 'Admin Created';
 
         // Ensure columns exist (Robust)
-        try {
-            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS security_memo TEXT`);
-        } catch (e) { /* ignore */ }
-        try {
-            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
-        } catch (e) { /* ignore */ }
+        // try {
+        //     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS security_memo TEXT`);
+        // } catch (e) { /* ignore */ }
+        // try {
+        //     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
+        // } catch (e) { /* ignore */ }
 
         await db.query(
             'INSERT INTO users (id, username, password_hash, name, role, password_hint, job_title, email, security_memo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -722,17 +711,6 @@ export async function sendMessage(receiverId: string, content: string) {
     if (!content.trim()) return { success: false, error: '내용을 입력해주세요.' };
 
     try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                sender_id TEXT NOT NULL,
-                receiver_id TEXT NOT NULL,
-                content TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         await db.query(
             'INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3)',
             [session.id, receiverId, content]
@@ -751,18 +729,6 @@ export async function getUserUnreadMessageCount() {
     if (!session) return 0;
 
     try {
-        // Check if table exists
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                sender_id TEXT NOT NULL,
-                receiver_id TEXT NOT NULL,
-                content TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         const res = await db.query('SELECT COUNT(*) as count FROM messages WHERE receiver_id = $1 AND is_read = FALSE', [session.id]);
         return parseInt(res.rows[0].count || '0');
     } catch (e) {
@@ -830,21 +796,6 @@ export async function deleteUser(targetId: string) {
 // --- Dashboard Tasks Actions ---
 
 export async function getDashboardTasks() {
-    // Lazy init table
-    try {
-        await db.query(`
-           CREATE TABLE IF NOT EXISTS dashboard_tasks (
-               id TEXT PRIMARY KEY,
-               content TEXT NOT NULL,
-               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-               is_completed BOOLEAN DEFAULT FALSE,
-               completed_at TIMESTAMP
-           )
-       `);
-    } catch (e) {
-        console.error("Task table init error (ignorable if exists)", e);
-    }
-
     try {
         // Also insert dummy data if empty for demo
         const check = await db.query('SELECT COUNT(*) as count FROM dashboard_tasks');
@@ -1159,49 +1110,34 @@ export async function addMemoComment(memoId: number, content: string) {
 
 export async function getMemos() {
     try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS memos (
-                id SERIAL PRIMARY KEY,
-                content TEXT NOT NULL,
-                author_name VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Fetch Memos
         const res = await db.query('SELECT * FROM memos ORDER BY created_at DESC LIMIT 20');
         const memos = res.rows;
 
-        // Fetch Comments for these memos
         if (memos.length > 0) {
             const memoIds = memos.map((m: any) => m.id);
-            // SQLite doesn't support ANY($1), iterate or IN clause construction
-            // But we are using 'pg', right? db.ts uses 'pg' or 'better-sqlite3'?
-            // "c:\prj\second-hand-inventory\src\lib\db.ts" is the file.
-            // Assume Postgres for now based on Vercel Postgres context. Vercel Postgres supports ANY.
+            const placeholders = memoIds.map((_, i) => `$${i + 1}`).join(',');
 
-            // Check if comments table exists first (lazy)
             try {
                 const commentRes = await db.query(`
-SELECT * FROM memo_comments 
-                    WHERE memo_id = ANY($1) 
+                    SELECT * FROM memo_comments 
+                    WHERE memo_id IN (${placeholders}) 
                     ORDER BY created_at ASC
-                `, [memoIds]);
+                `, memoIds);
 
                 const comments = commentRes.rows;
 
-                // Attach to memos
                 memos.forEach((m: any) => {
                     m.comments = comments.filter((c: any) => c.memo_id === m.id);
                 });
             } catch (e) {
-                // Table might not exist yet, ignore
+                console.error("Failed to fetch memo comments:", e);
                 memos.forEach((m: any) => m.comments = []);
             }
         }
 
         return memos;
     } catch (e) {
+        console.error("Failed to get memos:", e);
         return [];
     }
 }
@@ -1221,21 +1157,20 @@ export async function bulkUpdateProductsAI(ids: string[], options: { grade: bool
             let updates = [];
 
             if (options.grade) {
-                // Mock AI Logic: Set a high grade for demonstration.
-                // Using PostgreSQL random if available, or just static for simplicity if DB compatibility varies.
-                // Safest to toggle between A and S based on ID hash or random.
-                updates.push(`condition = CASE WHEN(FLOOR(RANDOM() * 10) > 5) THEN 'S급' ELSE 'A급' END`);
+                // Compatible random logic
+                updates.push(`condition = CASE WHEN ABS(RANDOM() % 10) > 5 THEN 'S급' ELSE 'A급' END`);
             }
             if (options.price) {
-                // Mock AI Logic: Set random price.
-                updates.push(`price_sell = (FLOOR(RANDOM() * 90) + 10):: int * 1000`);
+                // Set fixed increment for demo instead of random cast
+                updates.push(`price_sell = price_sell + 5000`);
             }
             if (options.description) {
-                updates.push(`md_comment = 'AI가 분석한 추천 상품입니다. 상태가 우수하며 가격 경쟁력이 있습니다. (AI 생성)'`);
+                updates.push(`md_comment = 'AI 분석 추천 상품 (상태 우수)'`);
             }
 
             if (updates.length > 0) {
-                await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id = ANY($1)`, params);
+                const placeholders = chunkIds.map((_, i) => `$${i + 1}`).join(',');
+                await db.query(`UPDATE products SET ${updates.join(', ')} WHERE id IN (${placeholders})`, chunkIds);
                 successCount += chunkIds.length;
             }
         }
@@ -1272,20 +1207,12 @@ export async function saveSmartStoreConfig(formData: FormData) {
     }
 
     try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS system_settings (
-                key VARCHAR(50) PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         // Upsert configuration
         const config = { sellerId, clientId, clientSecret };
         const query = `
-            INSERT INTO system_settings (key, value) VALUES ('smartstore_config', $1)
-            ON CONFLICT(key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
-        `;
+                INSERT INTO system_settings(key, value) VALUES('smartstore_config', $1)
+                ON CONFLICT(key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+                `;
         await db.query(query, [JSON.stringify(config)]);
 
         await logAction('UPDATE_CONFIG', 'system', 'smartstore', 'Updated API credentials');
@@ -1302,14 +1229,6 @@ export async function getSmartStoreConfig() {
     if (!session) return null;
 
     try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS system_settings (
-                key VARCHAR(50) PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         const res = await db.query("SELECT value FROM system_settings WHERE key = 'smartstore_config'");
         if (res.rows.length > 0) {
             return JSON.parse(res.rows[0].value);
