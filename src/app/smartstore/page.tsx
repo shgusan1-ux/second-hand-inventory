@@ -20,6 +20,7 @@ export default function SmartStoreManagement() {
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [error, setError] = useState<string | null>(null);
     const [logs, setLogs] = useState<any[]>([]);
     const [activeVisionData, setActiveVisionData] = useState<any>(null);
     const [filterStatus, setFilterStatus] = useState('ALL');
@@ -34,9 +35,14 @@ export default function SmartStoreManagement() {
 
     const fetchProducts = async () => {
         setIsLoading(true);
+        setError(null);
         addLog('상품 목록 동기화 중...', 'info');
         try {
             const res = await fetch(`/api/smartstore/products?name=${encodeURIComponent(searchTerm)}`);
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+            }
             const result = await res.json();
             if (result.success && result.data.contents) {
                 setProducts(result.data.contents);
@@ -45,8 +51,10 @@ export default function SmartStoreManagement() {
                 throw new Error(result.error || '조회 실패');
             }
         } catch (e: any) {
-            addLog(`조리 실패: ${e.message}`, 'error');
-            toast.error('상품 로딩 실패');
+            console.error('Fetch error:', e);
+            setError(e.message);
+            addLog(`조회 실패: ${e.message}`, 'error');
+            toast.error(`상품 로딩 실패: ${e.message}`);
         } finally {
             setIsLoading(false);
         }
@@ -90,6 +98,17 @@ export default function SmartStoreManagement() {
                     </Button>
                 </div>
             </div>
+
+            {error && (
+                <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                    <div className="flex-1">
+                        <h3 className="text-sm font-bold text-red-800">데이터를 불러오지 못했습니다.</h3>
+                        <p className="text-sm text-red-700 mt-1">{error}</p>
+                        <Button variant="link" size="sm" className="p-0 h-auto text-red-600 font-bold mt-2" onClick={fetchProducts}>다시 시도하기</Button>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 {/* Sidebar: Filters & Logs */}
@@ -137,8 +156,8 @@ export default function SmartStoreManagement() {
                             <div className="divide-y">
                                 {logs.map((log, i) => (
                                     <div key={i} className={`p-2 transition-colors ${log.type === 'error' ? 'bg-red-50 text-red-600' :
-                                            log.type === 'success' ? 'bg-emerald-50 text-emerald-700' :
-                                                'hover:bg-slate-50 text-slate-600'
+                                        log.type === 'success' ? 'bg-emerald-50 text-emerald-700' :
+                                            'hover:bg-slate-50 text-slate-600'
                                         }`}>
                                         <span className="opacity-50 mr-2">[{log.time}]</span>
                                         {log.message}

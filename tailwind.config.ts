@@ -89,11 +89,16 @@ const config: Config = {
 						backgroundPosition: "350% 50%, 350% 50%",
 					},
 				},
+				'expand': {
+					'0%': { width: '0%', opacity: '0' },
+					'100%': { width: '4rem', opacity: '1' }
+				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				'aurora': "aurora 60s linear infinite",
+				'aurora': "aurora 20s linear infinite",
+				'expand': 'expand 0.7s ease-out forwards',
 			}
 		}
 	},

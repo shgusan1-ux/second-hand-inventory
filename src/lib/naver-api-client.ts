@@ -3,7 +3,7 @@
  * Optimized for the specified EC2 Proxy (Port 3001)
  */
 
-const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || 'http://15.164.216.212:3001';
+const PROXY_URL = process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001';
 const PROXY_KEY = process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key';
 
 export interface NaverTokenResponse {
@@ -20,6 +20,7 @@ export async function getNaverToken(): Promise<NaverTokenResponse> {
         throw new Error('NAVER_CLIENT_ID or NAVER_CLIENT_SECRET is missing');
     }
 
+    console.log(`[NaverClient] Token 요청 보냄: ${PROXY_URL}/oauth/token`);
     const response = await fetch(`${PROXY_URL}/oauth/token`, {
         method: 'POST',
         headers: {

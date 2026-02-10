@@ -9,29 +9,38 @@ export async function GET(request: Request) {
     const size = parseInt(searchParams.get('size') || '100');
     const name = searchParams.get('name') || '';
 
+    console.log(`[API/Products] GET 요청 수신 - Name: ${name}, Page: ${page}, Size: ${size}`);
+
     try {
-        // 1. Fetch from Naver via Proxy
+        // 1. Fetch from Naver via Proxy (Internally handles token flow)
+        console.log('[API/Products] Naver API 호출 중...');
         const naverRes = await searchProducts(page, size, { searchKeyword: name });
 
         if (!naverRes || !naverRes.contents) {
-            return NextResponse.json({ success: true, data: naverRes });
+            console.warn('[API/Products] Naver 응답에 데이터가 없습니다.');
+            return NextResponse.json({ success: true, data: naverRes || { contents: [] } });
         }
+
+        console.log(`[API/Products] ${naverRes.contents.length}개의 상품을 Naver로부터 가져왔습니다.`);
 
         // 2. Fetch Overrides from DB
         const ids = naverRes.contents.map((item: any) => item.originProductNo.toString());
         let overridesMap: Record<string, any> = {};
 
-        try {
-            const { rows } = await db.query(
-                'SELECT id, override_date, internal_category FROM product_overrides WHERE id = ANY($1)',
-                [ids]
-            );
-            overridesMap = rows.reduce((acc: any, row: any) => {
-                acc[row.id] = row;
-                return acc;
-            }, {});
-        } catch (dbErr) {
-            console.warn('Overrides DB lookup failed, proceeding without overrides:', dbErr);
+        if (ids.length > 0) {
+            try {
+                const { rows } = await db.query(
+                    'SELECT id, override_date, internal_category FROM product_overrides WHERE id = ANY($1)',
+                    [ids]
+                );
+                overridesMap = rows.reduce((acc: any, row: any) => {
+                    acc[row.id] = row;
+                    return acc;
+                }, {});
+                console.log(`[API/Products] ${rows.length}개의 DB 오버라이드 정보를 매칭했습니다.`);
+            } catch (dbErr) {
+                console.warn('[API/Products] DB 오버라이드 조회 실패 (무시하고 계속):', dbErr);
+            }
         }
 
         // 3. Classify and Enrich
@@ -65,6 +74,8 @@ export async function GET(request: Request) {
             };
         });
 
+        console.log('[API/Products] 데이터 가공 완료. 응답 전송.');
+
         return NextResponse.json({
             success: true,
             data: {
@@ -74,7 +85,11 @@ export async function GET(request: Request) {
         });
 
     } catch (error: any) {
-        console.error('API Error:', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        console.error('[API/Products] 처리 오류:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        }, { status: 500 });
     }
 }
