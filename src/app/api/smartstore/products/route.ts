@@ -29,6 +29,19 @@ export async function GET(request: Request) {
             console.log('Token acquired successfully');
         } catch (authError: any) {
             console.log(`Auth Failed: ${authError.message}`);
+
+            // Development fallback: Return empty data instead of failing
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[DEV MODE] Proxy unavailable, returning empty data');
+                return handleSuccess({
+                    contents: [],
+                    totalCount: 0,
+                    page,
+                    size,
+                    hasMore: false
+                });
+            }
+
             return handleAuthError(authError);
         }
 

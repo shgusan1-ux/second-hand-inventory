@@ -135,17 +135,17 @@ export default function RegisterPage() {
                     {/* ... other fields ... */}
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase text-slate-500">이름</label>
-                        <Input name="name" required placeholder="실명" className="h-10" />
+                        <Input name="name" required placeholder="실명" autoComplete="name" className="h-10" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500">비밀번호</label>
-                            <Input name="password" type="password" required autoComplete="new-password" placeholder="****" className="h-10" />
+                            <Input name="password" type="password" required autoComplete="new-password" id="password" placeholder="****" className="h-10" />
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500">확인</label>
-                            <Input name="confirmPassword" type="password" required autoComplete="new-password" placeholder="****" className="h-10" />
+                            <Input name="confirmPassword" type="password" required autoComplete="new-password" id="confirmPassword" placeholder="****" className="h-10" />
                         </div>
                     </div>
 

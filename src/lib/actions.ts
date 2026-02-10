@@ -149,51 +149,58 @@ export async function bulkDeleteProducts(ids: string[]) {
 
 export async function login(prevState: any, formData: FormData) {
     try {
-        const username = formData.get('username') as string;
+        const username = (formData.get('username') as string || '').trim();
         const password = formData.get('password') as string;
 
-        const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+        console.log(`[LOGIN] Attempting login for: "${username}"`);
+        const result = await db.query('SELECT * FROM users WHERE TRIM(username) = $1', [username]);
         const user = result.rows[0];
 
-        if (!user || !(await verifyPassword(password, user.password_hash))) {
+        if (!user) {
+            console.log(`[LOGIN] User not found: "${username}"`);
             return { success: false, error: '아이디 또는 비밀번호가 잘못되었습니다.' };
         }
 
-    // 6 AM Login Restriction Check - DISABLED due to schema mismatch
-    // TODO: Re-enable after fixing attendance_logs table structure
-    /*
-    try {
-        const lastLogRes = await db.query('SELECT type, created_at FROM attendance_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [user.id]);
-        if (lastLogRes.rows.length > 0) {
-            const lastLog = lastLogRes.rows[0];
-            if (lastLog.type === '퇴근') {
-                const lastOut = new Date(lastLog.created_at);
-                const now = new Date();
+        if (!(await verifyPassword(password, user.password_hash))) {
+            console.log(`[LOGIN] Password mismatch for: "${username}"`);
+            return { success: false, error: '아이디 또는 비밀번호가 잘못되었습니다.' };
+        }
 
-                // Calculate release time (Next 6 AM)
-                const releaseTime = new Date(lastOut);
-                if (lastOut.getHours() >= 6) {
-                    // If clocked out after 6 AM, release is tomorrow 6 AM
-                    releaseTime.setDate(releaseTime.getDate() + 1);
-                }
-                // If clocked out before 6 AM (e.g. 2 AM), release is today 6 AM (Default behavior if we didn't add day? No, need to set hour)
-                // Actually, if clocked out at 2 AM, allow login at 6 AM same day.
-                // If clocked out at 20:00, allow login at 6 AM next day.
-
-                releaseTime.setHours(6, 0, 0, 0);
-
-                if (now < releaseTime) {
-                    return {
-                        success: false,
-                        error: `퇴근 후에는 익일 오전 6시까지 로그인이 제한됩니다.\n(가능 시간: ${releaseTime.toLocaleString()})`
-                    };
+        // 6 AM Login Restriction Check - DISABLED due to schema mismatch
+        // TODO: Re-enable after fixing attendance_logs table structure
+        /*
+        try {
+            const lastLogRes = await db.query('SELECT type, created_at FROM attendance_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [user.id]);
+            if (lastLogRes.rows.length > 0) {
+                const lastLog = lastLogRes.rows[0];
+                if (lastLog.type === '퇴근') {
+                    const lastOut = new Date(lastLog.created_at);
+                    const now = new Date();
+    
+                    // Calculate release time (Next 6 AM)
+                    const releaseTime = new Date(lastOut);
+                    if (lastOut.getHours() >= 6) {
+                        // If clocked out after 6 AM, release is tomorrow 6 AM
+                        releaseTime.setDate(releaseTime.getDate() + 1);
+                    }
+                    // If clocked out before 6 AM (e.g. 2 AM), release is today 6 AM (Default behavior if we didn't add day? No, need to set hour)
+                    // Actually, if clocked out at 2 AM, allow login at 6 AM same day.
+                    // If clocked out at 20:00, allow login at 6 AM next day.
+    
+                    releaseTime.setHours(6, 0, 0, 0);
+    
+                    if (now < releaseTime) {
+                        return {
+                            success: false,
+                            error: `퇴근 후에는 익일 오전 6시까지 로그인이 제한됩니다.\n(가능 시간: ${releaseTime.toLocaleString()})`
+                        };
+                    }
                 }
             }
+        } catch (e) {
+            console.error("Login restriction check failed", e);
         }
-    } catch (e) {
-        console.error("Login restriction check failed", e);
-    }
-    */
+        */
 
         await createSession(user.id);
         await logAction('LOGIN', 'user', user.id, 'User logged in');
