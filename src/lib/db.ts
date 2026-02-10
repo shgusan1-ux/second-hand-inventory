@@ -10,17 +10,13 @@ let tursoClient: any = null;
 
 function getTursoClient() {
   if (!tursoClient) {
-    const url = process.env.TURSO_DATABASE_URL;
-    const authToken = process.env.TURSO_AUTH_TOKEN;
+    const url = process.env.TURSO_DATABASE_URL || 'file:/tmp/inventory.db';
+    const authToken = process.env.TURSO_AUTH_TOKEN || '';
 
-    if (!url || !authToken) {
-      throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set');
-    }
-
-    console.log('[DB] Initializing Turso client');
+    console.log(`[DB] Initializing LibSQL client - URL: ${url}`);
     tursoClient = createClient({ url, authToken });
 
-    // Auto-initialize tables for Turso (SQLite compatible)
+    // Auto-initialize tables (SQLite compatible)
     const initTables = async () => {
       try {
         await tursoClient.execute(`
@@ -141,10 +137,55 @@ function getTursoClient() {
         `);
 
         await tursoClient.execute(`
+          CREATE TABLE IF NOT EXISTS categories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            classification TEXT DEFAULT 'NEW'
+          );
+        `);
+
+        // Seed Categories if empty
+        const catCheck = await tursoClient.execute('SELECT COUNT(*) as count FROM categories');
+        if (catCheck.rows[0].count === 0) {
+          console.log('[DB] Seeding categories...');
+          const seedData = [
+            ['NEW', 'NEW IN', 1, 'NEW'],
+            ['CURATED', 'CURATED', 2, 'CURATED'],
+            ['MILITARY', 'MILITARY', 3, 'ARCHIVE'],
+            ['WORKWEAR', 'WORKWEAR', 4, 'ARCHIVE'],
+            ['JAPAN', 'JAPANESE ARCHIVE', 5, 'ARCHIVE'],
+            ['EUROPE', 'HERITAGE EUROPE', 6, 'ARCHIVE'],
+            ['BRITISH', 'BRITISH ARCHIVE', 7, 'ARCHIVE'],
+            ['CLEARANCE', 'CLEARANCE', 8, 'CLEARANCE']
+          ];
+          for (const [id, name, order, cls] of seedData) {
+            await tursoClient.execute({
+              sql: 'INSERT INTO categories (id, name, sort_order, classification) VALUES (?, ?, ?, ?)',
+              args: [id, name, order, cls]
+            });
+          }
+        }
+
+        await tursoClient.execute(`
           CREATE TABLE IF NOT EXISTS system_settings (
             key VARCHAR(50) PRIMARY KEY,
             value TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+
+        await tursoClient.execute(`
+          CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type VARCHAR(10) NOT NULL,
+            amount INTEGER NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            description TEXT,
+            date VARCHAR(20) NOT NULL,
+            payment_method VARCHAR(20),
+            created_by VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
         `);
 
@@ -156,17 +197,15 @@ function getTursoClient() {
         await tursoClient.execute(`CREATE INDEX IF NOT EXISTS idx_memo_comments_memo ON memo_comments(memo_id);`);
         await tursoClient.execute(`CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);`);
 
-        console.log('[DB] Turso tables initialized successfully');
+        console.log('[DB] Database initialized successfully');
       } catch (e) {
         console.error('[DB] Table initialization error:', e);
-        // Don't throw, tables might already exist
       }
     };
 
-    // Initialize tables (fire and forget)
+    // Initialize (fire and forget)
     initTables();
   }
-
   return tursoClient;
 }
 
