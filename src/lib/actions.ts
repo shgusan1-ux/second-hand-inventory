@@ -155,7 +155,9 @@ export async function login(prevState: any, formData: FormData) {
         return { success: false, error: '아이디 또는 비밀번호가 잘못되었습니다.' };
     }
 
-    // 6 AM Login Restriction Check
+    // 6 AM Login Restriction Check - DISABLED due to schema mismatch
+    // TODO: Re-enable after fixing attendance_logs table structure
+    /*
     try {
         const lastLogRes = await db.query('SELECT type, created_at FROM attendance_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [user.id]);
         if (lastLogRes.rows.length > 0) {
@@ -187,6 +189,7 @@ export async function login(prevState: any, formData: FormData) {
     } catch (e) {
         console.error("Login restriction check failed", e);
     }
+    */
 
     await createSession(user.id);
     await logAction('LOGIN', 'user', user.id, 'User logged in');
@@ -1090,16 +1093,6 @@ export async function addMemoComment(memoId: number, content: string) {
     const author = session ? session.name : '익명';
 
     try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS memo_comments (
-                id SERIAL PRIMARY KEY,
-                memo_id INTEGER,
-                content TEXT NOT NULL,
-                author_name VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         await db.query('INSERT INTO memo_comments (memo_id, content, author_name) VALUES ($1, $2, $3)', [memoId, content, author]);
         revalidatePath('/');
         return { success: true };
