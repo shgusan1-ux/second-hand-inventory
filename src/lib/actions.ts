@@ -117,7 +117,10 @@ export async function register(prevState: any, formData: FormData) {
         if (e.message.includes('UNIQUE constraint failed') || e.message.includes('unique constraint')) {
             return { success: false, error: '이미 존재하는 ID입니다.' };
         }
-        return { success: false, error: '회원가입 실패' };
+        return {
+            success: false,
+            error: '회원가입 실패: ' + (e.message || String(e))
+        };
     }
 
     redirect('/');

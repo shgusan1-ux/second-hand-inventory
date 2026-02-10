@@ -100,6 +100,7 @@ function EmailVerificationSection() {
 
 export default function RegisterPage() {
     const [state, formAction] = useActionState(register, { success: false, error: '' });
+    const [jobTitle, setJobTitle] = useState('');
 
     return (
         <div className="fixed inset-0 z-[9999] overflow-y-auto flex items-center justify-center p-4 bg-[conic-gradient(at_top_right,_var(--tw-gradient-stops))] from-blue-700 via-blue-800 to-gray-900 animate-in fade-in duration-500">
@@ -154,7 +155,7 @@ export default function RegisterPage() {
 
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase text-slate-500">직책</label>
-                        <Select name="jobTitle" required>
+                        <Select value={jobTitle} onValueChange={setJobTitle} required>
                             <SelectTrigger className="h-10 bg-slate-50 border-slate-200">
                                 <SelectValue placeholder="직책을 선택하세요" />
                             </SelectTrigger>
@@ -168,6 +169,7 @@ export default function RegisterPage() {
                                 <SelectItem value="사원">사원</SelectItem>
                             </SelectContent>
                         </Select>
+                        <input type="hidden" name="jobTitle" value={jobTitle} />
                     </div>
                     {/* Hidden role input default to user */}
                     <input type="hidden" name="role" value="user" />
