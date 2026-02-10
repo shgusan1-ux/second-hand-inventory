@@ -13,10 +13,17 @@ import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
 import { MemoWidget } from '@/components/dashboard/memo-widget';
 import { OrgChart } from '@/components/dashboard/org-chart';
 import { getUsersForOrgChart } from '@/lib/actions';
+import { getSession } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
+  const session = await getSession();
+
+  if (!session) {
+    redirect('/login');
+  }
   const stats = await getDashboardStats();
   const recentProducts = await getRecentProducts();
   const weather = await getMarketWeather();
