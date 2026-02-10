@@ -1,4 +1,0 @@
-key : sk-user-eF8Eo-dlz9xmt87uLRUodr6_DWQVCjn7BN99t38phIPSH3Gy9sEpsiKQvtUtCGM28hqtQ1OLuAhz-e0kB_aMwUVlnMKvpMi-urs2BOH5RwcPmlbtm1ZGexIlDzGGc_zGajo
-
-claude code :claude mcp add TestSprite --env API_KEY=your_api_key -- npx @testsprite/testsprite-mcp@latest
-
