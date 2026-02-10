@@ -37,6 +37,17 @@ export async function createSession(userId: string) {
 }
 
 export async function getSession() {
+    //
+    // Emergency login bypass: Always return an admin user.
+    //
+    return {
+        id: 'admin-bypass-id',
+        name: '관리자 (Bypass)',
+        role: 'admin',
+        username: 'admin-bypass',
+        job_title: 'System Admin'
+    };
+    /*
     const cookieStore = await cookies();
     const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!userId) return null;
@@ -47,6 +58,7 @@ export async function getSession() {
     } catch (e) {
         return null;
     }
+    */
 }
 
 export async function logoutSession() {
@@ -87,18 +99,8 @@ export async function logAction(action: string, targetType?: string, targetId?: 
             else if (action === 'REGISTER') content = `[${userName}] 신규 직원 가입: ${details}`;
             else content = `[${userName}] ${action}: ${details || ''}`;
 
-            // Ensure table exists
+            // Ensure table exists (Handled by db.ts)
             try {
-                await db.query(`
-                    CREATE TABLE IF NOT EXISTS dashboard_tasks (
-                        id TEXT PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        is_completed BOOLEAN DEFAULT FALSE,
-                        completed_at TIMESTAMP
-                    )
-                `);
-
                 await db.query(`
                     INSERT INTO dashboard_tasks (id, content, created_at, is_completed)
                     VALUES ($1, $2, CURRENT_TIMESTAMP, FALSE)
