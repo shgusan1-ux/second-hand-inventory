@@ -10,16 +10,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'No items provided' }, { status: 400 });
         }
 
-        // Lazy create table if not exists
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS product_overrides (
-                id TEXT PRIMARY KEY,
-                override_date TIMESTAMP,
-                internal_category TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         // Batch execution
         for (const item of items) {
             const { id, overrideDate, internalCategory } = item;

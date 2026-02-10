@@ -183,10 +183,47 @@ async function initTables() {
       );
     `);
 
+    // Chat tables
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id TEXT NOT NULL,
+        sender_name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        attachment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_presence (
+        user_id TEXT PRIMARY KEY,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        name TEXT,
+        job_title TEXT
+      )
+    `);
+
+    // Add missing columns to existing tables (DEFAULT must be constant for ALTER TABLE in SQLite)
+    const alterStatements = [
+      `ALTER TABLE attendance_logs ADD COLUMN created_at TIMESTAMP`,
+      `ALTER TABLE users ADD COLUMN email TEXT`,
+      `ALTER TABLE users ADD COLUMN password_hint TEXT`,
+      `ALTER TABLE users ADD COLUMN security_memo TEXT`,
+      `ALTER TABLE chat_messages ADD COLUMN attachment TEXT`,
+    ];
+    for (const sql of alterStatements) {
+      try { await client.execute(sql); console.log('[DB] OK:', sql); } catch {}
+    }
+
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id);`);
-    await client.execute(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at);`);
+    try {
+      await client.execute(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at);`);
+    } catch {
+      console.log('[DB] Skipping idx_attendance_created index (column may not exist)');
+    }
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_memo_comments_memo ON memo_comments(memo_id);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);`);
@@ -241,9 +278,12 @@ export const db = {
         args: newParams
       });
 
+      // Convert Turso Row objects to plain objects for React Server Components
+      const plainRows = JSON.parse(JSON.stringify(result.rows));
+
       return {
-        rows: result.rows as T[],
-        rowCount: result.rows.length
+        rows: plainRows as T[],
+        rowCount: plainRows.length
       };
     } catch (e) {
       console.error("Turso DB Error:", e);

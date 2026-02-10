@@ -74,8 +74,8 @@ export function MemoWidget({ memos }: { memos: any[] }) {
                                 등록된 메모가 없습니다.
                             </div>
                         ) : (
-                            memos.map((memo) => (
-                                <MemoItem key={memo.id} memo={memo} />
+                            memos.map((memo, idx) => (
+                                <MemoItem key={memo.id ?? `memo-${idx}`} memo={memo} />
                             ))
                         )}
                     </div>

@@ -38,27 +38,32 @@ export async function createSession(userId: string) {
 
 export async function getSession() {
     //
-    // Emergency login bypass: Always return an admin user.
+    // BYPASS: Return first admin user from database to avoid auth checks
     //
-    return {
-        id: 'admin-bypass-id',
-        name: '관리자 (Bypass)',
-        role: 'admin',
-        username: 'admin-bypass',
-        job_title: 'System Admin'
-    };
-    /*
-    const cookieStore = await cookies();
-    const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!userId) return null;
-
     try {
-        const result = await db.query('SELECT id, name, role, username, job_title FROM users WHERE id = $1', [userId]);
-        return result.rows[0] as { id: string; name: string; role: string; username: string, job_title: string } | null;
+        const result = await db.query("SELECT id, name, role, username, job_title FROM users WHERE role = 'admin' LIMIT 1");
+        if (result.rows.length > 0) {
+            return result.rows[0] as { id: string; name: string; role: string; username: string, job_title: string };
+        }
+        // Fallback if no admin exists
+        return {
+            id: 'system',
+            name: 'System Admin',
+            role: 'admin',
+            username: 'system',
+            job_title: '시스템 관리자'
+        };
     } catch (e) {
-        return null;
+        console.error('[AUTH] Failed to get session:', e);
+        // Return system admin on error
+        return {
+            id: 'system',
+            name: 'System Admin',
+            role: 'admin',
+            username: 'system',
+            job_title: '시스템 관리자'
+        };
     }
-    */
 }
 
 export async function logoutSession() {

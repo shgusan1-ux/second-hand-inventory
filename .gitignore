@@ -42,3 +42,18 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Local Database
+*.db
+*.db-*
+
+# Log files
+*.log
+/logs/
+/결과보고/
+
+# Local settings
+/.claude/
+
+# Misc
+nul

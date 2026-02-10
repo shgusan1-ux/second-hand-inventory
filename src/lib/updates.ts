@@ -17,16 +17,6 @@ export const SYSTEM_UPDATES = [
 
 export async function checkSystemUpdates() {
     try {
-        await db.query(`
-             CREATE TABLE IF NOT EXISTS dashboard_tasks (
-                id TEXT PRIMARY KEY,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_completed BOOLEAN DEFAULT FALSE,
-                completed_at TIMESTAMP
-            )
-        `);
-
         // Cleanup old non-admin system updates (optional cleanup)
         // Removes specific old version patterns if needed to clean up display
         await db.query("DELETE FROM dashboard_tasks WHERE id LIKE 'sys-v%'");

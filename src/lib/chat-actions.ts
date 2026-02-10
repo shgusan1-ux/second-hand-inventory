@@ -9,36 +9,6 @@ export async function heartbeat() {
     if (!session || !session.id) return;
 
     try {
-        // Ensure column exists (Lazy migration)
-        // We will try to create table with attachment column
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id SERIAL PRIMARY KEY,
-                sender_id TEXT NOT NULL,
-                sender_name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                attachment TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // If table existed before without attachment, we try to add it.
-        // This query might fail if column exists or on some DBs, so we wrap in try-catch or ignore.
-        try {
-            await db.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment TEXT`);
-        } catch (e) {
-            // Ignore error if column already exists
-        }
-
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS user_presence (
-                user_id TEXT PRIMARY KEY,
-                last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                name TEXT,
-                job_title TEXT
-            )
-        `);
-
         await db.query(`
             INSERT INTO user_presence (user_id, last_active_at, name, job_title)
             VALUES ($1, CURRENT_TIMESTAMP, $2, $3)
@@ -53,10 +23,10 @@ export async function heartbeat() {
 
 export async function getOnlineUsers() {
     try {
-        // Active in last 5 minutes
+        // Active in last 5 minutes (SQLite compatible)
         const res = await db.query(`
-            SELECT * FROM user_presence 
-            WHERE last_active_at > NOW() - INTERVAL '5 minutes'
+            SELECT * FROM user_presence
+            WHERE last_active_at > datetime('now', '-5 minutes')
             ORDER BY last_active_at DESC
         `);
         return res.rows;

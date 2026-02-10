@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { AuroraBackground } from '@/components/ui/aurora-background';
+import { OceanVideoBackground } from '@/components/ui/ocean-video-background';
 
 const QUOTES = [
     "성공은 종착점이 아니라 여정이다.",
@@ -45,7 +45,7 @@ export default function LoginPage() {
 
     if (showSplash) {
         return (
-            <AuroraBackground className="fixed inset-0 z-[9999] bg-slate-950" showRadialGradient={false}>
+            <OceanVideoBackground className="fixed inset-0 z-[9999]">
                 <div className="z-10 text-center max-w-2xl px-6">
                     <div className="mb-8 opacity-0 animate-in fade-in slide-in-from-bottom-8 duration-1000 fill-mode-forwards">
                         <Image src="/brown_street.svg" alt="Brown Street" width={220} height={70} className="mx-auto brightness-0 invert" />
@@ -55,12 +55,12 @@ export default function LoginPage() {
                     </h2>
                     <div className="w-24 h-1 bg-emerald-400 mx-auto rounded-full opacity-0 animate-in fade-in expand duration-1000 delay-700 fill-mode-forwards"></div>
                 </div>
-            </AuroraBackground>
+            </OceanVideoBackground>
         );
     }
 
     return (
-        <AuroraBackground className="fixed inset-0 w-full h-full overflow-y-auto bg-slate-950">
+        <OceanVideoBackground className="fixed inset-0 w-full h-full overflow-y-auto">
             <div className="w-full max-w-sm space-y-6 p-8 bg-black/40 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
                 <div className="space-y-2 text-center text-white">
                     <div className="mx-auto w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/20">
@@ -104,9 +104,10 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-4">
-                <p className="text-xs text-white/30 uppercase tracking-[0.5em] mb-4">Brown Street Inventory System</p>
+            <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-8">
+                <Image src="/logo.png" alt="Brown Street" width={160} height={50} className="brightness-0 invert opacity-60" />
+                <p className="text-xs text-white/30 uppercase tracking-[0.5em]">Inventory Management System</p>
             </div>
-        </AuroraBackground>
+        </OceanVideoBackground>
     );
 }

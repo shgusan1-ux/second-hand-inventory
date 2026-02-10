@@ -16,34 +16,9 @@ export interface Transaction {
     created_at: string;
 }
 
-async function ensureSchema() {
-    try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                type VARCHAR(10) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE')),
-                amount INTEGER NOT NULL,
-                category VARCHAR(50) NOT NULL,
-                description TEXT,
-                date VARCHAR(20) NOT NULL,
-                payment_method VARCHAR(20),
-                created_by VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Lazy add column to users
-        try {
-            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_accounting BOOLEAN DEFAULT FALSE`);
-        } catch (e) { /* ignore if exists */ }
-
-    } catch (e) {
-        console.error('Accounting schema init failed', e);
-    }
-}
+// Schema is now handled centrally in db.ts
 
 export async function getTransactions(filters?: { startDate?: string, endDate?: string, type?: string }) {
-    await ensureSchema();
     const session = await getSession();
     if (!session) return [];
 
@@ -138,7 +113,6 @@ export async function deleteTransaction(id: number) {
 
 export async function getAccountingStats(month: string) {
     // month format: YYYY-MM
-    await ensureSchema();
     // Re-use permission logic if strictly needed, but this is usually called by the page which checks permission.
 
     try {
