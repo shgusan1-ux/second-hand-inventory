@@ -1,8 +1,20 @@
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 
 // Setup Google Vision Client
-// Note: Credentials should be provided via GOOGLE_VISION_CREDENTIALS_JSON or ENV
-const client = new ImageAnnotatorClient();
+const getVisionClient = () => {
+    const credsJson = process.env.GOOGLE_VISION_CREDENTIALS_JSON;
+    if (credsJson) {
+        try {
+            const credentials = JSON.parse(credsJson);
+            return new ImageAnnotatorClient({ credentials });
+        } catch (e) {
+            console.error('Failed to parse GOOGLE_VISION_CREDENTIALS_JSON:', e);
+        }
+    }
+    return new ImageAnnotatorClient();
+};
+
+const client = getVisionClient();
 
 export interface VisionAnalysisResult {
     labels: string[];

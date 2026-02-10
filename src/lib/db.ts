@@ -11,7 +11,13 @@ let sqliteDb: any = null;
 
 function getSqliteDb() {
   if (!sqliteDb) {
-    const dbPath = path.join(process.cwd(), 'inventory.db');
+    const isVercel = !!process.env.VERCEL;
+    // Vercel only allows writing to /tmp directory in serverless functions
+    const dbPath = isVercel
+      ? '/tmp/inventory.db'
+      : path.join(process.cwd(), 'inventory.db');
+
+    console.log(`[DB] Initializing SQLite at: ${dbPath}`);
     sqliteDb = new Database(dbPath);
   }
   return sqliteDb;
@@ -27,22 +33,21 @@ export const db = {
     const isCloud = !!process.env.POSTGRES_URL && process.env.DB_TYPE !== 'sqlite';
 
     if (isCloud) {
-      // Lazy load @vercel/postgres to avoid install errors locally
-      const { sql } = await import('@vercel/postgres');
-      // Vercel Postgres usage (Simplified adaptation)
-      // Note: This is a placeholder logic. Vercel SQL template tag usage is strict.
-      // For a robust migration, we might use 'kysely' or similar, but for now we wrap.
-      // CAUTION: 'text' string interpolation is dangerous in production without proper sanitization/tagging.
-      // Ideally, we rewrite queries to use sql template tag directly in actions.
-      // But for quick adapter:
-      const result = await sql.query(text, params);
-      return {
-        rows: result.rows as T[],
-        rowCount: result.rowCount || 0,
-      };
+      // Use the standard db client for raw queries
+      const { db } = await import('@vercel/postgres');
+      try {
+        const result = await db.query(text, params);
+        return {
+          rows: result.rows as T[],
+          rowCount: result.rowCount || 0,
+        };
+      } catch (e) {
+        console.error("Cloud DB Error:", e);
+        throw e;
+      }
     } else {
       // Local SQLite (Simulate Async)
-      const db = getSqliteDb();
+      const sqlite = getSqliteDb();
 
       // Convert Postgres-style $1, $2... to SQLite-style ?
       // Since Postgres allows reusing parameters ($1 used multiple times),
@@ -61,7 +66,7 @@ export const db = {
       const isSelect = text.trim().toLowerCase().startsWith('select');
 
       try {
-        const stmt = db.prepare(sqliteSql);
+        const stmt = sqlite.prepare(sqliteSql);
 
         let result;
         if (isSelect) {

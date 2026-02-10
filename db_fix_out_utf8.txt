@@ -1,0 +1,20 @@
+﻿[dotenv@17.2.4] injecting env (0) from .env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+Starting DB fix script...
+Constructing users table...
+node : ❌ DB Fix failed: {
+At line:1 char:1
++ node --env-file=.env.local
+ scripts/fix-db.mjs > db_fix
+_out.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (❌ DB   
+  Fix failed: {:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+  "name": "NeonDbError"
+}

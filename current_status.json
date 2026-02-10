@@ -1,0 +1,34 @@
+{
+    "timestamp":  "2026-02-10T06:56:56.906Z",
+    "env":  {
+                "NEXT_PUBLIC_PROXY_URL":  "http://15.164.216.212:3001",
+                "NAVER_CLIENT_ID":  "7Sx7FdSvbiqzHzJK6y7KD",
+                "hasSecret":  true
+            },
+    "tests":  [
+                  {
+                      "name":  "Health Check",
+                      "status":  200,
+                      "ok":  true,
+                      "data":  {
+                                   "status":  "ok",
+                                   "uptime":  45660.478754902
+                               }
+                  },
+                  {
+                      "name":  "Token Request",
+                      "status":  200,
+                      "ok":  true,
+                      "hasToken":  true,
+                      "tokenPreview":  "32PP6LiXDs...",
+                      "expiresIn":  7638
+                  },
+                  {
+                      "name":  "Products Search",
+                      "status":  200,
+                      "ok":  true,
+                      "count":  5,
+                      "firstProduct":  "YVES SAINT LAURENT ì\u0085ìë¡ë ìì¹´ì´ë¸ ì¬í ë¦¬ì¼ í¨ì´ ì¸ ì±ê¸ ë¸ë ì´ì  MAN-L"
+                  }
+              ]
+}

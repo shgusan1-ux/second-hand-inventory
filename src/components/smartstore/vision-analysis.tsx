@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -5,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     X, Brain, Sparkles,
-    CheckCircle2, Info, Image as ImageIcon,
+    Image as ImageIcon,
     Hash, Palette, AlignLeft
 } from "lucide-react";
 
@@ -19,10 +20,11 @@ interface VisionAnalysisProps {
 
 export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
     const { product, analysis } = data;
+    const imageUrl = product.images?.[0]?.url || product.images?.representativeImage?.url;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border-none">
+            <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border-none rounded-[32px]">
                 <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
@@ -30,8 +32,8 @@ export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
                         </div>
                         <div>
                             <CardTitle className="text-xl flex items-center gap-2">
-                                AI 리서치 분석 결과
-                                <Badge className="bg-indigo-500 text-[10px] h-4">Beta</Badge>
+                                AI Research Analysis
+                                <Badge className="bg-indigo-500 text-[10px] h-4">Enterprise</Badge>
                             </CardTitle>
                             <CardDescription className="text-slate-400">
                                 {product.name} ({product.originProductNo})
@@ -49,24 +51,30 @@ export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
                         <div className="p-8 border-r border-slate-200 space-y-8 bg-white">
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <ImageIcon className="w-4 h-4" /> 분석 대상 이미지
+                                    <ImageIcon className="w-4 h-4" /> Source Image
                                 </h3>
                                 <div className="aspect-square rounded-2xl overflow-hidden border shadow-inner bg-slate-100">
-                                    <img src={product.images.representativeImage.url} className="w-full h-full object-cover" />
+                                    <img src={imageUrl} className="w-full h-full object-cover" />
                                 </div>
                             </div>
 
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Sparkles className="w-4 h-4" /> AI 최종 추천 결과
+                                    <Sparkles className="w-4 h-4" /> AI Recommendations
                                 </h3>
-                                <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 space-y-3">
+                                <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm font-bold text-indigo-900">추천 카테고리</span>
-                                        <Badge className="bg-indigo-600 text-lg py-1 px-4">{product.recommendation.category}</Badge>
+                                        <span className="text-sm font-bold text-indigo-900">Stage</span>
+                                        <Badge className="bg-indigo-600 text-lg py-1 px-4 rounded-xl">{product.lifecycle?.stage}</Badge>
                                     </div>
-                                    <p className="text-xs text-indigo-700 leading-relaxed font-medium">
-                                        {product.recommendation.reasoning}
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-bold text-indigo-900">Category</span>
+                                        <Badge variant="outline" className="border-indigo-200 text-indigo-600 text-sm py-1 px-3 bg-white">
+                                            {product.archiveInfo?.category || product.internalCategory || 'UNCATEGORIZED'}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-xs text-indigo-700 leading-relaxed font-medium pt-2 border-t border-indigo-100">
+                                        Matched Keywords: {product.archiveInfo?.breakdown?.textMatches?.join(', ') || 'None'}
                                     </p>
                                 </div>
                             </div>
@@ -76,11 +84,11 @@ export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
                         <div className="p-8 space-y-8">
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Hash className="w-4 h-4" /> 감지된 속성 (Labels)
+                                    <Hash className="w-4 h-4" /> Detected Labels
                                 </h3>
                                 <div className="flex flex-wrap gap-2">
                                     {analysis.labels.map((label: string, i: number) => (
-                                        <Badge key={i} variant="outline" className="bg-white border-slate-200 text-slate-700 text-[11px] py-1">
+                                        <Badge key={i} variant="outline" className="bg-white border-slate-200 text-slate-700 text-[11px] py-1 shadow-sm">
                                             {label}
                                         </Badge>
                                     ))}
@@ -89,7 +97,7 @@ export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
 
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Palette className="w-4 h-4" /> 주요 색상 (Dominant Colors)
+                                    <Palette className="w-4 h-4" /> Color Profile
                                 </h3>
                                 <div className="flex gap-4">
                                     {analysis.dominantColors.map((color: string, i: number) => (
@@ -106,16 +114,16 @@ export function VisionAnalysis({ data, onClose }: VisionAnalysisProps) {
 
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <AlignLeft className="w-4 h-4" /> 추출된 텍스트
+                                    <AlignLeft className="w-4 h-4" /> OCR Data
                                 </h3>
-                                <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                    {analysis.text || '검출된 텍스트 없음'}
+                                <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                    {analysis.text || 'No text detected'}
                                 </div>
                             </div>
 
                             <div className="pt-4 flex justify-end gap-2">
-                                <Button variant="outline" className="gap-2" onClick={onClose}>닫기</Button>
-                                <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2">분류 반영하기</Button>
+                                <Button variant="outline" className="gap-2 rounded-xl" onClick={onClose}>Close</Button>
+                                <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2 rounded-xl px-6">Apply Classification</Button>
                             </div>
                         </div>
                     </div>

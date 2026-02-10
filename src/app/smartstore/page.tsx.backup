@@ -1,0 +1,295 @@
+
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+    Search, RefreshCw, ShoppingBag,
+    Filter, LayoutGrid, AlertCircle, ChevronRight
+} from "lucide-react";
+import { toast } from 'sonner';
+import { ProductTable } from "@/components/smartstore/product-table";
+import { BulkActions } from "@/components/smartstore/bulk-actions";
+import { VisionAnalysis } from "@/components/smartstore/vision-analysis";
+
+export default function SmartStoreManagement() {
+    const queryClient = useQueryClient();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [activeVisionData, setActiveVisionData] = useState<any>(null);
+    const [filterStatus, setFilterStatus] = useState('ALL');
+    const [archiveFilter, setArchiveFilter] = useState('ALL');
+    const [logs, setLogs] = useState<any[]>([]);
+
+    const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+        setLogs(prev => [{
+            time: new Date().toLocaleTimeString(),
+            message,
+            type
+        }, ...prev].slice(0, 50));
+    };
+
+    // React Query for fetching products
+    const {
+        data,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isLoading,
+        isError,
+        error,
+        refetch
+    } = useInfiniteQuery({
+        queryKey: ['smartstore-products', filterStatus, archiveFilter, searchTerm],
+        queryFn: async ({ pageParam = 1 }) => {
+            const url = `/api/smartstore/products?page=${pageParam}&size=20&name=${encodeURIComponent(searchTerm)}&stage=${filterStatus}&subStage=${archiveFilter}`;
+
+            const res = await fetch(url);
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`데이터 조회 실패 (${res.status}): ${errorText}`);
+            }
+            const result = await res.json();
+            if (!result.success) throw new Error(result.error || 'API 오류');
+            return result.data;
+        },
+        getNextPageParam: (lastPage) => {
+            return lastPage.hasMore ? (lastPage.page + 1) : undefined;
+        },
+        initialPageParam: 1,
+    });
+
+    const products = useMemo(() => {
+        return data?.pages.flatMap(page => page.contents) || [];
+    }, [data]);
+
+    const totalCount = data?.pages[0]?.totalCount || 0;
+
+    // Batching logic for bulk mutation
+    const bulkMutation = useMutation({
+        mutationFn: async ({ action, ids }: { action: string, ids: string[] }) => {
+            const BATCH_SIZE = 100;
+            const chunks = [];
+            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+                chunks.push(ids.slice(i, i + BATCH_SIZE));
+            }
+
+            addLog(`${ids.length}개 항목 배치 처리 시작 (${chunks.length}개 배치)`, 'info');
+
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+                addLog(`배치 ${i + 1}/${chunks.length} 처리 중...`, 'info');
+
+                const normalizedAction = action.startsWith('ARCHIVE_') ? action.replace('ARCHIVE_', '') : action;
+
+                const res = await fetch('/api/smartstore/classify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(chunk.map(id => ({
+                        id,
+                        internalCategory: normalizedAction
+                    })))
+                });
+
+                if (!res.ok) throw new Error(`Batch ${i + 1} failed`);
+
+                // Optional: Delay for rate limit
+                if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
+            }
+            return { success: true };
+        },
+        onSuccess: (_, variables) => {
+            addLog(`${variables.ids.length}개 항목 처리 완료`, 'success');
+            toast.success('일괄 수정이 완료되었습니다.');
+            setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['smartstore-products'] });
+        },
+        onError: (err: any) => {
+            addLog(`작업 실패: ${err.message}`, 'error');
+            toast.error('오류 발생');
+        }
+    });
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        refetch();
+    };
+
+    return (
+        <div className="container mx-auto py-8 px-4 space-y-6 max-w-7xl">
+            {/* Header Area */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3 font-outfit text-slate-900">
+                        <ShoppingBag className="w-8 h-8 text-indigo-600" />
+                        Smartstore Management
+                    </h1>
+                    <p className="text-slate-500 mt-1">Enterprise Inventory Control & AI Classification</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-2 transition-all hover:bg-slate-50 border-slate-200">
+                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        새로고침
+                    </Button>
+                    <Button className="bg-slate-900 hover:bg-slate-800 gap-2 shadow-lg shadow-slate-200 rounded-xl">
+                        <LayoutGrid className="w-4 h-4" />
+                        설정
+                    </Button>
+                </div>
+            </div>
+
+            {isError && (
+                <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                    <div className="flex-1">
+                        <h3 className="text-sm font-bold text-red-800">Connection Error</h3>
+                        <p className="text-sm text-red-700 mt-1">{(error as any).message}</p>
+                        <Button variant="link" size="sm" className="p-0 h-auto text-red-600 font-bold mt-2" onClick={() => refetch()}>다시 시도하기</Button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* Sidebar: Filters & Logs */}
+                <div className="space-y-6">
+                    <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100">
+                        <CardHeader className="pb-3 bg-slate-50/50">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
+                                <Filter className="w-4 h-4 text-indigo-500" /> Filter Engine
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4">
+                            <form onSubmit={handleSearch} className="relative">
+                                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Search products..."
+                                    className="pl-10 text-sm bg-slate-50/50 border-none focus:ring-2 focus:ring-indigo-500 transition-all rounded-2xl h-11"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </form>
+
+                            <div className="space-y-1.5 pt-2">
+                                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Primary Stages</label>
+                                {[
+                                    { id: 'ALL', label: 'All Inventory', count: totalCount },
+                                    { id: 'NEW', label: 'New Arrivals', color: 'bg-emerald-500' },
+                                    { id: 'CURATED', label: 'Curated Picks', color: 'bg-indigo-500' },
+                                    { id: 'ARCHIVE', label: 'Archive Collection', color: 'bg-slate-900' },
+                                    { id: 'CLEARANCE', label: 'Clearance', color: 'bg-amber-500' }
+                                ].map(s => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => {
+                                            setFilterStatus(s.id);
+                                            if (s.id !== 'ARCHIVE') setArchiveFilter('ALL');
+                                        }}
+                                        className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all duration-300 ${filterStatus === s.id
+                                            ? 'bg-slate-900 text-white shadow-xl translate-x-1'
+                                            : 'text-slate-500 hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        <span className="flex items-center gap-3">
+                                            {s.color && <span className={`w-2 h-2 rounded-full ${s.color}`} />}
+                                            {s.label}
+                                        </span>
+                                        {filterStatus === s.id && <ChevronRight className="w-4 h-4 opacity-50" />}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {filterStatus === 'ARCHIVE' && (
+                                <div className="space-y-1.5 pt-4 animate-in slide-in-from-left-2 fade-in">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Archive Categories</label>
+                                    {['ALL', 'MILITARY', 'WORKWEAR', 'JAPAN', 'EUROPE', 'BRITISH'].map(sub => (
+                                        <button
+                                            key={sub}
+                                            onClick={() => setArchiveFilter(sub)}
+                                            className={`w-full text-left px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all ${archiveFilter === sub
+                                                ? 'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100'
+                                                : 'text-slate-400 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            {sub}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="h-[350px] flex flex-col border-none shadow-xl rounded-3xl overflow-hidden bg-slate-900">
+                        <CardHeader className="py-4 bg-white/5 border-b border-white/5">
+                            <CardTitle className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Activity Log</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 overflow-y-auto flex-1 font-mono text-[10px]">
+                            <div className="divide-y divide-white/5">
+                                {logs.map((log, i) => (
+                                    <div key={i} className={`p-4 transition-colors ${log.type === 'error' ? 'text-red-400 bg-red-900/10' :
+                                        log.type === 'success' ? 'text-emerald-400 bg-emerald-900/10' :
+                                            'text-slate-400 hover:bg-white/5'
+                                        }`}>
+                                        <span className="text-slate-600 mr-2 opacity-50">{log.time}</span>
+                                        <span className="leading-relaxed">{log.message}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="lg:col-span-3 space-y-6">
+                    <BulkActions
+                        selectedCount={selectedIds.length}
+                        onClear={() => setSelectedIds([])}
+                        onAction={(action) => bulkMutation.mutate({ action, ids: selectedIds })}
+                    />
+
+                    <ProductTable
+                        products={products}
+                        isLoading={isLoading}
+                        selectedIds={selectedIds}
+                        onSelectChange={setSelectedIds}
+                        onAnalyzeVision={(data) => setActiveVisionData(data)}
+                        onUpdate={(id, update) => {
+                            addLog(`Updated product ${id}`, 'success');
+                            queryClient.invalidateQueries({ queryKey: ['smartstore-products'] });
+                        }}
+                    />
+
+                    {hasNextPage && (
+                        <div className="flex justify-center pt-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => fetchNextPage()}
+                                disabled={isFetchingNextPage}
+                                className="w-full max-w-sm rounded-2xl border-dashed border-2 py-8 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-slate-400 hover:text-indigo-600 font-bold"
+                            >
+                                {isFetchingNextPage ? (
+                                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Fetching more Data...</>
+                                ) : (
+                                    <>Load More Results (≈ {totalCount - products.length} remaining)</>
+                                )}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {activeVisionData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-in fade-in transition-all">
+                    <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl rounded-[40px] ring-1 ring-white/10">
+                        <VisionAnalysis
+                            data={activeVisionData}
+                            onClose={() => setActiveVisionData(null)}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

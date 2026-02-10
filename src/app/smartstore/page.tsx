@@ -1,205 +1,166 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-    Search, RefreshCw, ShoppingBag,
-    Filter, LayoutGrid, Brain,
-    ArrowRight, Info, AlertCircle
-} from "lucide-react";
-import { toast } from 'sonner';
-import { ProductTable } from "@/components/smartstore/product-table";
-import { BulkActions } from "@/components/smartstore/bulk-actions";
-import { VisionAnalysis } from "@/components/smartstore/vision-analysis";
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
-export default function SmartStoreManagement() {
-    const [products, setProducts] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [error, setError] = useState<string | null>(null);
-    const [logs, setLogs] = useState<any[]>([]);
-    const [activeVisionData, setActiveVisionData] = useState<any>(null);
-    const [filterStatus, setFilterStatus] = useState('ALL');
+interface Product {
+  originProductNo: string;
+  channelProductNo: number;
+  name: string;
+  salePrice: number;
+  stockQuantity: number;
+  regDate: string;
+  lifecycle?: {
+    stage: string;
+    daysSince: number;
+  };
+}
 
-    const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
-        setLogs(prev => [{
-            time: new Date().toLocaleTimeString(),
-            message,
-            type
-        }, ...prev].slice(0, 50));
-    };
+export default function SmartstorePage() {
+  const [filter, setFilter] = useState<string>('all');
 
-    const fetchProducts = async () => {
-        setIsLoading(true);
-        setError(null);
-        addLog('상품 목록 동기화 중...', 'info');
-        try {
-            const res = await fetch(`/api/smartstore/products?name=${encodeURIComponent(searchTerm)}`);
-            if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
-            }
-            const result = await res.json();
-            if (result.success && result.data.contents) {
-                setProducts(result.data.contents);
-                addLog(`${result.data.contents.length}개의 상품을 로드했습니다.`, 'success');
-            } else {
-                throw new Error(result.error || '조회 실패');
-            }
-        } catch (e: any) {
-            console.error('Fetch error:', e);
-            setError(e.message);
-            addLog(`조회 실패: ${e.message}`, 'error');
-            toast.error(`상품 로딩 실패: ${e.message}`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    error,
+  } = useInfiniteQuery({
+    queryKey: ['products', filter],
+    queryFn: async ({ pageParam = 1 }) => {
+      const url = filter === 'all'
+        ? `/api/smartstore/products?page=${pageParam}&size=20`
+        : `/api/smartstore/products?page=${pageParam}&size=20&stage=${filter}`;
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.data?.hasMore) {
+        return lastPage.data.page + 1;
+      }
+      return undefined;
+    },
+    initialPageParam: 1,
+  });
 
-    const filteredProducts = useMemo(() => {
-        return products.filter(p => {
-            if (filterStatus !== 'ALL' && p.recommendation.category !== filterStatus) return false;
-            return true;
-        });
-    }, [products, filterStatus]);
+  const allProducts = data?.pages.flatMap(page => page.data?.contents || []) || [];
+  const totalCount = data?.pages[0]?.data?.totalCount || 0;
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        fetchProducts();
-    };
-
+  if (isLoading) {
     return (
-        <div className="container mx-auto py-8 px-4 space-y-6 max-w-7xl">
-            {/* Header Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                        <ShoppingBag className="w-8 h-8 text-indigo-600" />
-                        스마트스토어 관리 시스템
-                    </h1>
-                    <p className="text-slate-500 mt-1">AI 기반 자동 분류 및 전시 카테고리 최적화 운영툴</p>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={fetchProducts} disabled={isLoading} className="gap-2">
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        새로고침
-                    </Button>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2">
-                        <LayoutGrid className="w-4 h-4" />
-                        전시 카테고리 설정
-                    </Button>
-                </div>
-            </div>
-
-            {error && (
-                <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-                    <div className="flex-1">
-                        <h3 className="text-sm font-bold text-red-800">데이터를 불러오지 못했습니다.</h3>
-                        <p className="text-sm text-red-700 mt-1">{error}</p>
-                        <Button variant="link" size="sm" className="p-0 h-auto text-red-600 font-bold mt-2" onClick={fetchProducts}>다시 시도하기</Button>
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Sidebar: Filters & Logs */}
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Filter className="w-4 h-4" /> 필터 및 검색
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <form onSubmit={handleSearch} className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="상품명/관리코드..."
-                                    className="pl-9 text-sm"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </form>
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-bold text-slate-400 uppercase">라이프사이클 단계</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {['ALL', 'NEW', 'CURATED', 'ARCHIVE', 'CLEARANCE'].map(s => (
-                                        <Button
-                                            key={s}
-                                            variant={filterStatus === s ? 'default' : 'outline'}
-                                            size="sm"
-                                            className="text-[11px] h-8"
-                                            onClick={() => setFilterStatus(s)}
-                                        >
-                                            {s}
-                                        </Button>
-                                    ))}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="h-[400px] flex flex-col">
-                        <CardHeader className="py-3 bg-slate-50 border-b">
-                            <CardTitle className="text-sm font-semibold">운영 로그</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 overflow-y-auto flex-1 font-mono text-[10px]">
-                            <div className="divide-y">
-                                {logs.map((log, i) => (
-                                    <div key={i} className={`p-2 transition-colors ${log.type === 'error' ? 'bg-red-50 text-red-600' :
-                                        log.type === 'success' ? 'bg-emerald-50 text-emerald-700' :
-                                            'hover:bg-slate-50 text-slate-600'
-                                        }`}>
-                                        <span className="opacity-50 mr-2">[{log.time}]</span>
-                                        {log.message}
-                                    </div>
-                                ))}
-                                {logs.length === 0 && (
-                                    <div className="p-8 text-center text-slate-300 italic">로그 기록이 없습니다.</div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Main Content Area */}
-                <div className="lg:col-span-3 space-y-6">
-                    <BulkActions
-                        selectedCount={selectedIds.length}
-                        onClear={() => setSelectedIds([])}
-                        onAction={(action) => addLog(`${selectedIds.length}개 항목 ${action} 진행 중...`)}
-                    />
-
-                    <ProductTable
-                        products={filteredProducts}
-                        isLoading={isLoading}
-                        selectedIds={selectedIds}
-                        onSelectChange={setSelectedIds}
-                        onAnalyzeVision={(data) => setActiveVisionData(data)}
-                        onUpdate={(id, update) => {
-                            addLog(`상품(${id}) 업데이트 완료`, 'success');
-                            fetchProducts();
-                        }}
-                    />
-                </div>
-            </div>
-
-            {/* Vision Analysis Modal-like Overlay (Simplified for MVP) */}
-            {activeVisionData && (
-                <VisionAnalysis
-                    data={activeVisionData}
-                    onClose={() => setActiveVisionData(null)}
-                />
-            )}
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl">로딩 중...</div>
+      </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl text-red-500">
+          에러: {(error as Error).message}
+        </div>
+      </div>
+    );
+  }
+
+  const buttons = [
+    { id: 'all', label: '전체' },
+    { id: 'NEW', label: 'NEW (0-30일)' },
+    { id: 'CURATED', label: 'CURATED (31-60일)' },
+    { id: 'ARCHIVE', label: 'ARCHIVE (61-150일)' },
+    { id: 'CLEARANCE', label: 'CLEARANCE (150일+)' },
+  ];
+
+  return (
+    <div className="container mx-auto p-8">
+      <h1 className="text-3xl font-bold mb-6">스마트스토어 관리</h1>
+
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-gray-600 text-sm">전체 상품</p>
+            <p className="text-2xl font-bold">{totalCount}개</p>
+          </div>
+          <div>
+            <p className="text-gray-600 text-sm">현재 표시</p>
+            <p className="text-2xl font-bold">{allProducts.length}개</p>
+          </div>
+          <div>
+            <p className="text-gray-600 text-sm">로드된 페이지</p>
+            <p className="text-2xl font-bold">{data?.pages.length || 0}페이지</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        {buttons.map((btn) => (
+          <button
+            key={btn.id}
+            onClick={() => setFilter(btn.id)}
+            className={`px-4 py-2 rounded font-medium transition-colors ${filter === btn.id
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        {allProducts.map((product: Product) => (
+          <div
+            key={product.originProductNo}
+            className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow"
+          >
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg mb-2 text-slate-800">
+                  {product.name}
+                </h3>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                  <span>상품번호: <span className="text-slate-700 font-mono">{product.originProductNo}</span></span>
+                  <span>재고: <span className="text-slate-700 font-bold">{product.stockQuantity}</span>개</span>
+                  <span>가격: <span className="text-indigo-600 font-bold">{product.salePrice.toLocaleString()}원</span></span>
+                </div>
+                {product.lifecycle && (
+                  <div className="mt-3">
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${product.lifecycle.stage === 'NEW' ? 'bg-emerald-100 text-emerald-700' :
+                        product.lifecycle.stage === 'CURATED' ? 'bg-indigo-100 text-indigo-700' :
+                          product.lifecycle.stage === 'ARCHIVE' ? 'bg-slate-100 text-slate-700' :
+                            'bg-amber-100 text-amber-700'
+                      }`}>
+                      {product.lifecycle.stage} ({product.lifecycle.daysSince}일 경과)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {hasNextPage && (
+        <div className="flex justify-center mt-8">
+          <button
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all font-bold shadow-lg shadow-blue-200"
+          >
+            {isFetchingNextPage ? '로딩 중...' : '더 보기 (20개 더)'}
+          </button>
+        </div>
+      )}
+
+      {!hasNextPage && allProducts.length > 0 && (
+        <div className="text-center mt-8 text-gray-500 font-medium">
+          모든 상품을 불러왔습니다.
+        </div>
+      )}
+    </div>
+  );
 }

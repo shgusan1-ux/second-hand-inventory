@@ -60,7 +60,7 @@ export default function LoginPage() {
     }
 
     return (
-        <AuroraBackground className="min-h-screen w-full relative overflow-y-auto p-4 bg-slate-950">
+        <AuroraBackground className="fixed inset-0 w-full h-full overflow-y-auto bg-slate-950">
             <div className="w-full max-w-sm space-y-6 p-8 bg-black/40 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
                 <div className="space-y-2 text-center text-white">
                     <div className="mx-auto w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/20">

@@ -24,16 +24,62 @@ export async function initDatabase() {
       )
     `);
 
-    // 인덱스 생성 (검색 속도 향상)
+    // Users 테이블 생성
     await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_product_overrides_category
-      ON product_overrides(internal_category)
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        job_title TEXT,
+        email TEXT,
+        password_hint TEXT,
+        security_memo TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
     `);
 
+    // Attendance Logs 테이블 생성
     await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_product_overrides_date
-      ON product_overrides(override_date)
+      CREATE TABLE IF NOT EXISTS attendance_logs (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
     `);
+
+    // Audit Logs 테이블 생성
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Security Logs 테이블 생성 (For auth safety)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS security_logs (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT,
+        user_name TEXT,
+        action TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 인덱스 생성
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at)`);
 
     console.log('✅ DB 초기화 완료');
     isInitialized = true;
