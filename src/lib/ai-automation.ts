@@ -147,18 +147,17 @@ export async function suggestPrice(product: {
         let soldPrices: number[] = [];
 
         try {
-            const { sql } = await import('@vercel/postgres');
-            const result = await sql`
-                SELECT price_sell, price_consumer, condition, 
-                       EXTRACT(DAY FROM (NOW() - created_at)) as days_old,
+            const { db } = await import('./db');
+            const result = await db.query(`
+                SELECT price_sell, price_consumer, condition,
                        status
                 FROM products
-                WHERE brand = ${product.brand}
-                    AND category = ${product.category}
+                WHERE brand = $1
+                    AND category = $2
                     AND status = '판매완료'
                 ORDER BY created_at DESC
                 LIMIT 20
-            `;
+            `, [product.brand, product.category]);
             soldPrices = result.rows.map((p: any) => p.price_sell).filter((p: number) => p > 0);
         } catch (dbError) {
             console.log('Database query failed, using fallback pricing');

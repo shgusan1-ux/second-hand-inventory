@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { db } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
     try {
@@ -11,24 +11,25 @@ export async function GET(request: NextRequest) {
         }
 
         // 상품명, 브랜드, ID로 검색
-        const result = await sql`
-            SELECT 
-                id, 
-                name, 
-                brand, 
-                category, 
-                image_url, 
+        const searchPattern = `%${query}%`;
+        const result = await db.query(`
+            SELECT
+                id,
+                name,
+                brand,
+                category,
+                image_url,
                 price_consumer,
                 price_sell,
                 status
             FROM products
-            WHERE 
-                name ILIKE ${'%' + query + '%'}
-                OR brand ILIKE ${'%' + query + '%'}
-                OR id::text ILIKE ${'%' + query + '%'}
+            WHERE
+                name LIKE $1
+                OR brand LIKE $1
+                OR CAST(id AS TEXT) LIKE $1
             ORDER BY created_at DESC
             LIMIT 20
-        `;
+        `, [searchPattern]);
 
         return NextResponse.json({ products: result.rows });
     } catch (error) {
