@@ -43,7 +43,7 @@ export async function initDatabase() {
     // Attendance Logs 테이블 생성
     await db.query(`
       CREATE TABLE IF NOT EXISTS attendance_logs (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         type TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -53,7 +53,7 @@ export async function initDatabase() {
     // Audit Logs 테이블 생성
     await db.query(`
       CREATE TABLE IF NOT EXISTS audit_logs (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT,
         action TEXT NOT NULL,
         target_type TEXT,
@@ -66,7 +66,7 @@ export async function initDatabase() {
     // Security Logs 테이블 생성 (For auth safety)
     await db.query(`
       CREATE TABLE IF NOT EXISTS security_logs (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT,
         user_name TEXT,
         action TEXT,
