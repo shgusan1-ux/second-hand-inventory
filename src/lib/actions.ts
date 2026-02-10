@@ -145,15 +145,16 @@ export async function bulkDeleteProducts(ids: string[]) {
 }
 
 export async function login(prevState: any, formData: FormData) {
-    const username = formData.get('username') as string;
-    const password = formData.get('password') as string;
+    try {
+        const username = formData.get('username') as string;
+        const password = formData.get('password') as string;
 
-    const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
-    const user = result.rows[0];
+        const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+        const user = result.rows[0];
 
-    if (!user || !(await verifyPassword(password, user.password_hash))) {
-        return { success: false, error: '아이디 또는 비밀번호가 잘못되었습니다.' };
-    }
+        if (!user || !(await verifyPassword(password, user.password_hash))) {
+            return { success: false, error: '아이디 또는 비밀번호가 잘못되었습니다.' };
+        }
 
     // 6 AM Login Restriction Check - DISABLED due to schema mismatch
     // TODO: Re-enable after fixing attendance_logs table structure
@@ -191,10 +192,17 @@ export async function login(prevState: any, formData: FormData) {
     }
     */
 
-    await createSession(user.id);
-    await logAction('LOGIN', 'user', user.id, 'User logged in');
-    // redirect('/'); // Removed immediate redirect
-    return { success: true };
+        await createSession(user.id);
+        await logAction('LOGIN', 'user', user.id, 'User logged in');
+        // redirect('/'); // Removed immediate redirect
+        return { success: true };
+    } catch (error) {
+        console.error('[LOGIN] Login failed:', error);
+        return {
+            success: false,
+            error: '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n' + (error instanceof Error ? error.message : String(error))
+        };
+    }
 }
 
 export async function logout() {
