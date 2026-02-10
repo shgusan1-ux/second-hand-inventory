@@ -116,7 +116,7 @@ export default function RegisterPage() {
                 <form action={formAction} className="space-y-4">
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase text-slate-500">이메일</label>
-                        <Input name="email" type="email" placeholder="example@company.com" className="h-10" />
+                        <Input name="email" type="email" autoComplete="email" placeholder="example@company.com" className="h-10" />
                     </div>
 
                     <div className="space-y-2">
@@ -126,6 +126,7 @@ export default function RegisterPage() {
                             required
                             type="tel"
                             pattern="[0-9]*"
+                            autoComplete="username"
                             placeholder="01012345678"
                             className="h-10"
                             inputMode="numeric"
@@ -140,11 +141,11 @@ export default function RegisterPage() {
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500">비밀번호</label>
-                            <Input name="password" type="password" required placeholder="****" className="h-10" />
+                            <Input name="password" type="password" required autoComplete="new-password" placeholder="****" className="h-10" />
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500">확인</label>
-                            <Input name="confirmPassword" type="password" required placeholder="****" className="h-10" />
+                            <Input name="confirmPassword" type="password" required autoComplete="new-password" placeholder="****" className="h-10" />
                         </div>
                     </div>
 

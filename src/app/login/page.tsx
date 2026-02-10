@@ -78,6 +78,7 @@ export default function LoginPage() {
                             required
                             type="tel"
                             pattern="[0-9]*"
+                            autoComplete="username"
                             className="bg-white/5 border-white/5 text-white placeholder:text-white/30 focus:bg-white/10 focus:border-white/20 transition-all h-11"
                             placeholder="01012345678"
                             inputMode="numeric"
@@ -88,7 +89,7 @@ export default function LoginPage() {
                             <label className="text-xs font-bold uppercase text-white/60 tracking-wider">비밀번호</label>
                             <Link href="/forgot-password" className="text-xs text-white/60 hover:text-white hover:underline">비밀번호 찾기</Link>
                         </div>
-                        <Input name="password" type="password" required className="bg-white/5 border-white/5 text-white placeholder:text-white/30 focus:bg-white/10 focus:border-white/20 transition-all h-11" placeholder="••••••••" />
+                        <Input name="password" type="password" required autoComplete="current-password" className="bg-white/5 border-white/5 text-white placeholder:text-white/30 focus:bg-white/10 focus:border-white/20 transition-all h-11" placeholder="••••••••" />
                     </div>
                     {state?.error && (
                         <div className="text-sm font-semibold text-red-200 text-center bg-red-900/40 p-3 rounded-md animate-pulse border border-red-500/20 whitespace-pre-line">
