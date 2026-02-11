@@ -28,12 +28,13 @@ export function MobileHeader({ user }: { user?: any }) {
     return (
         <div className="md:hidden flex flex-col">
             {/* Header Bar */}
-            <div className="h-14 border-b border-slate-200/50 bg-white/70 backdrop-blur-xl flex items-center px-3 z-50 relative">
-                <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-slate-700 hover:bg-slate-100 active:bg-slate-200 shrink-0">
+            <div className="h-14 border-b border-slate-700 bg-black flex items-center px-3 z-50 relative">
+                <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-white hover:bg-slate-800 active:bg-slate-700 shrink-0">
                     {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </Button>
-                <div className="flex-1 flex justify-center">
-                    <img src="/logo.png" alt="Brownstreet" className="h-7" />
+                <div className="flex-1 flex items-center justify-center gap-2">
+                    <img src="/logo.png" alt="Brownstreet" className="h-5" />
+                    <span className="text-white text-xs font-semibold tracking-tight">관리자 시스템</span>
                 </div>
                 <div className="w-10 shrink-0" />
             </div>
@@ -42,7 +43,7 @@ export function MobileHeader({ user }: { user?: any }) {
             {isOpen && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsOpen(false)}>
                     <div
-                        className="absolute top-14 left-0 w-64 h-[calc(100vh-3.5rem)] bg-slate-900 shadow-xl overflow-y-auto"
+                        className="absolute top-0 left-0 w-64 h-full bg-slate-900 shadow-xl overflow-y-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <Sidebar user={user} />

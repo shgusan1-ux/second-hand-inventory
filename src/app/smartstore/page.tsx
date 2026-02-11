@@ -92,6 +92,7 @@ async function fetchProductsWithProgress(
 }
 
 export default function SmartstorePage() {
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('products');
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -124,9 +125,14 @@ export default function SmartstorePage() {
   const allProducts: Product[] = data?.data?.contents || [];
   const totalCount = data?.data?.totalCount || 0;
   const isCached = data?.data?.cached || false;
+  const statusCounts = data?.data?.statusCounts || {
+    total: 0, wait: 0, sale: 0, outofstock: 0,
+    unapproved: 0, suspension: 0, ended: 0, prohibited: 0
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setStatusFilter(null);
     setProgress({ percent: 0, message: '새로고침 시작...' });
     queryClient.removeQueries({ queryKey: ['all-products'] });
     try {
@@ -139,15 +145,35 @@ export default function SmartstorePage() {
     setIsRefreshing(false);
   };
 
-  // 스테이지별 카운트
-  const stageCounts = {
-    NEW: allProducts.filter(p => p.lifecycle?.stage === 'NEW').length,
-    CURATED: allProducts.filter(p => p.lifecycle?.stage === 'CURATED').length,
-    ARCHIVE: allProducts.filter(p => p.lifecycle?.stage === 'ARCHIVE').length,
-    CLEARANCE: allProducts.filter(p => p.lifecycle?.stage === 'CLEARANCE').length,
+  const handleStatusClick = (statusKey: string | null) => {
+    // 탭 이동 (사용자 요청: 해당재고가 나와야함)
+    if (activeTab !== 'inventory') setActiveTab('inventory');
+
+    if (statusFilter === statusKey) {
+      setStatusFilter(null);
+    } else {
+      setStatusFilter(statusKey);
+    }
   };
 
-  // 로딩
+  // 상태별 필터링 로직 (API의 calculateStatusCounts와 동일하게 매핑)
+  const displayedProducts = statusFilter
+    ? allProducts.filter(p => {
+      const status = p.statusType;
+      switch (statusFilter) {
+        case 'sale': return status === 'SALE';
+        case 'outofstock': return status === 'OUTOFSTOCK';
+        case 'suspension': return status === 'SUSPENSION';
+        case 'wait': return status === 'WAIT';
+        case 'ended': return status === 'DELETE';
+        case 'unapproved': return status === 'UNAPPROVED'; // API에 추가될 경우 대비
+        case 'prohibited': return status === 'PROHIBITED'; // API에 추가될 경우 대비
+        default: return true;
+      }
+    })
+    : allProducts;
+
+  // 로딩 상태 처리
   if (isLoading || progress) {
     const pct = progress?.percent || 0;
     const msg = progress?.message || '준비 중...';
@@ -173,6 +199,7 @@ export default function SmartstorePage() {
     );
   }
 
+  // 에러 상태 처리
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -200,9 +227,7 @@ export default function SmartstorePage() {
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold text-slate-800">스마트스토어</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            {totalCount.toLocaleString()}개 상품
-            {lastUpdated && <> · {lastUpdated}</>}
-            {isCached && <span className="text-emerald-500"> (캐시)</span>}
+            상품 현황 · {totalCount.toLocaleString()}건
           </p>
         </div>
         <button
@@ -217,19 +242,42 @@ export default function SmartstorePage() {
         </button>
       </div>
 
-      {/* 스테이지 카운트 - 4열 그리드, 좌우 스크롤 없음 */}
-      <div className="grid grid-cols-4 gap-1.5 mb-3">
-        {Object.entries(stageCounts).map(([stage, count]) => (
-          <div key={stage} className="bg-white rounded-lg border px-2 py-1.5 text-center">
-            <p className={`text-[10px] font-bold leading-tight ${
-              stage === 'NEW' ? 'text-emerald-600' :
-              stage === 'CURATED' ? 'text-indigo-600' :
-              stage === 'ARCHIVE' ? 'text-slate-500' :
-              'text-amber-600'
-            }`}>{stage}</p>
-            <p className="text-sm font-bold text-slate-800">{count}</p>
+      {/* 네이버 스타일 상품 현황 대시보드 */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { id: null, label: '전체', count: statusCounts.total, color: 'text-slate-900', bgColor: 'bg-slate-100', activeRing: 'ring-slate-400' },
+            { id: 'wait', label: '판매대기', count: statusCounts.wait, color: 'text-slate-500', bgColor: 'bg-slate-50', activeRing: 'ring-slate-300' },
+            { id: 'sale', label: '판매중', count: statusCounts.sale, color: 'text-blue-600', bgColor: 'bg-blue-50', activeRing: 'ring-blue-400' },
+            { id: 'outofstock', label: '품절', count: statusCounts.outofstock, color: 'text-red-500', bgColor: 'bg-red-50', activeRing: 'ring-red-400' },
+            { id: 'unapproved', label: '승인대기', count: statusCounts.unapproved, color: 'text-slate-500', bgColor: 'bg-slate-50', activeRing: 'ring-slate-300' },
+            { id: 'suspension', label: '판매중지', count: statusCounts.suspension, color: 'text-orange-500', bgColor: 'bg-orange-50', activeRing: 'ring-orange-400' },
+            { id: 'ended', label: '판매종료', count: statusCounts.ended, color: 'text-slate-500', bgColor: 'bg-slate-50', activeRing: 'ring-slate-300' },
+            { id: 'prohibited', label: '판매금지', count: statusCounts.prohibited, color: 'text-slate-500', bgColor: 'bg-slate-50', activeRing: 'ring-slate-300' },
+          ].map((item) => (
+            <button
+              key={item.label}
+              onClick={() => handleStatusClick(item.id)}
+              className={`flex flex-col items-center gap-1.5 py-2 rounded-lg transition-all active:scale-95 ${statusFilter === item.id ? 'bg-slate-50 shadow-inner' : 'hover:bg-slate-50/50'
+                }`}
+            >
+              <div className={`w-10 h-10 rounded-full ${item.bgColor} flex items-center justify-center transition-all ${statusFilter === item.id ? `ring-2 ${item.activeRing} ring-offset-2 scale-110 shadow-sm` : ''
+                }`}>
+                <span className={`text-sm font-black ${item.color}`}>{item.count}</span>
+              </div>
+              <span className={`text-[11px] font-medium transition-colors ${statusFilter === item.id ? 'text-slate-900 font-bold' : 'text-slate-500'
+                }`}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+        {lastUpdated && (
+          <div className="text-center mt-2 pt-2 border-t border-slate-100">
+            <span className="text-[10px] text-slate-400">
+              마지막 동기화: {lastUpdated}
+              {isCached && ' (캐시)'}
+            </span>
           </div>
-        ))}
+        )}
       </div>
 
       {/* 탭 네비게이션 - 6열 균등 분할 */}
@@ -239,11 +287,10 @@ export default function SmartstorePage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-2.5 text-xs md:text-sm font-medium text-center border-b-2 transition-colors active:bg-slate-50 ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}
+              className={`py-2.5 text-xs md:text-sm font-medium text-center border-b-2 transition-colors active:bg-slate-50 ${activeTab === tab.id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
             >
               <span className="md:hidden">{tab.shortLabel}</span>
               <span className="hidden md:inline">{tab.label}</span>
@@ -255,22 +302,26 @@ export default function SmartstorePage() {
       {/* 탭 콘텐츠 */}
       <div className="w-full overflow-x-hidden">
         {activeTab === 'products' && (
-          <ProductManagementTab products={allProducts} onRefresh={handleRefresh} />
+          <ProductManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'categories' && (
-          <CategoryManagementTab products={allProducts} onRefresh={handleRefresh} />
+          <CategoryManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'inventory' && (
-          <InventoryManagementTab products={allProducts} onRefresh={handleRefresh} />
+          <InventoryManagementTab
+            products={displayedProducts}
+            onRefresh={handleRefresh}
+            parentFilter={statusFilter}
+          />
         )}
         {activeTab === 'pricing' && (
-          <PriceManagementTab products={allProducts} onRefresh={handleRefresh} />
+          <PriceManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'images' && (
-          <ImageManagementTab products={allProducts} onRefresh={handleRefresh} />
+          <ImageManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'automation' && (
-          <AutomationWorkflowTab products={allProducts} onRefresh={handleRefresh} />
+          <AutomationWorkflowTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
       </div>
     </div>

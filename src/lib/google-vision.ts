@@ -1,12 +1,19 @@
 import vision from '@google-cloud/vision';
 
-// Initialize the client
-// Check if credentials are provided via environment variable (for Vercel) or file path
-const clientConfig = process.env.GOOGLE_VISION_CREDENTIALS_JSON
-    ? { credentials: JSON.parse(process.env.GOOGLE_VISION_CREDENTIALS_JSON) }
-    : {}; // If empty, it looks for GOOGLE_APPLICATION_CREDENTIALS env var automatically
+let client: any = null;
 
-const client = new vision.ImageAnnotatorClient(clientConfig);
+function getVisionClient() {
+    if (!client) {
+        // Initialize the client
+        // Check if credentials are provided via environment variable (for Vercel) or file path
+        const clientConfig = process.env.GOOGLE_VISION_CREDENTIALS_JSON
+            ? { credentials: JSON.parse(process.env.GOOGLE_VISION_CREDENTIALS_JSON) }
+            : {}; // If empty, it looks for GOOGLE_APPLICATION_CREDENTIALS env var automatically
+
+        client = new vision.ImageAnnotatorClient(clientConfig);
+    }
+    return client;
+}
 
 export async function analyzeImage(imageInput: string) {
     try {
@@ -29,7 +36,7 @@ export async function analyzeImage(imageInput: string) {
             request.image = { content: base64Content };
         }
 
-        const [result] = await client.annotateImage(request);
+        const [result] = await getVisionClient().annotateImage(request);
 
         return {
             labels: result.labelAnnotations,

@@ -11,6 +11,54 @@ import { ensureDbInitialized } from '@/lib/db-init';
 let productCache: { data: any; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
+// 네이버 스마트스토어 기준: 판매중 1007 + 품절 1 + 판매중지 9 = 1017
+const PRODUCT_STATUS_FILTER = ['SALE', 'OUTOFSTOCK', 'SUSPENSION'];
+
+function buildSearchFilters(name: string) {
+    return {
+        searchKeyword: name || undefined,
+        searchType: name ? 'PRODUCT_NAME' : undefined,
+        productStatusTypes: PRODUCT_STATUS_FILTER,
+    };
+}
+
+// originProductNo 기준 중복 제거
+function deduplicateContents(contents: any[]): any[] {
+    const seen = new Set<string>();
+    return contents.filter(p => {
+        const id = p.originProductNo?.toString();
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
+}
+
+// 상태별 카운트 계산 (네이버 대시보드 8개 항목)
+function calculateStatusCounts(contents: any[]) {
+    const counts = {
+        total: contents.length,
+        wait: 0,      // 판매대기
+        sale: 0,      // 판매중
+        outofstock: 0, // 품절
+        unapproved: 0, // 승인대기
+        suspension: 0,  // 판매중지
+        ended: 0,      // 판매종료
+        prohibited: 0,  // 판매금지
+    };
+    for (const p of contents) {
+        const status = p.statusType;
+        switch (status) {
+            case 'SALE': counts.sale++; break;
+            case 'OUTOFSTOCK': counts.outofstock++; break;
+            case 'SUSPENSION': counts.suspension++; break;
+            case 'WAIT': counts.wait++; break;
+            case 'DELETE': counts.ended++; break;
+            default: break;
+        }
+    }
+    return counts;
+}
+
 function processProducts(contents: any[], overrideMap: any) {
     return contents.map(p => {
         const cp = p.channelProducts?.[0];
@@ -115,7 +163,7 @@ export async function GET(request: Request) {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'progress', percent: 100, message: '캐시에서 로드' })}\n\n`));
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             type: 'complete',
-                            data: { contents: filtered, totalCount: productCache!.data.totalCount, cached: true, cachedAt: new Date(productCache!.timestamp).toISOString() }
+                            data: { contents: filtered, totalCount: productCache!.data.totalCount, statusCounts: productCache!.data.statusCounts, cached: true, cachedAt: new Date(productCache!.timestamp).toISOString() }
                         })}\n\n`));
                         controller.close();
                     }
@@ -128,6 +176,7 @@ export async function GET(request: Request) {
             return handleSuccess({
                 contents: filtered,
                 totalCount: productCache.data.totalCount,
+                statusCounts: productCache.data.statusCounts,
                 page: 1,
                 size: productCache.data.totalCount,
                 hasMore: false,
@@ -159,49 +208,48 @@ export async function GET(request: Request) {
 
                         send({ type: 'progress', percent: 10, message: '상품 목록 조회 중...' });
 
-                        // First page to get total count
-                        const firstPage = await searchProducts(tokenData.access_token, 0, 100, {
-                            searchKeyword: name || undefined,
-                            searchType: name ? 'PRODUCT_NAME' : undefined
-                        });
+                        // First page to get total count (Naver API는 1-based pagination)
+                        const filters = buildSearchFilters(name);
+                        const firstPage = await searchProducts(tokenData.access_token, 1, 100, filters);
 
                         const totalElements = firstPage.totalElements || 0;
-                        const totalPages = Math.ceil(totalElements / 100);
+                        const totalPages = firstPage.totalPages || Math.ceil(totalElements / 100);
 
                         send({ type: 'progress', percent: 20, message: `총 ${totalElements}개 상품 발견 (${totalPages} 페이지)` });
 
                         let allContents = [...(firstPage.contents || [])];
 
-                        // Fetch remaining pages with progress updates
+                        // Fetch remaining pages with progress updates (page 2 ~ totalPages)
                         if (totalPages > 1) {
-                            const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 1);
+                            const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
                             let completedPages = 1;
 
-                            const pageResults = await Promise.all(
-                                remainingPages.map(async (p) => {
-                                    const result = await searchProducts(tokenData.access_token, p, 100, {
-                                        searchKeyword: name || undefined,
-                                        searchType: name ? 'PRODUCT_NAME' : undefined
-                                    }).catch(err => {
-                                        console.error(`[API/Products] Failed to fetch page ${p}:`, err);
-                                        return { contents: [] } as any;
-                                    });
+                            for (const p of remainingPages) {
+                                let result: any;
+                                try {
+                                    result = await searchProducts(tokenData.access_token, p, 100, filters);
+                                } catch (err) {
+                                    console.warn(`[API/Products] Page ${p} failed, retrying...`);
+                                    await new Promise(r => setTimeout(r, 500));
+                                    try {
+                                        result = await searchProducts(tokenData.access_token, p, 100, filters);
+                                    } catch (retryErr) {
+                                        console.error(`[API/Products] Page ${p} retry failed:`, retryErr);
+                                        result = { contents: [] };
+                                    }
+                                }
 
-                                    completedPages++;
-                                    const percent = 20 + Math.floor((completedPages / totalPages) * 60);
-                                    send({ type: 'progress', percent, message: `${completedPages}/${totalPages} 페이지 완료 (${allContents.length + (result.contents?.length || 0)}개)` });
-
-                                    return result;
-                                })
-                            );
-
-                            for (const result of pageResults) {
                                 if (result.contents) {
                                     allContents = allContents.concat(result.contents);
                                 }
+                                completedPages++;
+                                const percent = 20 + Math.floor((completedPages / totalPages) * 60);
+                                send({ type: 'progress', percent, message: `${completedPages}/${totalPages} 페이지 완료 (${allContents.length}개)` });
                             }
                         }
 
+                        // 중복 제거
+                        allContents = deduplicateContents(allContents);
                         send({ type: 'progress', percent: 85, message: `${allContents.length}개 상품 처리 중...` });
 
                         // Get overrides
@@ -212,10 +260,11 @@ export async function GET(request: Request) {
 
                         // Process all products
                         const processed = processProducts(allContents, overrideMap);
+                        const statusCounts = calculateStatusCounts(processed);
 
                         // Cache the full result
                         productCache = {
-                            data: { contents: processed, totalCount: totalElements },
+                            data: { contents: processed, totalCount: totalElements, statusCounts },
                             timestamp: Date.now()
                         };
 
@@ -234,6 +283,7 @@ export async function GET(request: Request) {
                             data: {
                                 contents: filtered,
                                 totalCount: totalElements,
+                                statusCounts,
                                 page: 1,
                                 size: totalElements,
                                 hasMore: false,
@@ -279,29 +329,33 @@ export async function GET(request: Request) {
         if (fetchAll) {
             console.log('[API/Products] Fetching ALL products...');
 
-            const firstPage = await searchProducts(tokenData.access_token, 0, 100, {
-                searchKeyword: name || undefined,
-                searchType: name ? 'PRODUCT_NAME' : undefined
-            });
+            const filters = buildSearchFilters(name);
+            const firstPage = await searchProducts(tokenData.access_token, 1, 100, filters);
 
             const totalElements = firstPage.totalElements || 0;
-            const totalPages = Math.ceil(totalElements / 100);
+            const totalPages = firstPage.totalPages || Math.ceil(totalElements / 100);
 
             let allContents = [...(firstPage.contents || [])];
 
             if (totalPages > 1) {
-                const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 1);
-                const pageResults = await Promise.all(
-                    remainingPages.map(p =>
-                        searchProducts(tokenData.access_token, p, 100, {
-                            searchKeyword: name || undefined,
-                            searchType: name ? 'PRODUCT_NAME' : undefined
-                        }).catch(err => {
-                            console.error(`[API/Products] Failed to fetch page ${p}:`, err);
-                            return { contents: [] } as any;
-                        })
-                    )
-                );
+                const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+                const pageResults: any[] = [];
+                for (const p of remainingPages) {
+                    try {
+                        const result = await searchProducts(tokenData.access_token, p, 100, filters);
+                        pageResults.push(result);
+                    } catch (err) {
+                        console.warn(`[API/Products] Page ${p} failed, retrying...`);
+                        await new Promise(r => setTimeout(r, 500));
+                        try {
+                            const result = await searchProducts(tokenData.access_token, p, 100, filters);
+                            pageResults.push(result);
+                        } catch (retryErr) {
+                            console.error(`[API/Products] Page ${p} retry failed:`, retryErr);
+                            pageResults.push({ contents: [] });
+                        }
+                    }
+                }
 
                 for (const result of pageResults) {
                     if (result.contents) {
@@ -310,12 +364,16 @@ export async function GET(request: Request) {
                 }
             }
 
+            // 중복 제거
+            allContents = deduplicateContents(allContents);
+
             const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
             const overrideMap = await fetchOverrideMap(ids);
             const processed = processProducts(allContents, overrideMap);
+            const statusCounts = calculateStatusCounts(processed);
 
             productCache = {
-                data: { contents: processed, totalCount: totalElements },
+                data: { contents: processed, totalCount: totalElements, statusCounts },
                 timestamp: Date.now()
             };
 
@@ -330,6 +388,7 @@ export async function GET(request: Request) {
             return handleSuccess({
                 contents: filtered,
                 totalCount: totalElements,
+                statusCounts,
                 page: 1,
                 size: totalElements,
                 hasMore: false,
@@ -338,10 +397,7 @@ export async function GET(request: Request) {
 
         } else {
             console.log(`[API/Products] Fetching page ${page}, size ${size}`);
-            const naverRes = await searchProducts(tokenData.access_token, page, size, {
-                searchKeyword: name || undefined,
-                searchType: name ? 'PRODUCT_NAME' : undefined
-            });
+            const naverRes = await searchProducts(tokenData.access_token, page, size, buildSearchFilters(name));
 
             if (!naverRes || !naverRes.contents || naverRes.contents.length === 0) {
                 return handleSuccess({

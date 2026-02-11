@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { analyzeImage, extractKeywords } from '@/lib/google-vision';
 import { extractFabricFromOCR } from '@/lib/fabric-extractor';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
     try {
         const { productIds } = await req.json();

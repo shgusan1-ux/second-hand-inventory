@@ -89,18 +89,6 @@ export async function updateProduct(token: string, originProductNo: number, payl
     return res.json();
 }
 
-// Verified: GET /v1/categories → 200 OK (5804 categories)
-export async function getCategories(token: string): Promise<NaverCategory[]> {
-    const res = await fetch(`${PROXY_URL}/v1/categories`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-proxy-key': PROXY_KEY
-        }
-    });
-    if (!res.ok) throw new Error(`Categories failed: ${res.statusText}`);
-    return res.json();
-}
-
 export async function naverRequest(path: string, options: RequestInit = {}) {
     const tokenData = await getNaverToken();
     const res = await fetch(`${PROXY_URL}${path}`, {
@@ -118,3 +106,16 @@ export async function naverRequest(path: string, options: RequestInit = {}) {
     }
     return res.json();
 }
+
+// Verified: GET /v1/categories → 200 OK (5804 categories)
+export async function getCategories(token: string): Promise<NaverCategory[]> {
+    const res = await fetch(`${PROXY_URL}/v1/categories`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-proxy-key': PROXY_KEY
+        }
+    });
+    if (!res.ok) throw new Error(`Categories failed: ${res.statusText}`);
+    return res.json();
+}
+
