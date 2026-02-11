@@ -1,31 +1,15 @@
 @echo off
 chcp 65001 >nul
 echo ================================
-echo 프로젝트 백업 시작
+echo 프로젝트 백업 시작 (PowerShell)
 echo ================================
 echo.
 
 cd /d "%~dp0"
+powershell -ExecutionPolicy Bypass -File "auto-backup.ps1"
 
-echo [1/4] Git 상태 확인...
-git status
 echo.
-
-echo [2/4] 모든 변경사항 스테이징...
-git add .
-echo.
-
-echo [3/4] 커밋 생성...
-for /f "tokens=1-3 delims=/ " %%a in ('date /t') do set mydate=%%a%%b%%c
-for /f "tokens=1-2 delims=: " %%a in ('time /t') do set mytime=%%a%%b
-git commit -m "Auto backup - %mydate% %mytime%"
-echo.
-
-echo [4/4] 원격 저장소에 푸시...
-git push
-echo.
-
 echo ================================
-echo 백업 완료!
+echo 백업 작업 완료! (상세 내역은 backup-log.txt 확인)
 echo ================================
 pause

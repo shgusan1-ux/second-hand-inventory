@@ -204,6 +204,37 @@ async function initTables() {
       )
     `);
 
+    // Naver category cache
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS naver_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        whole_category_name TEXT,
+        is_last BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Naver product sync tracking
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS naver_product_map (
+        origin_product_no TEXT PRIMARY KEY,
+        channel_product_no TEXT,
+        naver_category_id TEXT,
+        archive_category_id TEXT,
+        name TEXT,
+        sale_price INTEGER,
+        stock_quantity INTEGER,
+        status_type TEXT,
+        seller_management_code TEXT,
+        last_synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_category ON naver_product_map(naver_category_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_archive ON naver_product_map(archive_category_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_status ON naver_product_map(status_type);`);
+
     // Add missing columns to existing tables (DEFAULT must be constant for ALTER TABLE in SQLite)
     const alterStatements = [
       `ALTER TABLE attendance_logs ADD COLUMN created_at TIMESTAMP`,

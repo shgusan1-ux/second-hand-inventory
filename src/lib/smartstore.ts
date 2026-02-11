@@ -33,13 +33,17 @@ export class SmartStoreClient {
                 type: 'SELF'
             };
 
-            const response = await fetch(`${proxyUrl}/naver/token`, {
+            const response = await fetch(`${proxyUrl}/oauth/token`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-proxy-key': proxyKey || ''
                 },
-                body: JSON.stringify(body)
+                body: JSON.stringify({
+                    client_id: this.clientId,
+                    client_secret: this.clientSecret,
+                    grant_type: 'client_credentials'
+                })
             });
 
             const data = await response.json();

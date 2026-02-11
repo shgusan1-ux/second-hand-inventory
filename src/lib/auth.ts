@@ -41,15 +41,6 @@ export async function getSession() {
     const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
     if (!userId) {
-        // TEMPORARY BYPASS for production deployment debugging
-        try {
-            const result = await db.query("SELECT id, name, role, username, job_title FROM users WHERE role = 'admin' LIMIT 1");
-            if (result.rows.length > 0) {
-                return result.rows[0] as { id: string; name: string; role: string; username: string, job_title: string };
-            }
-        } catch (e) {
-            console.error('[AUTH] BYPASS failed:', e);
-        }
         return null;
     }
 

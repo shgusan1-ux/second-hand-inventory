@@ -49,7 +49,7 @@ export async function getNaverAccessToken(): Promise<string> {
         type: 'SELF'
     };
 
-    const response = await fetch(`${proxyUrl}/naver/token`, {
+    const response = await fetch(`${proxyUrl}/oauth/token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

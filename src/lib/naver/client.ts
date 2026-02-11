@@ -1,5 +1,5 @@
 
-import { TokenResponse, ProductSearchResponse } from './types';
+import { TokenResponse, ProductSearchResponse, ProductDetailResponse, NaverCategory } from './types';
 
 const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001';
 const PROXY_KEY = process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key';
@@ -57,17 +57,47 @@ export async function searchProducts(token: string, page: number, size: number, 
     return res.json();
 }
 
-export async function bulkUpdateProducts(token: string, products: any[]) {
-    const res = await fetch(`${PROXY_URL}/v1/products/bulk`, {
-        method: 'PATCH',
+// Verified: GET /v2/products/origin-products/{productNo} → 200 OK
+export async function getProductDetail(token: string, originProductNo: number): Promise<ProductDetailResponse> {
+    const res = await fetch(`${PROXY_URL}/v2/products/origin-products/${originProductNo}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'x-proxy-key': PROXY_KEY
+        }
+    });
+    if (!res.ok) throw new Error(`Product detail failed: ${res.statusText}`);
+    return res.json();
+}
+
+// Verified: PUT /v2/products/origin-products/{productNo} → 200 OK
+// Must send full originProduct data (not partial)
+export async function updateProduct(token: string, originProductNo: number, payload: any) {
+    const res = await fetch(`${PROXY_URL}/v2/products/origin-products/${originProductNo}`, {
+        method: 'PUT',
         headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'x-proxy-key': PROXY_KEY
         },
-        body: JSON.stringify({ products })
+        body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error(`Bulk update failed: ${res.statusText}`);
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Product update failed (${res.status}): ${errText}`);
+    }
+    return res.json();
+}
+
+// Verified: GET /v1/categories → 200 OK (5804 categories)
+export async function getCategories(token: string): Promise<NaverCategory[]> {
+    const res = await fetch(`${PROXY_URL}/v1/categories`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-proxy-key': PROXY_KEY
+        }
+    });
+    if (!res.ok) throw new Error(`Categories failed: ${res.statusText}`);
     return res.json();
 }
 
