@@ -124,15 +124,17 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* System Updates & Patch Logs + Memo Widget + Org Chart */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:items-start">
+      {/* System Updates & Patch Logs + Memo Widget */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 md:items-start">
         {/* Update Log */}
         <UpdateLogWidget tasks={tasks} />
 
         {/* Shared Memo */}
         <MemoWidget memos={memos} />
+      </div>
 
-        {/* Organization Chart */}
+      {/* Organization Chart - Full Width Centered */}
+      <div className="w-full max-w-7xl mx-auto">
         <OrgChart users={orgUsers} />
       </div>
     </div>
