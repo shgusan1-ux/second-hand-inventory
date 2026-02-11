@@ -28,7 +28,7 @@ export function MobileHeader({ user }: { user?: any }) {
     return (
         <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50">
             {/* Header Bar */}
-            <div className="h-14 border-b border-slate-700/50 bg-black/50 backdrop-blur-md flex items-center px-3 relative">
+            <div className="h-14 border-b border-slate-700/50 bg-black/80 backdrop-blur-md flex items-center px-3 relative">
                 <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-white hover:bg-white/10 active:bg-white/20 shrink-0">
                     {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </Button>

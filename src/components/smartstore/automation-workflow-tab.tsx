@@ -457,7 +457,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                 </svg>
                 <h4 className="text-sm font-bold text-violet-800">Gemini Vision 분석</h4>
               </div>
-              <span className="text-[10px] text-violet-500 font-mono">gemini-1.5-pro</span>
+              <span className="text-[10px] text-violet-500 font-mono">gemini-2.5-pro</span>
             </div>
 
             {batchProgress && (
