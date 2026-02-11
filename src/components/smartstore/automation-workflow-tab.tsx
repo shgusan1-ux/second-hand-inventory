@@ -281,8 +281,36 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     try {
       const res = await fetch('/api/smartstore/classify/stats');
       const data = await res.json();
-      if (data.recentEntries) {
-        setLogEntries(data.recentEntries);
+      if (data.recentEntries && data.recentEntries.length > 0) {
+        // API는 평면 구조 반환 → LogEntry 형식으로 변환
+        const mapped: LogEntry[] = data.recentEntries.map((e: any) => ({
+          productNo: e.productNo || '',
+          productName: e.name || e.productName || '',
+          timestamp: e.timestamp || new Date().toISOString(),
+          result: {
+            brand: e.brand || '',
+            brandTier: e.brandTier || 'OTHER',
+            gender: e.gender || 'UNKNOWN',
+            size: e.size || '',
+            clothingType: e.clothingType || 'UNKNOWN',
+            clothingSubType: e.clothingSubType || '',
+            confidence: e.confidence || 0,
+            suggestedNaverCategory: e.suggestedNaverCategory,
+          }
+        }));
+        setLogEntries(mapped);
+      } else {
+        // API에 데이터 없으면 로컬 products에서 생성
+        const entries = products
+          .filter(p => p.classification)
+          .slice(0, 50)
+          .map(p => ({
+            productNo: p.originProductNo,
+            productName: p.name,
+            timestamp: new Date().toISOString(),
+            result: p.classification!
+          }));
+        setLogEntries(entries);
       }
     } catch {
       const entries = products
