@@ -80,10 +80,12 @@ export function OrgChart({ users }: OrgChartProps) {
             <CardContent className="flex-1 overflow-auto p-6 space-y-8">
                 {groupedUsers.map((group, idx) => (
                     <div key={group.title} className="space-y-4">
-                        <div className="flex items-center gap-3">
-                            <div className={`h-1.5 w-8 rounded-full ${group.color.split(' ')[0]}`} />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{group.title}</h3>
-                            <div className="h-px flex-1 bg-slate-200" />
+                        <div className="flex items-center justify-center gap-3 relative">
+                            <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-200 -z-10 hidden sm:block"></div>
+                            <div className="bg-slate-50 px-4 flex items-center gap-2 z-10 rounded-full border border-slate-100 py-1">
+                                <div className={`h-2 w-2 rounded-full ${group.color.split(' ')[0]}`} />
+                                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">{group.title}</h3>
+                            </div>
                         </div>
                         <div className="flex flex-wrap justify-center gap-4">
                             {group.members.map((user) => (
@@ -104,8 +106,8 @@ export function OrgChart({ users }: OrgChartProps) {
                             ))}
                         </div>
                         {idx < groupedUsers.length - 1 && (
-                            <div className="flex justify-center py-2">
-                                <div className="w-px h-8 bg-slate-200 dashed h-8 border-l border-dashed border-slate-300" />
+                            <div className="flex justify-center -mb-2">
+                                <div className="w-px h-8 bg-slate-300" />
                             </div>
                         )}
                     </div>
