@@ -1,5 +1,5 @@
 
-import { ARCHIVE_KEYWORDS } from './keywords';
+import { ARCHIVE_KEYWORDS } from './keywords.ts';
 
 export type ArchiveCategory = 'MILITARY' | 'WORKWEAR' | 'JAPAN' | 'EUROPE' | 'BRITISH';
 

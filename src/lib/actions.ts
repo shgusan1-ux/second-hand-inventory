@@ -1273,3 +1273,82 @@ export async function testSmartStoreConnection() {
         return { success: false, error: e.message || '연동 테스트 중 오류가 발생했습니다.' };
     }
 }
+// --- SmartStore AI Category Approval Actions ---
+
+export async function getPendingAiSuggestions() {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    try {
+        const query = `
+            SELECT origin_product_no, name, suggested_archive_id, suggestion_reason
+            FROM naver_product_map
+            WHERE suggested_archive_id IS NOT NULL 
+            AND (is_approved = 0 OR is_approved IS NULL)
+            ORDER BY last_synced_at DESC
+        `;
+        const res = await db.query(query);
+        return { success: true, data: res.rows };
+    } catch (e: any) {
+        console.error('Fetch pending suggestions failed:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+export async function approveAiSuggestion(productNo: string, categoryId: string) {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    try {
+        // 1. Update the mapping table and mark as approved
+        await db.query(
+            `UPDATE naver_product_map 
+             SET archive_category_id = $1, is_approved = 1 
+             WHERE origin_product_no = $2`,
+            [categoryId, productNo]
+        );
+
+        // 2. Also update product_overrides if we want to persist it across syncs (optional but recommended)
+        await db.query(
+            `INSERT INTO product_overrides(id, internal_category) VALUES($1, $2)
+             ON CONFLICT(id) DO UPDATE SET internal_category = $2, updated_at = CURRENT_TIMESTAMP`,
+            [productNo, categoryId]
+        );
+
+        await logAction('APPROVE_AI_SUGGESTION', 'smartstore', productNo, `Approved category: ${categoryId}`);
+        revalidatePath('/settings/smartstore/approval');
+        revalidatePath('/smartstore');
+
+        return { success: true };
+    } catch (e: any) {
+        console.error('Approve suggestion failed:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+export async function approveAllAiSuggestions() {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    try {
+        const pending = await db.query(
+            `SELECT origin_product_no, suggested_archive_id 
+             FROM naver_product_map 
+             WHERE suggested_archive_id IS NOT NULL AND (is_approved = 0 OR is_approved IS NULL)`
+        );
+
+        for (const row of pending.rows) {
+            await approveAiSuggestion(row.origin_product_no, row.suggested_archive_id);
+        }
+
+        return { success: true, count: pending.rows.length };
+    } catch (e: any) {
+        console.error('Approve all failed:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+export async function clearSmartStoreCache() {
+    revalidatePath('/smartstore');
+    return { success: true };
+}

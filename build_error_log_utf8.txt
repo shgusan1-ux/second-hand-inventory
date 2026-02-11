@@ -1,0 +1,350 @@
+﻿
+> second-hand-inventory@0.1.0 build
+> next build
+
+node.exe : ⚠ `eslint` config
+uration in next.config.ts is
+ no longer supported. See mo
+re info here: https://nextjs
+.org/docs/app/api-reference/
+cli/next#next-lint-options
+At line:1 char:1
++ & "C:\Program Files\nodejs
+/node.exe" "C:\Program Files
+\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (⚠ `es  
+  lint` conf...xt-lint-op   
+ tions:String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+⚠ Invalid next.config.ts opt
+ions detected: 
+⚠     Unrecognized key(s) in
+ object: 'eslint'
+⚠ See more info here: https:
+//nextjs.org/docs/messages/i
+nvalid-next-config
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local, .env.production
+
+⚠ The "middleware" file conv
+ention is deprecated. Please
+ use "proxy" instead. Learn 
+more: https://nextjs.org/doc
+s/messages/middleware-to-pro
+xy
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build faile
+d with 4 errors:
+./src/app/api/smartstore/cat
+egories/route.ts:2:1
+Export naverRequest doesn't 
+exist in target module
+[0m [90m 1 |[39m [36mimp
+ort[39m { [33mNextResponse
+[39m } [36mfrom[39m [32m
+'next/server'[39m[33m;[39
+m
+[31m[1m>[22m[39m[90m 2 
+|[39m [36mimport[39m { na
+verRequest } [36mfrom[39m 
+[32m'@/lib/naver/client'[3
+9m[33m;[39m
+ [90m   |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mexport
+[39m [36masync[39m [36mfu
+nction[39m [33mGET[39m() 
+{
+ [90m 5 |[39m     [36mtry
+[39m {[0m
+
+The export naverRequest was 
+not found in module [project
+]/src/lib/naver/client.ts [a
+pp-route] (ecmascript).
+Did you mean to import getNa
+verToken?
+All exports of the module ar
+e statically known (It doesn
+'t have dynamic exports). So
+ it's known statically that 
+the requested export doesn't
+ exist.
+
+
+./src/app/api/smartstore/exh
+ibition/update/route.ts:2:1
+Export naverRequest doesn't 
+exist in target module
+[0m [90m 1 |[39m [36mimp
+ort[39m { [33mNextResponse
+[39m } [36mfrom[39m [32m
+'next/server'[39m[33m;[39
+m
+[31m[1m>[22m[39m[90m 2 
+|[39m [36mimport[39m { na
+verRequest } [36mfrom[39m 
+[32m'@/lib/naver/client'[3
+9m[33m;[39m
+ [90m   |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mexport
+[39m [36masync[39m [36mfu
+nction[39m [33mPOST[39m(r
+equest[33m:[39m [33mReque
+st[39m) {
+ [90m 5 |[39m     [36mtry
+[39m {[0m
+
+The export naverRequest was 
+not found in module [project
+]/src/lib/naver/client.ts [a
+pp-route] (ecmascript).
+Did you mean to import getNa
+verToken?
+All exports of the module ar
+e statically known (It doesn
+'t have dynamic exports). So
+ it's known statically that 
+the requested export doesn't
+ exist.
+
+
+./src/lib/naver/apis/orders.
+ts:1:1
+Export naverRequest doesn't 
+exist in target module
+[0m[31m[1m>[22m[39m[90
+m 1 |[39m [36mimport[39m 
+{ naverRequest } [36mfrom[
+39m [32m'../client'[39m[3
+3m;[39m
+ [90m   |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+ [90m 2 |[39m
+ [90m 3 |[39m [36mexport
+[39m [36masync[39m [36mfu
+nction[39m getNaverOrders(p
+arams[33m:[39m { startDate
+Time[33m?[39m[33m:[39m s
+tring[33m;[39m endDateTime
+[33m?[39m[33m:[39m strin
+g } [33m=[39m {}) {
+ [90m 4 |[39m     [90m// 
+Example endpoint for product
+ orders[39m[0m
+
+The export naverRequest was 
+not found in module [project
+]/src/lib/naver/client.ts [a
+pp-route] (ecmascript).
+Did you mean to import getNa
+verToken?
+All exports of the module ar
+e statically known (It doesn
+'t have dynamic exports). So
+ it's known statically that 
+the requested export doesn't
+ exist.
+
+Import trace:
+  App Route:
+    ./src/lib/naver/apis/ord
+ers.ts
+    ./src/app/api/naver/test
+/orders/route.ts
+
+
+./src/lib/naver/apis/product
+s.ts:1:1
+Export naverRequest doesn't 
+exist in target module
+[0m[31m[1m>[22m[39m[90
+m 1 |[39m [36mimport[39m 
+{ naverRequest } [36mfrom[
+39m [32m'../client'[39m[3
+3m;[39m
+ [90m   |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m
+ [90m 2 |[39m
+ [90m 3 |[39m [36mexport
+[39m [36masync[39m [36mfu
+nction[39m getNaverProducts
+(params[33m:[39m { page[3
+3m?[39m[33m:[39m number[
+33m;[39m size[33m?[39m[3
+3m:[39m number[33m;[39m n
+ame[33m?[39m[33m:[39m st
+ring } [33m=[39m {}) {
+ [90m 4 |[39m     [90m// 
+Example endpoint for searchi
+ng products[39m[0m
+
+The export naverRequest was 
+not found in module [project
+]/src/lib/naver/client.ts [a
+pp-route] (ecmascript).
+Did you mean to import getNa
+verToken?
+All exports of the module ar
+e statically known (It doesn
+'t have dynamic exports). So
+ it's known statically that 
+the requested export doesn't
+ exist.
+
+Import trace:
+  App Route:
+    ./src/lib/naver/apis/pro
+ducts.ts
+    ./src/app/api/naver/test
+/products/route.ts
+
+
+    at <unknown> (./src/app/
+api/smartstore/categories/ro
+ute.ts:2:1)
+    at <unknown> (./src/app/
+api/smartstore/exhibition/up
+date/route.ts:2:1)
+    at <unknown> (./src/lib/
+naver/apis/orders.ts:1:1)
+    at <unknown> (./src/lib/
+naver/apis/products.ts:1:1)

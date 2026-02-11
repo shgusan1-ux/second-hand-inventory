@@ -37,7 +37,7 @@ export default async function RootLayout({
           <aside className="hidden md:flex flex-shrink-0 h-full">
             <Sidebar user={session} />
           </aside>
-          <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-8">
             <Providers>
               {children}
             </Providers>

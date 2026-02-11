@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AttendanceWidget } from './attendance-widget';
 import { ClockWidget } from './clock-widget';
 import { ChatWidget } from './chat-widget';
-import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Sparkles, CheckCircle2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ const inventoryManagement = [
 // 3. AI Automation Tools
 const aiTools = [
     { name: 'AI 자동화', href: '/tools/ai-automation', icon: Sparkles },
+    { name: '분류 승인', href: '/settings/smartstore/approval', icon: CheckCircle2 },
 ];
 
 // 4. Admin & Business Support (User skipped 3?)

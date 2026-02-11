@@ -1,0 +1,21 @@
+﻿node.exe : Vercel CLI 50.12.
+3
+At C:\Users\Administrator\Ap
+pData\Roaming\npm\vercel.ps1
+:24 char:5
++     & "node$exe"  "$basedi
+r/node_modules/vercel/dist/v
+c.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Verce  
+  l CLI 50.12.3:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+Error: The --follow flag doe
+s not support filtering. Rem
+ove: --limit
