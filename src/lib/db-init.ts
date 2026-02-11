@@ -24,6 +24,11 @@ export async function initDatabase() {
       )
     `);
 
+    // Add product_name column for overrides
+    try {
+      await db.query(`ALTER TABLE product_overrides ADD COLUMN product_name TEXT`);
+    } catch (e) { /* Column likely exists */ }
+
     // Users 테이블 생성
     await db.query(`
       CREATE TABLE IF NOT EXISTS users (

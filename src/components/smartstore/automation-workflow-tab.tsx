@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { StatDetailModal } from './stat-detail-modal';
 
 interface Classification {
   brand: string;
@@ -387,6 +388,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
 
   // 카테고리 저장 (일괄 적용)
   const [savingTier, setSavingTier] = useState<string | null>(null);
+  const [statDetailType, setStatDetailType] = useState<'HIGH_CONFIDENCE' | 'LOW_CONFIDENCE' | null>(null);
 
   const handleSaveCategory = async (tierKey: string) => {
     const targetCategory = tierLabel[tierKey]; // e.g., "MILITARY ARCHIVE"
@@ -458,12 +460,18 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
             {stats.avgConfidence}%
           </p>
         </div>
-        <div className="bg-white rounded-xl border p-3 text-center">
-          <p className="text-[10px] text-slate-400 font-bold mb-1">고신뢰</p>
+        <div
+          onClick={() => setStatDetailType('HIGH_CONFIDENCE')}
+          className="bg-white rounded-xl border p-3 text-center cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+        >
+          <p className="text-[10px] text-slate-400 font-bold mb-1 group-hover:text-emerald-600 transition-colors">고신뢰</p>
           <p className="text-xl font-black text-emerald-600">{stats.highConf}</p>
         </div>
-        <div className="bg-white rounded-xl border p-3 text-center">
-          <p className="text-[10px] text-slate-400 font-bold mb-1">저신뢰</p>
+        <div
+          onClick={() => setStatDetailType('LOW_CONFIDENCE')}
+          className="bg-white rounded-xl border p-3 text-center cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+        >
+          <p className="text-[10px] text-slate-400 font-bold mb-1 group-hover:text-red-500 transition-colors">저신뢰</p>
           <p className="text-xl font-black text-red-500">{stats.lowConf}</p>
         </div>
       </div>
@@ -888,7 +896,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                       <span className="text-slate-300 font-medium">{new Date(entry.timestamp).toLocaleTimeString('ko-KR')}</span>
                     </div>
                     <p className="text-slate-700 font-black truncate mb-2">{entry.productName}</p>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       <span className={`px-1.5 py-0.5 rounded-md font-black text-white ${tierColor[entry.result.brandTier] || 'bg-slate-400'}`}>
                         {entry.result.brand}
                       </span>
@@ -907,6 +915,47 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                         }`}>
                         {entry.result.confidence}%
                       </span>
+                      {/* 아카이브 분류 변경 */}
+                      <select
+                        value={entry.result.brandTier || 'OTHER'}
+                        onChange={async (e) => {
+                          const newTier = e.target.value;
+                          // 로컬 상태 업데이트
+                          setLogEntries(prev => prev.map((ent, idx) =>
+                            idx === i ? { ...ent, result: { ...ent.result, brandTier: newTier } } : ent
+                          ));
+                          // DB 저장
+                          try {
+                            await fetch('/api/smartstore/vision/detail', {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                originProductNo: entry.productNo,
+                                productName: entry.productName,
+                                brand: entry.result.brand,
+                                clothingType: entry.result.clothingType,
+                                clothingSubType: entry.result.clothingSubType || '',
+                                gender: entry.result.gender,
+                                grade: 'A급',
+                                gradeReason: '',
+                                pattern: '솔리드',
+                                fabric: '',
+                                size: entry.result.size || '',
+                                colors: [],
+                                confidence: entry.result.confidence,
+                              }),
+                            });
+                            import('sonner').then(({ toast }) => toast.success(`${entry.productNo} → ${tierLabel[newTier] || newTier}`));
+                          } catch {
+                            import('sonner').then(({ toast }) => toast.error('저장 실패'));
+                          }
+                        }}
+                        className={`ml-auto px-1 py-0.5 rounded text-[9px] font-bold border-0 outline-none cursor-pointer ${tierColor[entry.result.brandTier] || 'bg-slate-200'} text-white`}
+                      >
+                        {Object.entries(tierLabel).map(([key, label]) => (
+                          <option key={key} value={key} className="text-slate-800 bg-white">{label.replace(' ARCHIVE', '')}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 ))}
@@ -915,6 +964,15 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
           </div>
         )}
       </div>
+
+      {statDetailType && (
+        <StatDetailModal
+          type={statDetailType}
+          products={products}
+          onClose={() => setStatDetailType(null)}
+          onRefresh={onRefresh}
+        />
+      )}
     </div>
   );
 }

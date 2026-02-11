@@ -124,16 +124,19 @@ export default function SmartstorePage() {
   } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
-      setProgress({ percent: 0, message: '시작...' });
-      const result = await fetchProductsWithProgress(handleProgress);
-      setProgress(null);
-      return result;
+      // 서버 캐시에서 이전 데이터 로드 (네이버 API 호출 없음)
+      const cacheRes = await fetch('/api/smartstore/products?cacheOnly=true');
+      const cacheData = await cacheRes.json();
+      if (cacheData.success && cacheData.data?.contents?.length > 0) {
+        return cacheData;
+      }
+      // 캐시 없으면 빈 데이터 반환 (자동 동기화 안 함)
+      return { success: true, data: { contents: [], totalCount: 0, statusCounts: { total: 0, wait: 0, sale: 0, outofstock: 0, unapproved: 0, suspension: 0, ended: 0, prohibited: 0 }, cached: false } };
     },
     staleTime: Infinity,
     gcTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    enabled: false, // 자동 동기화 비활성화 — 동기화 버튼으로만 실행
+    refetchOnMount: true, // 페이지 진입 시 서버 캐시 확인
   });
 
   const allProducts: Product[] = data?.data?.contents || [];
@@ -256,23 +259,27 @@ export default function SmartstorePage() {
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold text-slate-800">스마트스토어</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            상품 현황 · {totalCount.toLocaleString()}건
+            {hasData ? `상품 현황 · ${totalCount.toLocaleString()}건` : '상품 동기화 전'}
           </p>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isFetching || isRefreshing}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors active:bg-slate-100"
+          className={`shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm rounded-lg disabled:opacity-50 transition-colors active:scale-95 ${
+            hasData
+              ? 'bg-white border border-slate-200 hover:bg-slate-50'
+              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
+          }`}
         >
           <svg className={`w-4 h-4 ${(isFetching || isRefreshing) ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <span className="hidden sm:inline">{(isFetching || isRefreshing) ? '동기화 중...' : '새로고침'}</span>
+          <span className="hidden sm:inline">{(isFetching || isRefreshing) ? '동기화 중...' : hasData ? '새로고침' : '상품 동기화'}</span>
         </button>
       </div>
 
       {/* 네이버 스타일 상품 현황 대시보드 */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
+      {hasData && <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
         <div className="grid grid-cols-4 gap-3">
           {[
             { id: null, label: '전체', count: statusCounts.total, color: 'text-slate-900', bgColor: 'bg-slate-100', activeRing: 'ring-slate-400' },
@@ -307,7 +314,7 @@ export default function SmartstorePage() {
             </span>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* 탭 네비게이션 - 6열 균등 분할 */}
       <div className="border-b border-slate-200 mb-4">

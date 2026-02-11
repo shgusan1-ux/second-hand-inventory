@@ -70,7 +70,7 @@ function processProducts(contents: any[], overrideMap: any) {
         const override = overrideMap[prodId] || {};
 
         const regDate = cp.regDate || new Date().toISOString();
-        const prodName = cp.name || 'Unknown Product';
+        const prodName = override.product_name || cp.name || 'Unknown Product';
 
         const lifecycle = calculateLifecycle(regDate, override.override_date);
         const archiveInfo = lifecycle.stage === 'ARCHIVE'
@@ -221,6 +221,7 @@ export async function GET(request: Request) {
     const fetchAll = searchParams.get('fetchAll') === 'true';
     const refresh = searchParams.get('refresh') === 'true';
     const stream = searchParams.get('stream') === 'true';
+    const cacheOnly = searchParams.get('cacheOnly') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
     const size = Math.min(parseInt(searchParams.get('size') || '20'), 100);
     const name = searchParams.get('name') || '';
@@ -229,6 +230,27 @@ export async function GET(request: Request) {
 
     try {
         await ensureDbInitialized();
+
+        // cacheOnly 모드: 서버 캐시가 있으면 반환, 없으면 빈 데이터 반환 (네이버 API 호출 안 함)
+        if (cacheOnly) {
+            if (productCache && (Date.now() - productCache.timestamp) < CACHE_TTL) {
+                return handleSuccess({
+                    contents: productCache.data.contents,
+                    totalCount: productCache.data.totalCount,
+                    statusCounts: productCache.data.statusCounts,
+                    cached: true,
+                    cachedAt: new Date(productCache.timestamp).toISOString()
+                });
+            }
+            // 캐시 없음 → 빈 데이터 반환
+            return handleSuccess({
+                contents: [],
+                totalCount: 0,
+                statusCounts: { total: 0, wait: 0, sale: 0, outofstock: 0, unapproved: 0, suspension: 0, ended: 0, prohibited: 0 },
+                cached: false,
+                empty: true
+            });
+        }
 
         // Return cached data if available and not expired (fetchAll only)
         if (fetchAll && !refresh && productCache && (Date.now() - productCache.timestamp) < CACHE_TTL) {
