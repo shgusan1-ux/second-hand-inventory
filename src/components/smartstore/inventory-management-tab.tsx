@@ -177,18 +177,39 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
           return (
             <div key={p.originProductNo} className={`bg-white rounded-xl border p-3 transition-all hover:shadow-sm ${isSold || isSuspended ? 'bg-slate-50/50' : ''}`}>
               <div className="flex items-center gap-3">
-                {/* 상태 표시 아이콘 */}
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border shadow-sm ${isSold ? 'bg-red-50 border-red-100 text-red-500' :
-                    isSuspended ? 'bg-orange-50 border-orange-100 text-orange-500' :
-                      'bg-emerald-50 border-emerald-100 text-emerald-500'
-                  }`}>
-                  {isSold ? (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                  ) : isSuspended ? (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  ) : (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                  )}
+                {/* 썸네일 및 상태 아이콘 */}
+                <div className="relative shrink-0">
+                  <div className={`w-14 h-14 rounded-xl overflow-hidden border shadow-sm flex items-center justify-center ${isSold ? 'bg-red-50 border-red-100' :
+                      isSuspended ? 'bg-orange-50 border-orange-100' :
+                        'bg-emerald-50 border-emerald-100'
+                    }`}>
+                    {p.images?.[0]?.url ? (
+                      <img src={p.images[0].url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className={isSold ? 'text-red-500' : isSuspended ? 'text-orange-500' : 'text-emerald-500'}>
+                        {isSold ? (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                        ) : isSuspended ? (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        ) : (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* 이미지 위에 오버레이된 작은 상태 배지 */}
+                  <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center shadow-sm ${isSold ? 'bg-red-500 text-white' :
+                      isSuspended ? 'bg-orange-500 text-white' :
+                        'bg-emerald-500 text-white'
+                    }`}>
+                    {isSold ? (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    ) : isSuspended ? (
+                      <span className="text-[10px] font-black">!</span>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    )}
+                  </div>
                 </div>
 
                 {/* 상품 정보 */}
@@ -210,8 +231,8 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                 {/* 우측 액션/상태 */}
                 <div className="flex flex-col items-end gap-1.5">
                   <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-tighter ${isSold ? 'bg-red-500 text-white' :
-                      isSuspended ? 'bg-orange-500 text-white' :
-                        'bg-slate-900 text-white'
+                    isSuspended ? 'bg-orange-500 text-white' :
+                      'bg-slate-900 text-white'
                     }`}>
                     {isSold ? 'OUT OF STOCK' : isSuspended ? 'SUSPENDED' : 'IN STOCK'}
                   </span>
