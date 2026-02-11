@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ProductManagementTab } from '@/components/smartstore/product-management-tab';
 import { CategoryManagementTab } from '@/components/smartstore/category-management-tab';
 import { InventoryManagementTab } from '@/components/smartstore/inventory-management-tab';
@@ -107,6 +108,8 @@ export default function SmartstorePage() {
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get('q') || '';
 
   const handleProgress = useCallback((p: ProgressState) => {
     setProgress(p);
@@ -166,22 +169,36 @@ export default function SmartstorePage() {
     }
   };
 
-  // 상태별 필터링 로직 (API의 calculateStatusCounts와 동일하게 매핑)
-  const displayedProducts = statusFilter
-    ? allProducts.filter(p => {
+  // 상태별 및 검색어 필터링 로직
+  const displayedProducts = allProducts.filter(p => {
+    // 1. 상태 필터
+    let statusMatch = true;
+    if (statusFilter) {
       const status = p.statusType;
       switch (statusFilter) {
-        case 'sale': return status === 'SALE';
-        case 'outofstock': return status === 'OUTOFSTOCK';
-        case 'suspension': return status === 'SUSPENSION';
-        case 'wait': return status === 'WAIT';
-        case 'ended': return status === 'DELETE';
-        case 'unapproved': return status === 'UNAPPROVED'; // API에 추가될 경우 대비
-        case 'prohibited': return status === 'PROHIBITED'; // API에 추가될 경우 대비
-        default: return true;
+        case 'sale': statusMatch = status === 'SALE'; break;
+        case 'outofstock': statusMatch = status === 'OUTOFSTOCK'; break;
+        case 'suspension': statusMatch = status === 'SUSPENSION'; break;
+        case 'wait': statusMatch = status === 'WAIT'; break;
+        case 'ended': statusMatch = status === 'DELETE'; break;
+        case 'unapproved': statusMatch = status === 'UNAPPROVED'; break;
+        case 'prohibited': statusMatch = status === 'PROHIBITED'; break;
       }
-    })
-    : allProducts;
+    }
+
+    // 2. 검색어 필터
+    let searchMatch = true;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const name = p.name.toLowerCase();
+      const brand = p.classification?.brand?.toLowerCase() || '';
+      const productNo = String(p.originProductNo);
+
+      searchMatch = name.includes(q) || brand.includes(q) || productNo.includes(q);
+    }
+
+    return statusMatch && searchMatch;
+  });
 
   // 로딩 상태 처리
   if (isLoading || progress) {
