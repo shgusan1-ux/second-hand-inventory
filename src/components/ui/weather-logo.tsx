@@ -87,21 +87,22 @@ export function WeatherLogo({ className }: { className?: string }) {
             {/* 2. 눈 내림 효과 */}
             {isSnowy && (
                 <div className="absolute inset-x-0 -top-12 -bottom-8 z-[100] pointer-events-none overflow-visible">
-                    {[...Array(15)].map((_, i) => (
+                    {[...Array(20)].map((_, i) => (
                         <div
                             key={i}
-                            className="absolute rounded-full bg-white opacity-0 animate-snow blur-[0.2px] shadow-[0_0_3px_rgba(255,255,255,0.9)]"
+                            className="absolute rounded-full bg-white animate-snow blur-[0.2px] shadow-[0_0_2px_rgba(255,255,255,0.8)]"
                             style={{
-                                width: Math.random() * 4 + 2 + 'px',
-                                height: Math.random() * 4 + 2 + 'px',
+                                width: Math.random() * 5 + 3 + 'px',
+                                height: Math.random() * 5 + 3 + 'px',
                                 left: Math.random() * 100 + '%',
-                                animationDuration: Math.random() * 3 + 2.5 + 's',
-                                animationDelay: Math.random() * 4 + 's',
+                                animationDuration: Math.random() * 3 + 3 + 's',
+                                animationDelay: Math.random() * 5 + 's',
+                                opacity: 0.3 // 사용자 요청: 불투명도 30%
                             }}
                         />
                     ))}
                     {/* 로고 위에 살짝 쌓인 눈 강조 */}
-                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-90 blur-[1px] z-[110] shadow-[0_1px_3px_rgba(255,255,255,0.5)]" />
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-30 blur-[1px] z-[110] shadow-[0_1px_2px_rgba(255,255,255,0.3)]" />
                 </div>
             )}
 

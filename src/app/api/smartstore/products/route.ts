@@ -69,8 +69,8 @@ function processProducts(contents: any[], overrideMap: any) {
         const prodId = p.originProductNo?.toString();
         const override = overrideMap[prodId] || {};
 
-        // 라이프사이클 기준일: override_date > first_seen_at > regDate > 오늘
-        const baseDate = override.override_date || override.first_seen_at || cp.regDate || new Date().toISOString();
+        // 라이프사이클 기준일: override_date > regDate(스마트스토어 등록일) > first_seen_at > 오늘
+        const baseDate = override.override_date || cp.regDate || override.first_seen_at || new Date().toISOString();
         const prodName = override.product_name || cp.name || 'Unknown Product';
 
         const lifecycle = calculateLifecycle(baseDate);
