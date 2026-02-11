@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { Menu, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { WeatherLogo } from '@/components/ui/weather-logo';
 
 export function MobileHeader({ user }: { user?: any }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -34,8 +35,8 @@ export function MobileHeader({ user }: { user?: any }) {
                 </Button>
 
                 <div className="flex-1 flex items-center justify-center gap-2">
-                    {/* 로고: 흰색 반전 (invert) + 높이 조절 */}
-                    <img src="/logo.png" alt="Brownstreet" className="h-4 invert opacity-90" />
+                    {/* 로고: 날씨 반응형 (WeatherLogo) */}
+                    <WeatherLogo className="h-4 invert opacity-90" />
                     <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access</span>
                 </div>
 
