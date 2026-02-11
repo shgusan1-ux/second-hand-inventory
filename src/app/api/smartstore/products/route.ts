@@ -133,6 +133,40 @@ function processProducts(contents: any[], overrideMap: any) {
             classification.visionStatus = visionData?.analysis_status || 'none';
         }
 
+        // 라이프사이클 기반 내부카테고리 결정
+        // NEW(0-30일) → "NEW", CURATED(30-60일) → "CURATED"
+        // ARCHIVE(60-120일) → 브랜드 tier ARCHIVE (예: "MILITARY ARCHIVE")
+        // CLEARANCE(120일+) → "CLEARANCE"
+        let internalCategory: string;
+        const savedArchiveTier = override.internal_category; // DB에 수동 확정된 값
+
+        switch (lifecycle.stage) {
+            case 'NEW':
+                internalCategory = 'NEW';
+                break;
+            case 'CURATED':
+                internalCategory = 'CURATED';
+                break;
+            case 'ARCHIVE': {
+                // 수동 확정값 우선, 없으면 AI 분류 tier, 없으면 텍스트 분류
+                if (savedArchiveTier && savedArchiveTier.includes('ARCHIVE')) {
+                    internalCategory = savedArchiveTier;
+                } else if (classification.brandTier && classification.brandTier !== 'OTHER') {
+                    internalCategory = classification.brandTier + ' ARCHIVE';
+                } else if (archiveInfo?.category && archiveInfo.category !== 'UNCATEGORIZED') {
+                    internalCategory = archiveInfo.category + ' ARCHIVE';
+                } else {
+                    internalCategory = 'ARCHIVE';
+                }
+                break;
+            }
+            case 'CLEARANCE':
+                internalCategory = 'CLEARANCE';
+                break;
+            default:
+                internalCategory = 'NEW';
+        }
+
         return {
             ...cp,
             originProductNo: prodId,
@@ -140,7 +174,8 @@ function processProducts(contents: any[], overrideMap: any) {
             thumbnailUrl: cp.representativeImage?.url || null,
             lifecycle,
             archiveInfo,
-            internalCategory: override.internal_category || archiveInfo?.category || 'UNCATEGORIZED',
+            internalCategory,
+            archiveTier: savedArchiveTier, // 수동 확정된 아카이브 tier (lifecycle 무관하게 보존)
             classification,
             suggestedArchiveId: override.suggested_archive_id,
             suggestionReason: override.suggestion_reason,
