@@ -46,28 +46,7 @@ export default async function DashboardPage() {
           <KoreaWeatherMap />
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">(주)에이치엠이커머스 SCM 시스템</h1>
-          <p className="text-slate-500 mt-2">
-            현재 직원들이 하고 있는 모든 작업에 대해서 여기서 가능하게 구현하는 것이 최종 목표입니다.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/settings/smartstore">
-            <Button variant="outline" className="text-slate-600 border-slate-300 hover:bg-slate-50">
-              <span className="mr-2">🔧</span>
-              스토어 API 연동
-            </Button>
-          </Link>
-          <Link href="/inventory/new">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">
-              <Package className="mr-2 h-4 w-4" />
-              재고 등록
-            </Button>
-          </Link>
-        </div>
-      </div>
+
 
       {/* Hero Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
