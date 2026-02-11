@@ -29,6 +29,11 @@ export async function initDatabase() {
       await db.query(`ALTER TABLE product_overrides ADD COLUMN product_name TEXT`);
     } catch (e) { /* Column likely exists */ }
 
+    // 최초 발견일 (스마트스토어 등록일 대체)
+    try {
+      await db.query(`ALTER TABLE product_overrides ADD COLUMN first_seen_at TIMESTAMP`);
+    } catch (e) { /* Column likely exists */ }
+
     // Users 테이블 생성
     await db.query(`
       CREATE TABLE IF NOT EXISTS users (

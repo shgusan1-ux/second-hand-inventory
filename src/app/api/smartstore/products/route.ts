@@ -69,10 +69,11 @@ function processProducts(contents: any[], overrideMap: any) {
         const prodId = p.originProductNo?.toString();
         const override = overrideMap[prodId] || {};
 
-        const regDate = cp.regDate || new Date().toISOString();
+        // 라이프사이클 기준일: override_date > first_seen_at > regDate > 오늘
+        const baseDate = override.override_date || override.first_seen_at || cp.regDate || new Date().toISOString();
         const prodName = override.product_name || cp.name || 'Unknown Product';
 
-        const lifecycle = calculateLifecycle(regDate, override.override_date);
+        const lifecycle = calculateLifecycle(baseDate);
         const archiveInfo = lifecycle.stage === 'ARCHIVE'
             ? classifyArchive(prodName, [])
             : null;
@@ -251,6 +252,45 @@ async function fetchOverrideMap(ids: string[]) {
     }
 }
 
+// 최초 발견일 기록 (first_seen_at이 없는 상품에 현재 시간 저장)
+async function recordFirstSeen(ids: string[], overrideMap: any) {
+    const newIds = ids.filter(id => !overrideMap[id]?.first_seen_at);
+    if (newIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    // 배치로 upsert (50개씩)
+    for (let i = 0; i < newIds.length; i += 50) {
+        const batch = newIds.slice(i, i + 50);
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        batch.forEach((id, idx) => {
+            const base = idx * 2;
+            values.push(id, now);
+            placeholders.push(`($${base + 1}, $${base + 2})`);
+        });
+
+        try {
+            await db.query(
+                `INSERT INTO product_overrides (id, first_seen_at)
+                 VALUES ${placeholders.join(',')}
+                 ON CONFLICT (id) DO UPDATE SET
+                   first_seen_at = COALESCE(product_overrides.first_seen_at, EXCLUDED.first_seen_at)`,
+                values
+            );
+        } catch (e) {
+            console.warn('[recordFirstSeen] batch failed:', e);
+        }
+    }
+
+    // overrideMap에도 반영 (processProducts에서 사용)
+    newIds.forEach(id => {
+        if (!overrideMap[id]) overrideMap[id] = {};
+        overrideMap[id].first_seen_at = now;
+    });
+
+    console.log(`[recordFirstSeen] ${newIds.length}개 상품 최초 발견일 기록`);
+}
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const fetchAll = searchParams.get('fetchAll') === 'true';
@@ -398,6 +438,9 @@ export async function GET(request: Request) {
                         // Get overrides
                         const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
                         const overrideMap = await fetchOverrideMap(ids);
+
+                        // first_seen_at이 없는 상품에 현재 시간 기록
+                        await recordFirstSeen(ids, overrideMap);
 
                         send({ type: 'progress', percent: 90, message: '분류 처리 중...' });
 
