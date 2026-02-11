@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { OceanVideoBackground } from '@/components/ui/ocean-video-background';
+import { WeatherLogo } from '@/components/ui/weather-logo';
 
 const QUOTES = [
     "성공은 종착점이 아니라 여정이다.",
@@ -106,7 +107,10 @@ export default function LoginPage() {
             </div>
 
             <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-8">
-                <Image src="/logo.png" alt="Brown Street" width={160} height={50} className="brightness-0 invert opacity-60" />
+                <div className="relative group">
+                    <div className="absolute inset-0 bg-black/60 blur-2xl rounded-full scale-150 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    <WeatherLogo className="h-10 invert opacity-100 relative z-10" />
+                </div>
             </div>
         </OceanVideoBackground>
     );

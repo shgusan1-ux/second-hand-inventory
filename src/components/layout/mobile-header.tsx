@@ -68,7 +68,7 @@ export function MobileHeader({ user }: { user?: any }) {
     };
 
     return (
-        <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50">
+        <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50 overflow-visible">
             {/* Header Bar */}
             <div className="h-14 border-b border-slate-700/50 bg-black/80 backdrop-blur-md flex items-center px-3 relative transition-all overflow-visible">
                 {isSearchOpen ? (
@@ -97,11 +97,14 @@ export function MobileHeader({ user }: { user?: any }) {
                         </Button>
 
                         <div
-                            className="flex-1 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-transform"
+                            className="flex-1 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-transform group"
                             onClick={() => router.push('/')}
                         >
                             {/* 로고: 날씨 반응형 (WeatherLogo) */}
-                            <WeatherLogo className="h-4 invert opacity-90" />
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-black/40 blur-lg rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <WeatherLogo className="h-4 invert opacity-90 relative z-10" />
+                            </div>
                             <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access v2.1</span>
                         </div>
 
