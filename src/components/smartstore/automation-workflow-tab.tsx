@@ -28,10 +28,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     const clearanceProducts = products.filter(p => p.lifecycle?.stage === 'CLEARANCE');
     const discountable = clearanceProducts.filter(p => p.statusType === 'SALE').length;
 
-    const outOfStock = products.filter(p => p.stockQuantity === 0 && p.statusType === 'SALE').length;
-    const lowStock = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= 3).length;
-
-    return { archiveUncategorized, discountable, outOfStock, lowStock };
+    return { archiveUncategorized, discountable };
   }, [products]);
 
   const automations = [
@@ -61,25 +58,11 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       color: 'amber',
       ready: stats.discountable > 0,
     },
-    {
-      id: 'stock-alert',
-      title: '재고 알림',
-      description: '품절 상품 자동 상태 변경 및 재고 부족 알림을 생성합니다.',
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
-      ),
-      stat: `${stats.outOfStock}개 품절, ${stats.lowStock}개 부족`,
-      color: 'red',
-      ready: stats.outOfStock > 0 || stats.lowStock > 0,
-    },
   ];
 
   const colorMap: Record<string, { bg: string; text: string; border: string; button: string }> = {
     blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', button: 'bg-blue-600 hover:bg-blue-700' },
     amber: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', button: 'bg-amber-600 hover:bg-amber-700' },
-    red: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', button: 'bg-red-600 hover:bg-red-700' },
   };
 
   return (
