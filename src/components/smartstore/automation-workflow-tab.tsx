@@ -21,8 +21,9 @@ interface Product {
   stockQuantity: number;
   statusType: string;
   thumbnailUrl?: string | null;
-  lifecycle?: { stage: string; daysSince: number };
+  lifecycle?: { stage: string; daysSince: number; discount: number };
   internalCategory?: string;
+  archiveTier?: string; // 수동 확정된 아카이브 tier (lifecycle 무관)
   classification?: Classification & { visionStatus?: string; visionGrade?: string };
 }
 
@@ -152,11 +153,18 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10);
 
+    // 라이프사이클 단계별 카운트
+    const byLifecycle: Record<string, number> = { NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0 };
+    products.forEach(p => {
+      const stage = p.lifecycle?.stage || 'NEW';
+      byLifecycle[stage] = (byLifecycle[stage] || 0) + 1;
+    });
+
     return {
       total, classifiedCount, avgConfidence,
       byClothingType, byBrandTier, byGender,
       highConf, midConf, lowConf,
-      topBrands
+      topBrands, byLifecycle
     };
   }, [products]);
 
@@ -502,6 +510,26 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                     </span>
                   </div>
                 ))}
+            </div>
+          </div>
+
+          {/* 라이프사이클 단계별 현황 */}
+          <div className="bg-white rounded-xl border p-4">
+            <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider">상품 라이프사이클</h4>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { key: 'NEW', label: 'NEW', sub: '0-30일 · 할인없음', color: 'bg-emerald-500', textColor: 'text-emerald-600' },
+                { key: 'CURATED', label: 'CURATED', sub: '30-60일 · 20%할인', color: 'bg-blue-500', textColor: 'text-blue-600' },
+                { key: 'ARCHIVE', label: 'ARCHIVE', sub: '60-120일 · 아카이브', color: 'bg-amber-500', textColor: 'text-amber-600' },
+                { key: 'CLEARANCE', label: 'CLEARANCE', sub: '120일+ · 클리어런스', color: 'bg-red-500', textColor: 'text-red-600' },
+              ].map(lc => (
+                <div key={lc.key} className="text-center p-2 rounded-lg bg-slate-50">
+                  <div className={`w-full h-1 ${lc.color} rounded-full mb-2`} />
+                  <p className={`text-lg font-black ${lc.textColor}`}>{stats.byLifecycle[lc.key] || 0}</p>
+                  <p className="text-[9px] font-bold text-slate-600">{lc.label}</p>
+                  <p className="text-[8px] text-slate-400 mt-0.5">{lc.sub}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -932,42 +960,58 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                           <option key={key} value={key} className="text-slate-800 bg-white">{label.replace(' ARCHIVE', '')}</option>
                         ))}
                       </select>
-                      {/* 확정 버튼 */}
-                      {confirmedSet.has(entry.productNo) ? (
-                        <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-600">확정됨</span>
-                      ) : (
-                        <button
-                          disabled={confirmingSet.has(entry.productNo)}
-                          onClick={async () => {
-                            const tier = entry.result.brandTier;
-                            const category = tierLabel[tier] || tier;
-                            setConfirmingSet(prev => new Set(prev).add(entry.productNo));
-                            try {
-                              await fetch('/api/smartstore/products/category/bulk', {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  productNos: [entry.productNo],
-                                  category
-                                })
-                              });
-                              setConfirmedSet(prev => new Set(prev).add(entry.productNo));
-                              import('sonner').then(({ toast }) => toast.success(`#${entry.productNo} → ${category} 확정`));
-                            } catch {
-                              import('sonner').then(({ toast }) => toast.error('확정 실패'));
-                            } finally {
-                              setConfirmingSet(prev => {
-                                const next = new Set(prev);
-                                next.delete(entry.productNo);
-                                return next;
-                              });
-                            }
-                          }}
-                          className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500 text-white hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          {confirmingSet.has(entry.productNo) ? '...' : '확정'}
-                        </button>
-                      )}
+                      {/* 확정 버튼 + 라이프사이클 표시 */}
+                      {(() => {
+                        const prod = products.find(p => p.originProductNo === entry.productNo);
+                        const stage = prod?.lifecycle?.stage || 'NEW';
+                        const days = prod?.lifecycle?.daysSince ?? 0;
+                        const stageLabel: Record<string, string> = { NEW: 'NEW', CURATED: 'CURATED', ARCHIVE: 'ARCHIVE', CLEARANCE: 'CLEARANCE' };
+                        const stageColor: Record<string, string> = { NEW: 'bg-emerald-100 text-emerald-600', CURATED: 'bg-blue-100 text-blue-600', ARCHIVE: 'bg-amber-100 text-amber-600', CLEARANCE: 'bg-red-100 text-red-600' };
+                        const isArchiveReady = stage === 'ARCHIVE' || stage === 'CLEARANCE';
+                        return (
+                          <>
+                            <span className={`px-1 py-0.5 rounded text-[8px] font-bold ${stageColor[stage] || 'bg-slate-100 text-slate-500'}`}>
+                              {stageLabel[stage]} {days}일
+                            </span>
+                            {confirmedSet.has(entry.productNo) ? (
+                              <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-600">확정됨</span>
+                            ) : (
+                              <button
+                                disabled={confirmingSet.has(entry.productNo)}
+                                onClick={async () => {
+                                  const tier = entry.result.brandTier;
+                                  const category = tierLabel[tier] || tier;
+                                  setConfirmingSet(prev => new Set(prev).add(entry.productNo));
+                                  try {
+                                    await fetch('/api/smartstore/products/category/bulk', {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        productNos: [entry.productNo],
+                                        category
+                                      })
+                                    });
+                                    setConfirmedSet(prev => new Set(prev).add(entry.productNo));
+                                    const note = !isArchiveReady ? ` (${60 - days}일 후 ARCHIVE 적용)` : '';
+                                    import('sonner').then(({ toast }) => toast.success(`#${entry.productNo} → ${category} 확정${note}`));
+                                  } catch {
+                                    import('sonner').then(({ toast }) => toast.error('확정 실패'));
+                                  } finally {
+                                    setConfirmingSet(prev => {
+                                      const next = new Set(prev);
+                                      next.delete(entry.productNo);
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500 text-white hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50"
+                              >
+                                {confirmingSet.has(entry.productNo) ? '...' : '확정'}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}

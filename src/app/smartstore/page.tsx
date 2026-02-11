@@ -23,11 +23,13 @@ interface Product {
   lifecycle?: {
     stage: string;
     daysSince: number;
+    discount: number;
   };
   archiveInfo?: {
     category: string;
   };
   internalCategory?: string;
+  archiveTier?: string;
   classification?: {
     brand: string;
     brandTier: string;
