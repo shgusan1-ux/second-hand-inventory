@@ -61,9 +61,10 @@ export function WeatherLogo({ className }: { className?: string }) {
     // 95-99: Thunderstorm
 
     const isRainy = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(wCode);
-    const isSnowy = [71, 73, 75, 77, 85, 86].includes(wCode);
+    // 겨울 시즌 및 테스트를 위해 눈 내림 효과를 강제로 활성화합니다 (실제 날씨가 아니어도 작동)
+    const isSnowy = true; // [71, 73, 75, 77, 85, 86].includes(wCode);
     const isThunder = [95, 96, 99].includes(wCode);
-    const isSunny = [0, 1].includes(wCode);
+    const isSunny = [0, 1].includes(wCode) && !isSnowy;
 
     return (
         <div className="relative inline-block group overflow-visible z-[60]">
