@@ -478,6 +478,13 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
 
             <div className="flex gap-2">
               <button
+                onClick={() => startVisionBatch(1)}
+                disabled={batchRunning}
+                className="py-1.5 px-3 text-[11px] font-bold text-violet-600 bg-white border border-violet-200 hover:bg-violet-50 rounded-lg disabled:opacity-50"
+              >
+                {batchRunning ? '...' : '1개'}
+              </button>
+              <button
                 onClick={() => startVisionBatch(20)}
                 disabled={batchRunning}
                 className="flex-1 py-1.5 text-[11px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg disabled:opacity-50"

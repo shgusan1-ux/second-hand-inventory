@@ -253,16 +253,22 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                     </span>
                   </div>
                   {/* 판매자코드 + 등록일 */}
-                  {(p.sellerManagementCode || p.regDate) && (
-                    <div className="flex items-center gap-2 mb-1">
-                      {p.sellerManagementCode && (
-                        <span className="text-[9px] font-mono text-blue-500 bg-blue-50 px-1 py-px rounded">{p.sellerManagementCode}</span>
-                      )}
-                      {p.regDate && (
-                        <span className="text-[9px] text-slate-400">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>
-                      )}
-                    </div>
-                  )}
+                  {/* 판매자코드 + 등록일 (필수 노출) */}
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    {p.sellerManagementCode ? (
+                      <span className="text-[10px] font-mono font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100">
+                        {p.sellerManagementCode}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-300 font-mono">-</span>
+                    )}
+                    <span className="w-px h-2.5 bg-slate-200"></span>
+                    {p.regDate && (
+                      <span className="text-[10px] text-slate-500 font-medium tracking-tight">
+                        {new Date(p.regDate).toLocaleDateString('ko-KR')}
+                      </span>
+                    )}
+                  </div>
                   <p className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-1.5">{p.name}</p>
                 </div>
 
@@ -330,14 +336,13 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
                   <div className="flex gap-2 flex-wrap">
                     {/* 브랜드 + 티어 */}
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                      p.classification.brandTier === 'LUXURY' ? 'bg-purple-100 text-purple-800' :
-                      p.classification.brandTier === 'PREMIUM' ? 'bg-indigo-100 text-indigo-700' :
-                      p.classification.brandTier === 'DESIGNER' ? 'bg-blue-100 text-blue-700' :
-                      p.classification.brandTier === 'CONTEMPORARY' ? 'bg-cyan-100 text-cyan-700' :
-                      p.classification.brandTier === 'SPORTSWEAR' ? 'bg-orange-100 text-orange-700' :
-                      'bg-slate-100 text-slate-600'
-                    }`}>
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.brandTier === 'LUXURY' ? 'bg-purple-100 text-purple-800' :
+                        p.classification.brandTier === 'PREMIUM' ? 'bg-indigo-100 text-indigo-700' :
+                          p.classification.brandTier === 'DESIGNER' ? 'bg-blue-100 text-blue-700' :
+                            p.classification.brandTier === 'CONTEMPORARY' ? 'bg-cyan-100 text-cyan-700' :
+                              p.classification.brandTier === 'SPORTSWEAR' ? 'bg-orange-100 text-orange-700' :
+                                'bg-slate-100 text-slate-600'
+                      }`}>
                       {p.classification.brand || extractBrand(p.name)}
                       <span className="opacity-60 text-[8px]">{p.classification.brandTier}</span>
                     </span>
@@ -346,9 +351,9 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                     {p.classification.clothingType !== 'UNKNOWN' && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
                         {p.classification.clothingType === 'OUTERWEAR' ? '아우터' :
-                         p.classification.clothingType === 'TOPS' ? '상의' :
-                         p.classification.clothingType === 'BOTTOMS' ? '하의' :
-                         p.classification.clothingType === 'DRESS' ? '원피스' : '기타'}
+                          p.classification.clothingType === 'TOPS' ? '상의' :
+                            p.classification.clothingType === 'BOTTOMS' ? '하의' :
+                              p.classification.clothingType === 'DRESS' ? '원피스' : '기타'}
                         {p.classification.clothingSubType !== 'UNKNOWN' && (
                           <span className="text-[8px] opacity-70">{p.classification.clothingSubType}</span>
                         )}
@@ -356,12 +361,11 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                     )}
 
                     {/* 성별 */}
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                      p.classification.gender === 'MAN' ? 'bg-blue-100 text-blue-700' :
-                      p.classification.gender === 'WOMAN' ? 'bg-pink-100 text-pink-700' :
-                      p.classification.gender === 'KIDS' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.gender === 'MAN' ? 'bg-blue-100 text-blue-700' :
+                        p.classification.gender === 'WOMAN' ? 'bg-pink-100 text-pink-700' :
+                          p.classification.gender === 'KIDS' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-slate-100 text-slate-500'
+                      }`}>
                       {p.classification.gender === 'MAN' ? 'M' : p.classification.gender === 'WOMAN' ? 'W' : p.classification.gender === 'KIDS' ? 'K' : '-'}
                       {p.classification.size && p.classification.size !== 'FREE' && (
                         <span className="ml-0.5 opacity-70">/{p.classification.size}</span>
@@ -407,8 +411,8 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
                   className={`min-w-[32px] h-8 rounded-lg text-xs font-bold transition-all ${currentPage === pageNum
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                      : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
                 >
                   {pageNum}
