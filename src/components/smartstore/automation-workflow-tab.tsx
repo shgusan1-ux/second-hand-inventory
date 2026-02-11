@@ -21,6 +21,7 @@ interface Product {
   statusType: string;
   thumbnailUrl?: string | null;
   lifecycle?: { stage: string; daysSince: number };
+  internalCategory?: string;
   classification?: Classification & { visionStatus?: string; visionGrade?: string };
 }
 
@@ -355,6 +356,48 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     BRITISH: 'bg-indigo-500'
   };
 
+  // 카테고리 저장 (일괄 적용)
+  const [savingTier, setSavingTier] = useState<string | null>(null);
+
+  const handleSaveCategory = async (tierKey: string) => {
+    const targetCategory = tierLabel[tierKey]; // e.g., "MILITARY ARCHIVE"
+    // AI 분류가 해당 tier이면서, 실제 카테고리는 아직 적용되지 않은 상품들
+    const targetProducts = products.filter(p =>
+      p.classification?.brandTier === tierKey &&
+      p.internalCategory !== targetCategory
+    );
+
+    if (targetProducts.length === 0) {
+      import('sonner').then(({ toast }) => toast.info('저장할 새로운 상품이 없습니다.'));
+      return;
+    }
+
+    if (!confirm(`${targetCategory}로 분류된 ${targetProducts.length}개 상품을 해당 카테고리로 확정하시겠습니까?`)) return;
+
+    setSavingTier(tierKey);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productNos: targetProducts.map(p => p.originProductNo),
+          category: targetCategory
+        })
+      });
+
+      if (res.ok) {
+        import('sonner').then(({ toast }) => toast.success(`${targetProducts.length}개 상품 저장 완료`));
+        onRefresh();
+      } else {
+        throw new Error('저장 실패');
+      }
+    } catch (err) {
+      import('sonner').then(({ toast }) => toast.error('카테고리 저장 중 오류가 발생했습니다.'));
+    } finally {
+      setSavingTier(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* 헤더 */}
@@ -437,16 +480,43 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                   { key: 'HERITAGE', label: 'HERITAGE', color: 'bg-blue-500' },
                   { key: 'BRITISH', label: 'BRITISH', color: 'bg-indigo-500' },
                 ].map(cat => {
-                  const count = products.filter(p =>
+                  const totalCount = products.filter(p =>
                     p.classification?.brandTier === cat.key
                   ).length;
+
+                  const pendingCount = products.filter(p =>
+                    p.classification?.brandTier === cat.key &&
+                    p.internalCategory !== tierLabel[cat.key]
+                  ).length;
+
                   return (
-                    <div key={cat.key} className="flex items-center justify-between">
+                    <div key={cat.key} className="flex items-center justify-between group h-7">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${cat.color}`} />
                         <span className="text-[10px] font-bold text-slate-600">{cat.label}</span>
                       </div>
-                      <span className="text-[11px] font-black text-slate-800">{count}</span>
+                      <div className="flex items-center gap-2">
+                        {pendingCount > 0 && (
+                          <button
+                            onClick={() => handleSaveCategory(cat.key)}
+                            disabled={savingTier === cat.key}
+                            className="px-1.5 py-0.5 text-[9px] font-bold text-white bg-blue-500 hover:bg-blue-600 rounded flex items-center gap-1 transition-colors animate-in fade-in zoom-in duration-200"
+                          >
+                            {savingTier === cat.key ? (
+                              <svg className="animate-spin h-2.5 w-2.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                            )}
+                            저장 ({pendingCount})
+                          </button>
+                        )}
+                        <span className="text-[11px] font-black text-slate-800 w-8 text-right">{totalCount}</span>
+                      </div>
                     </div>
                   );
                 })}
