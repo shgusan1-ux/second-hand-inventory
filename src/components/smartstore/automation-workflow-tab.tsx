@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 interface Classification {
   brand: string;
@@ -55,6 +55,34 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
   // Vision 배치 상태
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ completed: number; failed: number; total: number; percent: number } | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (batchRunning) {
+      interval = setInterval(() => {
+        setElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [batchRunning]);
+
+  // 진행 상태에 따른 메시지 생성
+  const getProgressMessage = () => {
+    if (!batchProgress) return '대기 중...';
+    if (batchProgress.percent === 100) return '분석 완료!';
+
+    // 단순화된 작업 메시지 로직
+    const currentItemIndex = batchProgress.completed + batchProgress.failed + 1;
+    const isAnalyzing = batchProgress.percent < 90;
+
+    if (isAnalyzing) {
+      return `상품 #${currentItemIndex} 정밀 분석 중... (패턴, 재질, 오염도)`;
+    } else {
+      return '데이터베이스 동기화 및 저장 중...';
+    }
+  };
 
   // 브랜드 관리 상태
   const [showBrands, setShowBrands] = useState(false);
@@ -144,6 +172,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     }));
 
     setBatchRunning(true);
+    setElapsedSeconds(0);
     setBatchProgress({ completed: 0, failed: 0, total: batch.length, percent: 0 });
 
     try {
@@ -560,16 +589,34 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
             </div>
 
             {batchProgress && (
-              <div className="mb-3">
-                <div className="flex justify-between text-[10px] mb-1">
-                  <span className="text-slate-500">{batchProgress.completed + batchProgress.failed}/{batchProgress.total}</span>
-                  <span className="font-bold text-violet-600">{batchProgress.percent}%</span>
+              <div className="mb-4 bg-white/50 rounded-lg p-3 border border-violet-100 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-bold text-violet-700 animate-pulse">
+                      {batchRunning ? getProgressMessage() : '대기 중'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {batchProgress.completed + batchProgress.failed} / {batchProgress.total}개 완료
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-mono font-bold text-slate-700 block bg-slate-100 px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+                      {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-widest scale-75 origin-right font-bold">Elapsed</span>
+                  </div>
                 </div>
-                {batchProgress.failed > 0 && (
-                  <p className="text-[10px] text-red-500 mt-1">{batchProgress.failed}개 실패</p>
-                )}
-                <div className="w-full h-1.5 bg-violet-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${batchProgress.percent}%` }} />
+
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-1 relative border border-slate-100">
+                  <div
+                    className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-300 relative overflow-hidden"
+                    style={{ width: `${batchProgress.percent}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between text-[9px] font-medium text-slate-500">
+                  <span>진행률 {batchProgress.percent}%</span>
+                  {batchProgress.failed > 0 && <span className="text-red-500 font-bold ml-auto">{batchProgress.failed}개 실패</span>}
                 </div>
               </div>
             )}
