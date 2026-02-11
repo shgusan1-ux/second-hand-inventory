@@ -73,9 +73,9 @@ function ProductList({ items, tag, color, discount, selectedIds, onSelectChange 
                             <thead className="[&_tr]:border-b bg-slate-50 sticky top-0 z-10">
                                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                                     <th className="h-8 md:h-10 px-2 md:px-4 align-middle font-medium text-muted-foreground w-10">
-                                        <input 
-                                            type="checkbox" 
-                                            className="rounded border-slate-300" 
+                                        <input
+                                            type="checkbox"
+                                            className="rounded border-slate-300"
                                             onChange={(e) => {
                                                 items.forEach(item => onSelectChange(item.id, e.target.checked));
                                             }}
@@ -105,8 +105,8 @@ function ProductList({ items, tag, color, discount, selectedIds, onSelectChange 
                                     return (
                                         <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${isSelected ? 'bg-indigo-50' : ''}`}>
                                             <td className="p-2 md:p-3 align-middle">
-                                                <input 
-                                                    type="checkbox" 
+                                                <input
+                                                    type="checkbox"
                                                     className="rounded border-slate-300"
                                                     checked={isSelected}
                                                     onChange={(e) => onSelectChange(item.id, e.target.checked)}
@@ -169,7 +169,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
 
     const onReclassify = async () => {
         if (!confirm('설정된 규칙에 따라 모든 상품을 다시 분류하시겠습니까? (잠긴 상품 제외)')) return;
-        
+
         setIsReclassifying(true);
         try {
             const res = await fetch('/api/strategy/reclassify', { method: 'POST' });
@@ -240,21 +240,21 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                     <RefreshCw className="w-4 h-4" /> 네이버 주문 조회 테스트
                 </Button>
                 <div className="h-6 w-[1px] bg-slate-200 mx-2 hidden md:block" />
-                <Button 
-                    variant="default" 
-                    size="sm" 
-                    onClick={onReclassify} 
+                <Button
+                    variant="default"
+                    size="sm"
+                    onClick={onReclassify}
                     disabled={isReclassifying}
                     className="bg-slate-900 hover:bg-slate-800 gap-2"
                 >
-                    <RefreshCw className={`w-4 h-4 ${isReclassifying ? 'animate-spin' : ''}`} /> 
+                    <RefreshCw className={`w-4 h-4 ${isReclassifying ? 'animate-spin' : ''}`} />
                     {isReclassifying ? '분류 중...' : '전체 재분류 실행'}
                 </Button>
 
                 {selectedIds.length > 0 && (
                     <div className="flex items-center gap-2 ml-auto animate-in fade-in slide-in-from-right-2">
                         <span className="text-sm font-medium text-indigo-600">{selectedIds.length}개 선택됨</span>
-                        <select 
+                        <select
                             className="text-sm border rounded px-2 py-1 bg-white"
                             onChange={(e) => onBulkMove(e.target.value)}
                             disabled={isMoving}
@@ -265,7 +265,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                             <option value="MILITARY">MILITARY (고정)</option>
                             <option value="WORKWEAR">WORKWEAR (고정)</option>
                             <option value="JAPAN">JAPAN (고정)</option>
-                            <option value="EUROPE">EUROPE (고정)</option>
+                            <option value="HERITAGE">HERITAGE (고정)</option>
                             <option value="BRITISH">BRITISH (고정)</option>
                             <option value="CLEARANCE">CLEARANCE (고정)</option>
                             <option value="ETC">ETC (고정)</option>
@@ -304,8 +304,8 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         <TabsTrigger value="japan" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
                             JAPAN <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.japanArchive.length}</Badge>
                         </TabsTrigger>
-                        <TabsTrigger value="europe" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
-                            EUROPE <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.heritageEurope.length}</Badge>
+                        <TabsTrigger value="heritage" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
+                            HERITAGE <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.heritageEurope.length}</Badge>
                         </TabsTrigger>
                         <TabsTrigger value="british" className="whitespace-nowrap text-xs md:text-sm px-2 md:px-3 py-2">
                             BRITISH <Badge variant="secondary" className="ml-1 h-4 md:h-5 px-1 text-[10px] md:text-xs">{groups.britishArchive.length}</Badge>
@@ -405,19 +405,19 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                 </Card>
             </TabsContent>
 
-            <TabsContent value="europe" className="mt-0">
+            <TabsContent value="heritage" className="mt-0">
                 <Card>
                     <CardHeader className="p-4 md:p-6">
                         <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                             <Crown className="w-4 h-4 md:w-5 md:h-5 text-purple-600" />
-                            HERITAGE EUROPE - 40% 할인
+                            HERITAGE ARCHIVE - 40% 할인
                         </CardTitle>
                         <CardDescription className="text-xs md:text-sm">
-                            유럽 헤리티지 브랜드 (Barbour, Burberry, Aquascutum 등)
+                            전통 헤리티지 브랜드 (Ralph Lauren, Barbour, Burberry 등)
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.heritageEurope} tag="EUROPE" color="bg-purple-600" discount={40} categoryName="EUROPE" />
+                        <ProductList items={groups.heritageEurope} tag="HERITAGE" color="bg-purple-600" discount={40} categoryName="HERITAGE" />
                     </CardContent>
                 </Card>
             </TabsContent>

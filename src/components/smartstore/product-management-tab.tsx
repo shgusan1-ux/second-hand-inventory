@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+type VisionStatus = 'none' | 'pending' | 'processing' | 'completed' | 'failed';
+
 interface Product {
   originProductNo: string;
   channelProductNo: number;
@@ -21,11 +23,33 @@ interface Product {
   inferredBrand?: string;
   ocrText?: string;
   isApproved?: boolean;
+  classification?: {
+    brand: string;
+    brandTier: string;
+    gender: string;
+    size: string;
+    clothingType: string;
+    clothingSubType: string;
+    confidence: number;
+    suggestedNaverCategory?: string;
+    visionStatus?: VisionStatus;
+    visionGrade?: string;
+    visionColors?: string[];
+  };
 }
 
 interface ProductManagementTabProps {
   products: Product[];
   onRefresh: () => void;
+}
+
+// 상품명에서 브랜드 추출: 한글 나오기 전까지 영문+특수문자 부분
+function extractBrand(name: string): string {
+  // "DOLCE&GABBANA 다크블루..." → "DOLCE&GABBANA"
+  // "URBAN RESEARCH 어반 리서치..." → "URBAN RESEARCH"
+  // "POLO RALPH LAUREN 폴로..." → "POLO RALPH LAUREN"
+  const match = name.match(/^([A-Z0-9&.'\-\s]+?)(?=\s+[가-힣])/);
+  return match ? match[1].trim() : name.split(' ')[0];
 }
 
 export function ProductManagementTab({ products, onRefresh }: ProductManagementTabProps) {
@@ -34,6 +58,38 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+
+  // 개별 Vision 분석
+  const analyzeProduct = async (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    const id = product.originProductNo;
+    if (analyzingIds.has(id)) return;
+
+    setAnalyzingIds(prev => new Set(prev).add(id));
+    try {
+      const res = await fetch('/api/smartstore/vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originProductNo: id,
+          name: product.name,
+          imageUrl: product.thumbnailUrl
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Vision 분석 완료: ${product.name.slice(0, 20)}...`);
+        onRefresh();
+      } else {
+        toast.error(data.error || '분석 실패');
+      }
+    } catch (err: any) {
+      toast.error('분석 오류: ' + err.message);
+    } finally {
+      setAnalyzingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+    }
+  };
 
   const handleCopy = (e: React.MouseEvent, text: string) => {
     e.stopPropagation();
@@ -196,6 +252,17 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                       {p.internalCategory}
                     </span>
                   </div>
+                  {/* 판매자코드 + 등록일 */}
+                  {(p.sellerManagementCode || p.regDate) && (
+                    <div className="flex items-center gap-2 mb-1">
+                      {p.sellerManagementCode && (
+                        <span className="text-[9px] font-mono text-blue-500 bg-blue-50 px-1 py-px rounded">{p.sellerManagementCode}</span>
+                      )}
+                      {p.regDate && (
+                        <span className="text-[9px] text-slate-400">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>
+                      )}
+                    </div>
+                  )}
                   <p className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-1.5">{p.name}</p>
                 </div>
 
@@ -215,45 +282,99 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                       {p.lifecycle.stage}
                     </span>
                   )}
+
+                  {/* Vision 상태 배지 */}
+                  {p.classification?.visionStatus === 'completed' ? (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700">
+                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      {p.classification.visionGrade || 'A급'}
+                    </span>
+                  ) : p.classification?.visionStatus === 'processing' || analyzingIds.has(p.originProductNo) ? (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-600 animate-pulse">
+                      분석중
+                    </span>
+                  ) : p.thumbnailUrl ? (
+                    <button
+                      onClick={(e) => analyzeProduct(e, p)}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-600 transition-colors"
+                    >
+                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      분석
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            {/* AI Inference Section */}
-            {(p.internalCategory === 'UNCATEGORIZED' || p.suggestedArchiveId || p.inferredBrand) && (
+            {/* AI 다차원 분류 결과 */}
+            {p.classification && (
               <div className="mt-3 pt-3 border-t border-dashed border-slate-100">
-                <div className="bg-slate-50 rounded-lg p-2.5 space-y-2">
+                <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-lg p-2.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">AI 인공지능 추론</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">AI 다차원 분류</span>
                     </div>
-                    {(p.suggestionReason || p.ocrText) && (
-                      <span className="text-[9px] text-slate-400 bg-white px-1.5 py-0.5 rounded-full border border-slate-100 shadow-sm">
-                        OCR/상세설명 기반
+                    <div className="flex items-center gap-1">
+                      <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${p.classification.confidence >= 70 ? 'bg-emerald-500' : p.classification.confidence >= 40 ? 'bg-amber-500' : 'bg-red-400'}`}
+                          style={{ width: `${p.classification.confidence}%` }}
+                        />
+                      </div>
+                      <span className={`text-[9px] font-black ${p.classification.confidence >= 70 ? 'text-emerald-600' : p.classification.confidence >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
+                        {p.classification.confidence}%
                       </span>
-                    )}
+                    </div>
                   </div>
 
-                  <div className="flex gap-3">
-                    <div className="flex-1 border-r border-slate-200 pr-2">
-                      <p className="text-[10px] text-slate-400 mb-0.5 font-medium">추천 브랜드</p>
-                      <p className="text-[11px] font-black text-slate-800">
-                        {p.inferredBrand || (p.name.split(' ')[0]) || '-'}
-                      </p>
-                    </div>
-                    <div className="flex-[2]">
-                      <p className="text-[10px] text-slate-400 mb-0.5 font-medium">추천 카테고리 / 근거</p>
-                      <p className="text-[11px] font-bold text-slate-600 line-clamp-1">
-                        <span className="text-blue-600">[{p.suggestedArchiveId || 'N/A'}]</span> {p.suggestionReason || '분석 중...'}
-                      </p>
-                    </div>
-                    <div className="flex items-end shrink-0">
-                      <button className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black px-2.5 py-1.5 rounded-md shadow-sm transition-colors active:scale-95">
-                        지정 승인
-                      </button>
-                    </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {/* 브랜드 + 티어 */}
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      p.classification.brandTier === 'LUXURY' ? 'bg-purple-100 text-purple-800' :
+                      p.classification.brandTier === 'PREMIUM' ? 'bg-indigo-100 text-indigo-700' :
+                      p.classification.brandTier === 'DESIGNER' ? 'bg-blue-100 text-blue-700' :
+                      p.classification.brandTier === 'CONTEMPORARY' ? 'bg-cyan-100 text-cyan-700' :
+                      p.classification.brandTier === 'SPORTSWEAR' ? 'bg-orange-100 text-orange-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {p.classification.brand || extractBrand(p.name)}
+                      <span className="opacity-60 text-[8px]">{p.classification.brandTier}</span>
+                    </span>
+
+                    {/* 의류 타입 */}
+                    {p.classification.clothingType !== 'UNKNOWN' && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
+                        {p.classification.clothingType === 'OUTERWEAR' ? '아우터' :
+                         p.classification.clothingType === 'TOPS' ? '상의' :
+                         p.classification.clothingType === 'BOTTOMS' ? '하의' :
+                         p.classification.clothingType === 'DRESS' ? '원피스' : '기타'}
+                        {p.classification.clothingSubType !== 'UNKNOWN' && (
+                          <span className="text-[8px] opacity-70">{p.classification.clothingSubType}</span>
+                        )}
+                      </span>
+                    )}
+
+                    {/* 성별 */}
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      p.classification.gender === 'MAN' ? 'bg-blue-100 text-blue-700' :
+                      p.classification.gender === 'WOMAN' ? 'bg-pink-100 text-pink-700' :
+                      p.classification.gender === 'KIDS' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-slate-100 text-slate-500'
+                    }`}>
+                      {p.classification.gender === 'MAN' ? 'M' : p.classification.gender === 'WOMAN' ? 'W' : p.classification.gender === 'KIDS' ? 'K' : '-'}
+                      {p.classification.size && p.classification.size !== 'FREE' && (
+                        <span className="ml-0.5 opacity-70">/{p.classification.size}</span>
+                      )}
+                    </span>
                   </div>
+
+                  {/* 네이버 카테고리 제안 */}
+                  {p.classification.suggestedNaverCategory && (
+                    <p className="text-[9px] text-slate-400 truncate">
+                      <span className="font-bold text-blue-500">네이버</span> {p.classification.suggestedNaverCategory}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

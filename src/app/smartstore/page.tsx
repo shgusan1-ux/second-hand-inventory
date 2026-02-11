@@ -27,6 +27,16 @@ interface Product {
     category: string;
   };
   internalCategory?: string;
+  classification?: {
+    brand: string;
+    brandTier: string;
+    gender: string;
+    size: string;
+    clothingType: string;
+    clothingSubType: string;
+    confidence: number;
+    suggestedNaverCategory?: string;
+  };
 }
 
 interface ProgressState {

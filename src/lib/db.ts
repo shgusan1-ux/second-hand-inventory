@@ -235,6 +235,49 @@ async function initTables() {
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_archive ON naver_product_map(archive_category_id);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_status ON naver_product_map(status_type);`);
 
+    // Vision 분석 결과 테이블
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS product_vision_analysis (
+        origin_product_no TEXT PRIMARY KEY,
+        vision_brand TEXT,
+        vision_clothing_type TEXT,
+        vision_clothing_sub_type TEXT,
+        vision_gender TEXT,
+        vision_grade TEXT,
+        vision_grade_reason TEXT,
+        vision_color TEXT,
+        vision_pattern TEXT,
+        vision_fabric TEXT,
+        vision_size TEXT,
+        vision_confidence INTEGER DEFAULT 0,
+        merged_confidence INTEGER DEFAULT 0,
+        image_urls TEXT,
+        raw_response TEXT,
+        analysis_status TEXT DEFAULT 'pending',
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_vision_status ON product_vision_analysis(analysis_status);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_vision_confidence ON product_vision_analysis(vision_confidence);`);
+
+    // 수동 브랜드 관리 테이블
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS custom_brands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand_name TEXT NOT NULL UNIQUE,
+        brand_name_ko TEXT,
+        aliases TEXT,
+        tier TEXT DEFAULT 'OTHER',
+        country TEXT,
+        notes TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Add missing columns to existing tables (DEFAULT must be constant for ALTER TABLE in SQLite)
     const alterStatements = [
       `ALTER TABLE attendance_logs ADD COLUMN created_at TIMESTAMP`,
@@ -242,9 +285,10 @@ async function initTables() {
       `ALTER TABLE users ADD COLUMN password_hint TEXT`,
       `ALTER TABLE users ADD COLUMN security_memo TEXT`,
       `ALTER TABLE chat_messages ADD COLUMN attachment TEXT`,
+      `ALTER TABLE naver_product_map ADD COLUMN inferred_brand TEXT`,
     ];
     for (const sql of alterStatements) {
-      try { await client.execute(sql); console.log('[DB] OK:', sql); } catch {}
+      try { await client.execute(sql); console.log('[DB] OK:', sql); } catch { }
     }
 
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category);`);

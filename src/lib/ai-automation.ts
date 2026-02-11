@@ -9,9 +9,9 @@
  * 5. 가상 피팅 - 나노바나나 스타일
  */
 
-// Gemini API 설정 (Google AI)
+// Gemini API 설정 (Google AI) - 3 Pro 최고 분별력 모델
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
 
 // Replicate API 설정 (가상 피팅용)
 const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';

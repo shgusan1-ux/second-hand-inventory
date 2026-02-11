@@ -121,13 +121,20 @@ const CLASSIFICATION_RULES = {
     },
 };
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+
 /**
  * 상품명과 브랜드를 분석하여 ARCHIVE 카테고리 분류
  */
-export function classifyArchive(productName: string, brand: string = ''): ClassificationResult {
+export async function classifyArchive(
+    productName: string,
+    brand: string = '',
+    options: { useAI?: boolean; forceAI?: boolean } = {}
+): Promise<ClassificationResult> {
     const text = `${productName} ${brand}`.toUpperCase();
 
-    const scores = {
+    const scores: Record<string, number> = {
         'MILITARY ARCHIVE': 0,
         'WORKWEAR ARCHIVE': 0,
         'JAPAN ARCHIVE': 0,
@@ -204,6 +211,23 @@ export function classifyArchive(productName: string, brand: string = ''): Classi
         }
     }
 
+    // 4. AI 판정 (옵션이 켜져 있거나 확신도가 낮을 때)
+    if (options.forceAI || (options.useAI && (maxScore < 40 || !selectedCategory))) {
+        try {
+            const aiResult = await classifyWithAI(productName, brand);
+            if (aiResult.category) {
+                return {
+                    category: aiResult.category as ArchiveCategory,
+                    confidence: aiResult.confidence,
+                    reason: `AI 정밀 분석 (${aiResult.reason})`,
+                };
+            }
+        } catch (e) {
+            console.error('AI Classification failed:', e);
+            // AI 실패 시 기존 점수 결과 사용
+        }
+    }
+
     // 점수가 너무 낮으면 ARCHIVE가 아님
     if (maxScore < 10) {
         return {
@@ -221,16 +245,67 @@ export function classifyArchive(productName: string, brand: string = ''): Classi
 }
 
 /**
+ * AI를 이용한 정밀 분류
+ */
+async function classifyWithAI(productName: string, brand: string): Promise<ClassificationResult> {
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing');
+
+    const prompt = `
+당신은 빈티지 및 아카이브 의류 전문 감정사입니다. 상품명과 브랜드를 분석하여 아래 5가지 카테고리 중 가장 적합한 하나로 분류해주세요.
+
+카테고리:
+1. MILITARY ARCHIVE: 미군 등 군용 의류, 오리지널 군복, 밀리터리 복각 브랜드
+2. WORKWEAR ARCHIVE: 칼하트, 디키즈, 프렌치 워크 등 노동복 기반 브랜드 및 아이템
+3. JAPAN ARCHIVE: 비스빔, 캐피탈, 유나이티드 애로우 등 일본 고유의 감성이나 브랜드
+4. HERITAGE ARCHIVE: 폴로 랄프로렌, 브룩스 브라더스 등 역사와 전통이 깊은 클래식/아이비 스타일
+5. BRITISH ARCHIVE: 바버, 버버리, 맥킨토시 등 정통 영국 스타일 및 브랜드
+
+상품명: ${productName}
+브랜드: ${brand}
+
+결과를 JSON 형식으로만 응답하세요:
+{
+  "category": "원하는 카테고리 명칭 (예: MILITARY ARCHIVE)",
+  "confidence": 신뢰도 점수 (0-100),
+  "reason": "분류 근거 (10자 내외)"
+}
+`;
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`Gemini API error: ${data.error?.message || 'Unknown'}`);
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
+    const result = JSON.parse(jsonStr);
+
+    return {
+        category: result.category as ArchiveCategory,
+        confidence: result.confidence || 0,
+        reason: result.reason || 'AI 분석',
+    };
+}
+
+/**
  * 대량 상품 분류
  */
-export function classifyBulkArchive(products: Array<{ id: string; name: string; brand: string }>) {
-    return products.map(product => {
-        const result = classifyArchive(product.name, product.brand);
-        return {
+export async function classifyBulkArchive(products: Array<{ id: string; name: string; brand: string }>, useAI = false) {
+    const results = [];
+    for (const product of products) {
+        const result = await classifyArchive(product.name, product.brand, { useAI });
+        results.push({
             productId: product.id,
             category: result.category,
             confidence: result.confidence,
             reason: result.reason,
-        };
-    });
+        });
+    }
+    return results;
 }

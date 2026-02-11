@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getNaverToken, searchProducts } from '@/lib/naver/client';
 import { calculateLifecycle } from '@/lib/classification/lifecycle';
 import { classifyArchive } from '@/lib/classification/archive';
+import { classifyProduct, logClassification } from '@/lib/classification';
+import { mergeClassifications } from '@/lib/classification/merger';
 import { db } from '@/lib/db';
 import { handleApiError, handleAuthError, handleSuccess } from '@/lib/api-utils';
 import { ensureDbInitialized } from '@/lib/db-init';
@@ -75,13 +77,71 @@ function processProducts(contents: any[], overrideMap: any) {
             ? classifyArchive(prodName, [])
             : null;
 
+        // 다차원 자동 분류 (텍스트 기반)
+        const textClassification = classifyProduct(prodName);
+        logClassification(prodId, prodName, textClassification);
+
+        // Vision 결과와 merge (DB에 결과가 있는 경우)
+        const visionData = override.visionAnalysis;
+        let classification: any = textClassification;
+
+        if (visionData?.analysis_status === 'completed') {
+            // 수동 브랜드 매칭
+            const customBrands = override.customBrands || [];
+            const brandName = (visionData.vision_brand || textClassification.brand || '').toUpperCase();
+            const customBrand = customBrands.find((b: any) =>
+                b.brand_name === brandName ||
+                (b.aliases && JSON.parse(b.aliases).some((a: string) => a.toUpperCase() === brandName))
+            ) || null;
+
+            const visionResult = {
+                brand: visionData.vision_brand || '',
+                clothingType: visionData.vision_clothing_type || '기타',
+                clothingSubType: visionData.vision_clothing_sub_type || '',
+                gender: visionData.vision_gender || 'UNKNOWN',
+                grade: visionData.vision_grade || 'A급',
+                gradeReason: visionData.vision_grade_reason || '',
+                colors: visionData.vision_color ? JSON.parse(visionData.vision_color) : [],
+                pattern: visionData.vision_pattern || '',
+                fabric: visionData.vision_fabric || '',
+                size: visionData.vision_size || '',
+                confidence: visionData.vision_confidence || 0,
+            };
+
+            classification = mergeClassifications(textClassification, visionResult, customBrand);
+            classification.visionStatus = 'completed';
+            classification.visionGrade = visionData.vision_grade || 'A급';
+            classification.visionColors = visionData.vision_color ? JSON.parse(visionData.vision_color) : [];
+        } else {
+            // Vision 미완료: 수동 브랜드만 체크
+            const customBrands = override.customBrands || [];
+            const brandName = (textClassification.brand || '').toUpperCase();
+            const customBrand = customBrands.find((b: any) =>
+                b.brand_name === brandName ||
+                (b.aliases && JSON.parse(b.aliases).some((a: string) => a.toUpperCase() === brandName))
+            ) || null;
+
+            if (customBrand) {
+                classification = {
+                    ...textClassification,
+                    brand: customBrand.brand_name,
+                    brandTier: customBrand.tier,
+                    confidence: Math.min(100, textClassification.confidence + 10),
+                };
+            }
+
+            classification.visionStatus = visionData?.analysis_status || 'none';
+        }
+
         return {
             ...cp,
             originProductNo: prodId,
+            sellerManagementCode: p.sellerManagementCode || '',
             thumbnailUrl: cp.representativeImage?.url || null,
             lifecycle,
             archiveInfo,
             internalCategory: override.internal_category || archiveInfo?.category || 'UNCATEGORIZED',
+            classification,
             suggestedArchiveId: override.suggested_archive_id,
             suggestionReason: override.suggestion_reason,
             inferredBrand: override.inferred_brand,
@@ -107,6 +167,26 @@ async function fetchOverrideMap(ids: string[]) {
             ids
         );
 
+        // 3. Vision 분석 결과 조회
+        let visionMap: any = {};
+        try {
+            const { rows: visionRows } = await db.query(
+                `SELECT origin_product_no, vision_brand, vision_clothing_type, vision_clothing_sub_type,
+                        vision_gender, vision_grade, vision_grade_reason, vision_color, vision_pattern,
+                        vision_fabric, vision_size, vision_confidence, merged_confidence, analysis_status
+                 FROM product_vision_analysis WHERE origin_product_no IN (${placeholders})`,
+                ids
+            );
+            visionRows.forEach((row: any) => { visionMap[row.origin_product_no] = row; });
+        } catch { /* 테이블 아직 없으면 무시 */ }
+
+        // 4. 수동 브랜드 조회
+        let customBrands: any[] = [];
+        try {
+            const { rows } = await db.query('SELECT brand_name, brand_name_ko, tier, aliases FROM custom_brands WHERE is_active = TRUE');
+            customBrands = rows;
+        } catch { /* 테이블 아직 없으면 무시 */ }
+
         const map: any = {};
 
         // Base mapping from naver_product_map
@@ -121,6 +201,12 @@ async function fetchOverrideMap(ids: string[]) {
             } else {
                 map[row.id] = row;
             }
+        });
+
+        // Vision 결과 + 수동 브랜드 첨부
+        Object.keys(map).forEach(id => {
+            map[id].visionAnalysis = visionMap[id] || null;
+            map[id].customBrands = customBrands;
         });
 
         return map;
