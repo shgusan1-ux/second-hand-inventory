@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ProductManagementTab } from '@/components/smartstore/product-management-tab';
 import { CategoryManagementTab } from '@/components/smartstore/category-management-tab';
@@ -147,10 +147,12 @@ export default function SmartstorePage() {
     unapproved: 0, suspension: 0, ended: 0, prohibited: 0
   };
 
+  const autoSyncTriggered = useRef(false);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     setStatusFilter(null);
-    setProgress({ percent: 0, message: '새로고침 시작...' });
+    setProgress({ percent: 0, message: '동기화 시작...' });
     queryClient.removeQueries({ queryKey: ['all-products'] });
     try {
       const freshData = await fetchProductsWithProgress(handleProgress);
@@ -161,6 +163,14 @@ export default function SmartstorePage() {
     setProgress(null);
     setIsRefreshing(false);
   };
+
+  // 캐시 비어있으면 자동 동기화
+  useEffect(() => {
+    if (!isLoading && !isFetching && !isRefreshing && !progress && allProducts.length === 0 && !autoSyncTriggered.current) {
+      autoSyncTriggered.current = true;
+      handleRefresh();
+    }
+  }, [isLoading, isFetching]);
 
   const handleStatusClick = (statusKey: string | null) => {
     // 탭 이동 (사용자 요청: 해당재고가 나와야함)
