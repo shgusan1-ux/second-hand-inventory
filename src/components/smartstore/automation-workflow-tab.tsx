@@ -50,6 +50,8 @@ interface CustomBrand {
 
 export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflowTabProps) {
   const [showLog, setShowLog] = useState(false);
+  const [confirmedSet, setConfirmedSet] = useState<Set<string>>(new Set());
+  const [confirmingSet, setConfirmingSet] = useState<Set<string>>(new Set());
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [logLoading, setLogLoading] = useState(false);
 
@@ -917,44 +919,55 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                       {/* 아카이브 분류 변경 */}
                       <select
                         value={entry.result.brandTier || 'OTHER'}
-                        onChange={async (e) => {
+                        disabled={confirmedSet.has(entry.productNo)}
+                        onChange={(e) => {
                           const newTier = e.target.value;
-                          // 로컬 상태 업데이트
                           setLogEntries(prev => prev.map((ent, idx) =>
                             idx === i ? { ...ent, result: { ...ent.result, brandTier: newTier } } : ent
                           ));
-                          // DB 저장
-                          try {
-                            await fetch('/api/smartstore/vision/detail', {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                originProductNo: entry.productNo,
-                                productName: entry.productName,
-                                brand: entry.result.brand,
-                                clothingType: entry.result.clothingType,
-                                clothingSubType: entry.result.clothingSubType || '',
-                                gender: entry.result.gender,
-                                grade: 'A급',
-                                gradeReason: '',
-                                pattern: '솔리드',
-                                fabric: '',
-                                size: entry.result.size || '',
-                                colors: [],
-                                confidence: entry.result.confidence,
-                              }),
-                            });
-                            import('sonner').then(({ toast }) => toast.success(`${entry.productNo} → ${tierLabel[newTier] || newTier}`));
-                          } catch {
-                            import('sonner').then(({ toast }) => toast.error('저장 실패'));
-                          }
                         }}
-                        className={`ml-auto px-1 py-0.5 rounded text-[9px] font-bold border-0 outline-none cursor-pointer ${tierColor[entry.result.brandTier] || 'bg-slate-200'} text-white`}
+                        className={`px-1 py-0.5 rounded text-[9px] font-bold border-0 outline-none cursor-pointer ${tierColor[entry.result.brandTier] || 'bg-slate-200'} text-white disabled:opacity-60`}
                       >
                         {Object.entries(tierLabel).map(([key, label]) => (
                           <option key={key} value={key} className="text-slate-800 bg-white">{label.replace(' ARCHIVE', '')}</option>
                         ))}
                       </select>
+                      {/* 확정 버튼 */}
+                      {confirmedSet.has(entry.productNo) ? (
+                        <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-600">확정됨</span>
+                      ) : (
+                        <button
+                          disabled={confirmingSet.has(entry.productNo)}
+                          onClick={async () => {
+                            const tier = entry.result.brandTier;
+                            const category = tierLabel[tier] || tier;
+                            setConfirmingSet(prev => new Set(prev).add(entry.productNo));
+                            try {
+                              await fetch('/api/smartstore/products/category/bulk', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  productNos: [entry.productNo],
+                                  category
+                                })
+                              });
+                              setConfirmedSet(prev => new Set(prev).add(entry.productNo));
+                              import('sonner').then(({ toast }) => toast.success(`#${entry.productNo} → ${category} 확정`));
+                            } catch {
+                              import('sonner').then(({ toast }) => toast.error('확정 실패'));
+                            } finally {
+                              setConfirmingSet(prev => {
+                                const next = new Set(prev);
+                                next.delete(entry.productNo);
+                                return next;
+                              });
+                            }
+                          }}
+                          className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500 text-white hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50"
+                        >
+                          {confirmingSet.has(entry.productNo) ? '...' : '확정'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
