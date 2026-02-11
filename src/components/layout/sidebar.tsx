@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { AttendanceWidget } from './attendance-widget';
-import { ClockWidget } from './clock-widget';
+import { AttendanceClockWidget } from './attendance-clock-widget';
 import { ChatWidget } from './chat-widget';
 import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Sparkles, CheckCircle2 } from 'lucide-react';
 
@@ -194,7 +193,7 @@ export function Sidebar({ user }: { user?: any }) {
                 </div>
             </nav>
             <div className="p-4 border-t border-slate-800 bg-slate-900/50">
-                <ClockWidget />
+                <AttendanceClockWidget userId={user?.id} />
                 {user && <ChatWidget currentUser={user} />}
 
                 <div className="flex items-center justify-between mb-4">
@@ -217,7 +216,7 @@ export function Sidebar({ user }: { user?: any }) {
                     )}
                 </div>
 
-                {user && <AttendanceWidget userId={user.id} />}
+
 
                 <p className="text-[10px] text-slate-500 text-center mt-4 leading-tight">
                     (주)에이치엠이커머스<br />

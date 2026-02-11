@@ -244,33 +244,7 @@ export default function SmartstorePage() {
     );
   }
 
-  // 데이터 없음 — 동기화 필요
-  if (!data && !isLoading) {
-    return (
-      <div className="w-full max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-800">스마트스토어</h1>
-            <p className="text-xs text-slate-400 mt-0.5">상품 동기화가 필요합니다</p>
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-          <svg className="w-16 h-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <p className="text-sm text-slate-500">네이버 스마트스토어 상품을 불러와 주세요</p>
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="px-8 py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isRefreshing ? '동기화 중...' : '상품 동기화'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  const hasData = allProducts.length > 0;
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString('ko-KR')
     : '';

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ProductAnalysisDetail } from './product-analysis-detail';
 
 type VisionStatus = 'none' | 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -59,6 +60,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
   // 개별 Vision 분석
   const analyzeProduct = async (e: React.MouseEvent, product: Product) => {
@@ -291,10 +293,13 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
                   {/* Vision 상태 배지 */}
                   {p.classification?.visionStatus === 'completed' ? (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors cursor-pointer"
+                    >
                       <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                       {p.classification.visionGrade || 'A급'}
-                    </span>
+                    </button>
                   ) : p.classification?.visionStatus === 'processing' || analyzingIds.has(p.originProductNo) ? (
                     <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-600 animate-pulse">
                       분석중
@@ -308,6 +313,13 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                       분석
                     </button>
                   ) : null}
+                  {/* 상세 보기 버튼 */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                  >
+                    상세
+                  </button>
                 </div>
               </div>
             </div>
@@ -440,6 +452,18 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             {searchTerm ? '검색 결과가 없습니다.' : '표시할 상품이 없습니다.'}
           </p>
         </div>
+      )}
+      {/* AI 분석 상세 모달 */}
+      {detailProduct && (
+        <ProductAnalysisDetail
+          open={!!detailProduct}
+          onClose={() => setDetailProduct(null)}
+          product={detailProduct}
+          onSaved={() => {
+            setDetailProduct(null);
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );
