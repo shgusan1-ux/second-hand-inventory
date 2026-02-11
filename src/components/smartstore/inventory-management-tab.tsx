@@ -9,7 +9,7 @@ interface Product {
   salePrice: number;
   stockQuantity: number;
   statusType: string;
-  images?: any;
+  thumbnailUrl?: string | null;
   lifecycle?: { stage: string; daysSince: number };
 }
 
@@ -183,8 +183,8 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                       isSuspended ? 'bg-orange-50 border-orange-100' :
                         'bg-emerald-50 border-emerald-100'
                     }`}>
-                    {p.images?.[0]?.url ? (
-                      <img src={p.images[0].url} alt="" className="w-full h-full object-cover" />
+                    {p.thumbnailUrl ? (
+                      <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className={isSold ? 'text-red-500' : isSuspended ? 'text-orange-500' : 'text-emerald-500'}>
                         {isSold ? (

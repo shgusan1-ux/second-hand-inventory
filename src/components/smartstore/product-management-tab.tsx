@@ -12,7 +12,7 @@ interface Product {
   regDate: string;
   statusType: string;
   sellerManagementCode?: string;
-  images?: any;
+  thumbnailUrl?: string | null;
   lifecycle?: { stage: string; daysSince: number };
   archiveInfo?: { category: string };
   internalCategory?: string;
@@ -168,8 +168,8 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             <div className="flex gap-4">
               {/* 이미지 */}
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-100 shadow-inner">
-                {p.images?.[0]?.url ? (
-                  <img src={p.images[0].url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                {p.thumbnailUrl ? (
+                  <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-300 text-[10px] font-bold">IMAGE</div>
                 )}

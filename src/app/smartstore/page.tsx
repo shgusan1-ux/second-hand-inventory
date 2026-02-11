@@ -18,7 +18,7 @@ interface Product {
   regDate: string;
   statusType: string;
   sellerManagementCode?: string;
-  images?: any;
+  thumbnailUrl?: string | null;
   lifecycle?: {
     stage: string;
     daysSince: number;

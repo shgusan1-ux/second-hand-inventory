@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 interface Product {
   originProductNo: string;
   name: string;
-  images?: any;
+  thumbnailUrl?: string | null;
   salePrice: number;
   lifecycle?: { stage: string; daysSince: number };
 }
@@ -29,17 +29,11 @@ export function ImageManagementTab({ products, onRefresh }: ImageManagementTabPr
   }, [products, searchTerm]);
 
   const getImageUrl = (p: Product): string | null => {
-    if (p.images?.[0]?.url) return p.images[0].url;
-    if (p.images?.representativeImage?.url) return p.images.representativeImage.url;
-    return null;
+    return p.thumbnailUrl || null;
   };
 
   const getImageCount = (p: Product): number => {
-    if (Array.isArray(p.images)) return p.images.length;
-    let count = 0;
-    if (p.images?.representativeImage) count++;
-    if (p.images?.optionalImages) count += p.images.optionalImages.length;
-    return count;
+    return p.thumbnailUrl ? 1 : 0;
   };
 
   const noImageCount = products.filter(p => !getImageUrl(p)).length;

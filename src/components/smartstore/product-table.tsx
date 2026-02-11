@@ -42,7 +42,7 @@ const ProductRow = memo(({ p, isSelected, onSelect, onAnalyzeVision, onUpdate }:
             <div className="w-20 px-2">
                 <div className="relative w-14 h-14 rounded-lg overflow-hidden border bg-slate-100">
                     <img
-                        src={p.images?.[0]?.url || p.images?.representativeImage?.url}
+                        src={p.thumbnailUrl || undefined}
                         alt={p.name}
                         className="w-full h-full object-cover"
                     />

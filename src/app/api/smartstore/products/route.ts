@@ -78,7 +78,7 @@ function processProducts(contents: any[], overrideMap: any) {
         return {
             ...cp,
             originProductNo: prodId,
-            images: cp.images,
+            thumbnailUrl: cp.representativeImage?.url || null,
             lifecycle,
             archiveInfo,
             internalCategory: override.internal_category || archiveInfo?.category || 'UNCATEGORIZED',
