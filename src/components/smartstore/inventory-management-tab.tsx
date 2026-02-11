@@ -10,6 +10,7 @@ interface Product {
   stockQuantity: number;
   statusType: string;
   thumbnailUrl?: string | null;
+  regDate?: string;
   lifecycle?: { stage: string; daysSince: number };
 }
 
@@ -216,6 +217,9 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[10px] font-mono font-bold text-slate-400">#{p.originProductNo}</span>
+                    {p.regDate && (
+                      <span className="text-[9px] text-slate-400">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>
+                    )}
                     {isSuspended && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">판매중지</span>}
                   </div>
                   <p className="font-bold text-sm text-slate-800 truncate leading-snug">{p.name}</p>

@@ -97,12 +97,12 @@ export function WeatherLogo({ className }: { className?: string }) {
                                 left: Math.random() * 100 + '%',
                                 animationDuration: Math.random() * 3 + 3 + 's',
                                 animationDelay: Math.random() * 5 + 's',
-                                opacity: 0.3 // 사용자 요청: 불투명도 30%
+                                opacity: 0.2 // 사용자 요청: 불투명도 20%
                             }}
                         />
                     ))}
                     {/* 로고 위에 살짝 쌓인 눈 강조 */}
-                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-30 blur-[1px] z-[110] shadow-[0_1px_2px_rgba(255,255,255,0.3)]" />
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-20 blur-[1px] z-[110] shadow-[0_1px_2px_rgba(255,255,255,0.2)]" />
                 </div>
             )}
 

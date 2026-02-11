@@ -9,6 +9,7 @@ interface Product {
   salePrice?: number;
   stockQuantity?: number;
   statusType?: string;
+  regDate?: string;
   lifecycle?: { stage: string; daysSince: number };
   archiveInfo?: { category: string };
   internalCategory?: string;

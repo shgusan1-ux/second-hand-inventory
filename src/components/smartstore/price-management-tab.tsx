@@ -8,6 +8,7 @@ interface Product {
   salePrice: number;
   stockQuantity: number;
   statusType: string;
+  regDate?: string;
   lifecycle?: { stage: string; daysSince: number };
 }
 
@@ -164,6 +165,9 @@ export function PriceManagementTab({ products, onRefresh }: PriceManagementTabPr
             <div key={p.originProductNo} className="bg-white rounded-xl border border-slate-100 p-3">
               <p className="font-medium text-sm text-slate-800 truncate">{p.name}</p>
               <div className="flex items-center justify-between mt-2">
+                {p.regDate && (
+                  <span className="text-[9px] text-slate-400 mb-1">{new Date(p.regDate).toLocaleDateString('ko-KR')} 등록</span>
+                )}
                 <div className="flex items-center gap-2 flex-wrap">
                   {p.lifecycle && (
                     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${stage === 'NEW' ? 'bg-emerald-100 text-emerald-700' :

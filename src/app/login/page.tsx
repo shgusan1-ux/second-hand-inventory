@@ -62,7 +62,7 @@ export default function LoginPage() {
 
     return (
         <OceanVideoBackground className="fixed inset-0 w-full h-full overflow-y-auto">
-            <div className="w-full max-w-sm space-y-6 p-8 bg-black/40 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
+            <div className="w-full max-w-sm space-y-6 p-8 bg-black/20 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 relative z-20 transition-all hover:scale-[1.01] duration-300 my-auto">
                 <div className="space-y-2 text-center text-white">
                     <div className="mx-auto w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-4 shadow-lg border border-white/20">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
@@ -108,7 +108,7 @@ export default function LoginPage() {
 
             <div className="relative z-20 animate-in slide-in-from-bottom-5 duration-1000 delay-500 fade-in flex flex-col items-center gap-4 mt-8 pb-8">
                 <div className="relative group">
-                    <div className="absolute inset-0 bg-black/60 blur-2xl rounded-full scale-150 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 bg-black/20 blur-2xl rounded-full scale-150 opacity-50 group-hover:opacity-100 transition-opacity" />
                     <WeatherLogo className="h-10 invert opacity-100 relative z-10" />
                 </div>
             </div>

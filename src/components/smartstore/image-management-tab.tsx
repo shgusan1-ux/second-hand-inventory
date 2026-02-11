@@ -7,6 +7,7 @@ interface Product {
   name: string;
   thumbnailUrl?: string | null;
   salePrice: number;
+  regDate?: string;
   lifecycle?: { stage: string; daysSince: number };
 }
 

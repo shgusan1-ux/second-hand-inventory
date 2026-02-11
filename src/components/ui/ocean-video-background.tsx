@@ -16,9 +16,9 @@ const OCEAN_IMAGES = [
 
 // Random Ken Burns directions
 const KB_VARIANTS = [
-  { from: 'scale(1) translate(0%, 0%)',   to: 'scale(1.15) translate(-2%, -1%)' },
+  { from: 'scale(1) translate(0%, 0%)', to: 'scale(1.15) translate(-2%, -1%)' },
   { from: 'scale(1.1) translate(-2%, 0%)', to: 'scale(1) translate(1%, 1%)' },
-  { from: 'scale(1) translate(0%, 0%)',   to: 'scale(1.12) translate(2%, -2%)' },
+  { from: 'scale(1) translate(0%, 0%)', to: 'scale(1.12) translate(2%, -2%)' },
   { from: 'scale(1.1) translate(1%, 1%)', to: 'scale(1) translate(-1%, 0%)' },
   { from: 'scale(1.05) translate(0%, 2%)', to: 'scale(1.15) translate(-1%, -1%)' },
 ];
@@ -89,7 +89,7 @@ export function OceanVideoBackground({
         }}
       />
 
-      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50 z-[1]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/30 z-[1]" />
 
       <div className="relative z-[2] flex flex-col items-center justify-center min-h-screen w-full">
         {children}
