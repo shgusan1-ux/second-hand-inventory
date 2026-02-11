@@ -69,7 +69,7 @@ export function WeatherLogo({ className }: { className?: string }) {
         <div className="relative inline-block group">
             {/* 기본 로고 */}
             <img
-                src="/logo.png"
+                src="/logo.png?v=weather"
                 alt="Brownstreet"
                 className={`relative z-10 transition-all duration-700 ${className} ${isFrozen ? 'brightness-125 hue-rotate-180 saturate-50' : '' // 얼었을 때: 푸른빛 + 쨍하게
                     }`}

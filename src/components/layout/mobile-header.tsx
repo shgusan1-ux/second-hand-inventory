@@ -37,7 +37,7 @@ export function MobileHeader({ user }: { user?: any }) {
                 <div className="flex-1 flex items-center justify-center gap-2">
                     {/* 로고: 날씨 반응형 (WeatherLogo) */}
                     <WeatherLogo className="h-4 invert opacity-90" />
-                    <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access</span>
+                    <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access v2.1</span>
                 </div>
 
                 <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 active:bg-white/20 shrink-0">

@@ -1,12 +1,12 @@
 /**
- * Gemini 2.5 Pro Vision 기반 상품 분류기
- * 안정 릴리즈 + thinking 모드 = 최고 정확도
+ * Gemini 3.0 Pro Vision 기반 상품 분류기
+ * 최신 모델 고정: gemini-3-pro-preview
  */
 
 import type { GeminiVisionResult } from './types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = 'gemini-2.5-pro';
+const GEMINI_MODEL = 'gemini-3-pro-preview';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 async function fetchImageAsBase64(url: string): Promise<string> {
