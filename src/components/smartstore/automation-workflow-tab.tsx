@@ -213,7 +213,6 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       import('sonner').then(({ toast }) => toast.error('배치 분석 실패: ' + err.message));
     } finally {
       setBatchRunning(false);
-      onRefresh();
     }
   };
 
