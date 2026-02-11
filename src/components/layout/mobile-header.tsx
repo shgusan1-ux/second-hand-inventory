@@ -96,7 +96,10 @@ export function MobileHeader({ user }: { user?: any }) {
                             {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                         </Button>
 
-                        <div className="flex-1 flex items-center justify-center gap-2">
+                        <div
+                            className="flex-1 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-transform"
+                            onClick={() => router.push('/')}
+                        >
                             {/* 로고: 날씨 반응형 (WeatherLogo) */}
                             <WeatherLogo className="h-4 invert opacity-90" />
                             <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access v2.1</span>
