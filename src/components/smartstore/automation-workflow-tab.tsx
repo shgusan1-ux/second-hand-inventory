@@ -312,19 +312,19 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
   const tierLabel: Record<string, string> = {
     MILITARY: 'MILITARY ARCHIVE',
     WORKWEAR: 'WORKWEAR ARCHIVE',
+    OUTDOOR: 'OUTDOOR ARCHIVE',
     JAPAN: 'JAPAN ARCHIVE',
     HERITAGE: 'HERITAGE ARCHIVE',
-    BRITISH: 'BRITISH ARCHIVE',
-    OTHER: '기타'
+    BRITISH: 'BRITISH ARCHIVE'
   };
 
   const tierColor: Record<string, string> = {
     MILITARY: 'bg-emerald-700',
     WORKWEAR: 'bg-amber-600',
+    OUTDOOR: 'bg-teal-600',
     JAPAN: 'bg-red-500',
     HERITAGE: 'bg-blue-500',
-    BRITISH: 'bg-indigo-500',
-    OTHER: 'bg-slate-300'
+    BRITISH: 'bg-indigo-500'
   };
 
   return (
@@ -404,6 +404,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                 {[
                   { key: 'MILITARY', label: 'MILITARY', color: 'bg-emerald-700' },
                   { key: 'WORKWEAR', label: 'WORKWEAR', color: 'bg-amber-600' },
+                  { key: 'OUTDOOR', label: 'OUTDOOR', color: 'bg-teal-600' },
                   { key: 'JAPAN', label: 'JAPANESE', color: 'bg-red-500' },
                   { key: 'HERITAGE', label: 'HERITAGE', color: 'bg-blue-500' },
                   { key: 'BRITISH', label: 'BRITISH', color: 'bg-indigo-500' },
@@ -647,8 +648,8 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                             key={key}
                             onClick={() => setListFilterTier(key)}
                             className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all ${listFilterTier === key
-                                ? `${tierColor[key]} text-white border-transparent`
-                                : 'bg-white text-slate-400 border-slate-200'
+                              ? `${tierColor[key]} text-white border-transparent`
+                              : 'bg-white text-slate-400 border-slate-200'
                               }`}
                           >
                             {tierLabel[key].replace(' ARCHIVE', '')}

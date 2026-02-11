@@ -66,55 +66,55 @@ export function WeatherLogo({ className }: { className?: string }) {
     const isSunny = [0, 1].includes(wCode);
 
     return (
-        <div className="relative inline-block group">
+        <div className="relative inline-block group overflow-visible">
             {/* 기본 로고 */}
             <img
                 src="/logo.png?v=weather"
                 alt="Brownstreet"
-                className={`relative z-10 transition-all duration-700 ${className} ${isFrozen ? 'brightness-125 hue-rotate-180 saturate-50' : '' // 얼었을 때: 푸른빛 + 쨍하게
+                className={`relative z-20 transition-all duration-700 ${className} ${isFrozen ? 'brightness-125 hue-rotate-180 saturate-50' : ''
                     }`}
             />
 
             {/* 1. 얼어붙음 효과 (온도 0도 이하) */}
             {isFrozen && (
                 <>
-                    <div className="absolute inset-0 z-20 pointer-events-none opacity-60 mix-blend-screen bg-gradient-to-t from-white/40 to-transparent rounded-sm" />
-                    <ThermometerSnowflake className="absolute -right-3 -top-2 w-3 h-3 text-cyan-300 opacity-80 animate-pulse" />
+                    <div className="absolute inset-0 z-30 pointer-events-none opacity-60 mix-blend-screen bg-gradient-to-t from-white/40 to-transparent rounded-sm" />
+                    <ThermometerSnowflake className="absolute -right-3 -top-2 w-3 h-3 text-cyan-300 opacity-80 animate-pulse z-40" />
                 </>
             )}
 
             {/* 2. 눈 내림 효과 */}
             {isSnowy && (
-                <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden -mt-4 h-[150%]">
+                <div className="absolute inset-0 z-50 pointer-events-none -mt-6 h-[200%] overflow-visible">
                     {[...Array(6)].map((_, i) => (
                         <div
                             key={i}
-                            className="absolute top-0 bg-white rounded-full opacity-80 animate-snow"
+                            className="absolute top-0 bg-white rounded-full opacity-90 animate-snow"
                             style={{
-                                width: Math.random() * 3 + 1 + 'px',
-                                height: Math.random() * 3 + 1 + 'px',
+                                width: Math.random() * 4 + 2 + 'px',
+                                height: Math.random() * 4 + 2 + 'px',
                                 left: Math.random() * 100 + '%',
-                                animationDuration: Math.random() * 2 + 2 + 's',
-                                animationDelay: Math.random() * 2 + 's'
+                                animationDuration: Math.random() * 2 + 1.5 + 's',
+                                animationDelay: Math.random() * 1 + 's'
                             }}
                         />
                     ))}
                     {/* 로고 위에 쌓인 눈 */}
-                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-white rounded-t-full opacity-80 blur-[1px]" />
+                    <div className="absolute top-0 left-0 right-0 h-2 bg-white rounded-t-full opacity-90 blur-[0.5px] z-40" />
                 </div>
             )}
 
             {/* 3. 비 효과 */}
             {isRainy && (
-                <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden -mt-2">
+                <div className="absolute inset-0 z-50 pointer-events-none -mt-4 h-[150%] overflow-visible">
                     {[...Array(8)].map((_, i) => (
                         <div
                             key={i}
-                            className="absolute bg-blue-200 w-[1px] h-3 animate-rain opacity-60"
+                            className="absolute bg-blue-200 w-[1.5px] h-4 animate-rain opacity-70"
                             style={{
                                 left: Math.random() * 100 + '%',
                                 top: -10,
-                                animationDuration: '0.8s',
+                                animationDuration: '0.6s',
                                 animationDelay: Math.random() + 's'
                             }}
                         />
@@ -124,14 +124,14 @@ export function WeatherLogo({ className }: { className?: string }) {
 
             {/* 4. 번개 효과 */}
             {isThunder && (
-                <div className="absolute inset-0 z-30 pointer-events-none bg-white opacity-0 animate-lightning mix-blend-overlay" />
+                <div className="absolute inset-0 z-50 pointer-events-none bg-white opacity-0 animate-lightning mix-blend-overlay" />
             )}
 
-            {/* 5. 맑음 (햇살) 효과 */}
-            {isSunny && !isFrozen && (
-                <div className="absolute -top-4 -right-4 z-0">
-                    <div className="w-8 h-8 bg-amber-400/20 rounded-full blur-xl animate-pulse" />
-                    <div className="absolute inset-0 w-8 h-8 bg-yellow-200/10 rounded-full blur-md" />
+            {/* 5. 맑음 (햇살) 효과 - 항상 은은하게 보이도록 조정 */}
+            {(isSunny || (!isRainy && !isSnowy && !isThunder)) && !isFrozen && (
+                <div className="absolute -top-6 -right-6 z-10 pointer-events-none">
+                    <div className="w-10 h-10 bg-amber-400/30 rounded-full blur-xl animate-pulse" />
+                    <div className="absolute inset-0 w-10 h-10 bg-yellow-200/20 rounded-full blur-lg" />
                 </div>
             )}
 

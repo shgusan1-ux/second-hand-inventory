@@ -14,10 +14,12 @@
 export type ArchiveCategory =
     | 'MILITARY ARCHIVE'
     | 'WORKWEAR ARCHIVE'
+    | 'OUTDOOR ARCHIVE'
     | 'JAPAN ARCHIVE'
     | 'HERITAGE ARCHIVE'
     | 'BRITISH ARCHIVE'
     | null; // null = ARCHIVE가 아님
+
 
 interface ClassificationResult {
     category: ArchiveCategory;
@@ -54,6 +56,33 @@ const CLASSIFICATION_RULES = {
             'POINTER', 'ROUND HOUSE', 'KEY',
         ],
         brands: ['CARHARTT', 'DICKIES', 'RED KAP', 'BEN DAVIS', 'POINTER', 'KEY'],
+    },
+    OUTDOOR: {
+        keywords: [
+            // 아웃도어 키워드
+            'GORE-TEX', 'GORETEX', '고어텍스',
+            'FLEECE', '플리스', '후리스',
+            'MOUNTAIN', '마운틴', 'PARKA', '파카',
+            'ANORAK', '아노락', 'WIND', '윈드',
+            'CAMPING', '캠핑', 'CLIMBING', '클라이밍',
+            'RETRO X', '레트로X', 'NUPTSE', '눕시',
+            // 아웃도어 브랜드
+            'PATAGONIA', '파타고니아',
+            'THE NORTH FACE', 'NORTH FACE', '노스페이스',
+            'ARC TERYX', 'ARCTERYX', '아크테릭스',
+            'COLUMBIA', '컬럼비아',
+            'L.L.BEAN', 'LLBEAN', '엘엘빈',
+            'EDDIE BAUER', '에디바우어',
+            'SNOW PEAK', '스노우피크',
+            'GREGORY', '그레고리',
+            'SIERRA DESIGNS', '시에라 디자인',
+            'WOOLRICH', '울리치', 'PENDLETON', '펜들턴'
+        ],
+        brands: [
+            'PATAGONIA', 'THE NORTH FACE', 'NORTH FACE', 'ARC TERYX',
+            'COLUMBIA', 'L.L.BEAN', 'EDDIE BAUER', 'SNOW PEAK',
+            'GREGORY', 'SIERRA DESIGNS', 'WOOLRICH', 'PENDLETON'
+        ]
     },
     JAPAN: {
         keywords: [
@@ -137,6 +166,7 @@ export async function classifyArchive(
     const scores: Record<string, number> = {
         'MILITARY ARCHIVE': 0,
         'WORKWEAR ARCHIVE': 0,
+        'OUTDOOR ARCHIVE': 0,
         'JAPAN ARCHIVE': 0,
         'HERITAGE ARCHIVE': 0,
         'BRITISH ARCHIVE': 0,
@@ -154,6 +184,10 @@ export async function classifyArchive(
     if (CLASSIFICATION_RULES.WORKWEAR.brands.some(b => brandUpper.includes(b))) {
         scores['WORKWEAR ARCHIVE'] += 50;
         reasons.push('워크웨어 브랜드');
+    }
+    if (CLASSIFICATION_RULES.OUTDOOR.brands.some(b => brandUpper.includes(b))) {
+        scores['OUTDOOR ARCHIVE'] += 50;
+        reasons.push('아웃도어 브랜드');
     }
     if (CLASSIFICATION_RULES.JAPAN.brands.some(b => brandUpper.includes(b))) {
         scores['JAPAN ARCHIVE'] += 50;
@@ -179,6 +213,12 @@ export async function classifyArchive(
         if (text.includes(keyword.toUpperCase())) {
             scores['WORKWEAR ARCHIVE'] += 10;
             if (!reasons.includes('워크웨어 키워드')) reasons.push('워크웨어 키워드');
+        }
+    }
+    for (const keyword of CLASSIFICATION_RULES.OUTDOOR.keywords) {
+        if (text.includes(keyword.toUpperCase())) {
+            scores['OUTDOOR ARCHIVE'] += 10;
+            if (!reasons.includes('아웃도어 키워드')) reasons.push('아웃도어 키워드');
         }
     }
     for (const keyword of CLASSIFICATION_RULES.JAPAN.keywords) {
@@ -251,14 +291,15 @@ async function classifyWithAI(productName: string, brand: string): Promise<Class
     if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing');
 
     const prompt = `
-당신은 빈티지 및 아카이브 의류 전문 감정사입니다. 상품명과 브랜드를 분석하여 아래 5가지 카테고리 중 가장 적합한 하나로 분류해주세요.
+당신은 빈티지 및 아카이브 의류 전문 감정사입니다. 상품명과 브랜드를 분석하여 아래 6가지 카테고리 중 가장 적합한 하나로 분류해주세요.
 
 카테고리:
 1. MILITARY ARCHIVE: 미군 등 군용 의류, 오리지널 군복, 밀리터리 복각 브랜드
 2. WORKWEAR ARCHIVE: 칼하트, 디키즈, 프렌치 워크 등 노동복 기반 브랜드 및 아이템
-3. JAPAN ARCHIVE: 비스빔, 캐피탈, 유나이티드 애로우 등 일본 고유의 감성이나 브랜드
-4. HERITAGE ARCHIVE: 폴로 랄프로렌, 브룩스 브라더스 등 역사와 전통이 깊은 클래식/아이비 스타일
-5. BRITISH ARCHIVE: 바버, 버버리, 맥킨토시 등 정통 영국 스타일 및 브랜드
+3. OUTDOOR ARCHIVE: 파타고니아, 노스페이스, 아크테릭스 등 아웃도어 및 등산 브랜드
+4. JAPAN ARCHIVE: 비스빔, 캐피탈, 유나이티드 애로우 등 일본 고유의 감성이나 브랜드
+5. HERITAGE ARCHIVE: 폴로 랄프로렌, 브룩스 브라더스 등 역사와 전통이 깊은 클래식/아이비 스타일
+6. BRITISH ARCHIVE: 바버, 버버리, 맥킨토시 등 정통 영국 스타일 및 브랜드
 
 상품명: ${productName}
 브랜드: ${brand}
