@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ProductAnalysisDetail } from './product-analysis-detail';
 
@@ -54,6 +55,7 @@ function extractBrand(name: string): string {
 }
 
 export function ProductManagementTab({ products, onRefresh }: ProductManagementTabProps) {
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState<number>(50);
