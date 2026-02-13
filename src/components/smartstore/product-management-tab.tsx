@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { ProductAnalysisDetail } from './product-analysis-detail';
 
@@ -16,7 +16,7 @@ interface Product {
   statusType: string;
   sellerManagementCode?: string;
   thumbnailUrl?: string | null;
-  lifecycle?: { stage: string; daysSince: number };
+  lifecycle?: { stage: string; daysSince: number; discountRate: number };
   archiveInfo?: { category: string };
   internalCategory?: string;
   suggestedArchiveId?: string;
@@ -55,12 +55,65 @@ function extractBrand(name: string): string {
 
 export function ProductManagementTab({ products, onRefresh }: ProductManagementTabProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [sortBy, setSortBy] = useState<string>('date_desc');
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [movingCategory, setMovingCategory] = useState(false);
+
+  // 카테고리 네비게이션
+  const [stageFilter, setStageFilter] = useState<string>('ALL');
+  const [subFilter, setSubFilter] = useState<string>('ALL');
+
+  const ARCHIVE_SUBS = ['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE'];
+  const isArchiveCategory = (cat?: string) => cat === 'ARCHIVE' || ARCHIVE_SUBS.includes(cat || '');
+  const isClearanceCategory = (cat?: string) => cat === 'CLEARANCE' || cat === 'CLEARANCE_KEEP' || cat === 'CLEARANCE_DISPOSE';
+
+  // 스테이지별 카운트
+  const stageCounts = useMemo(() => {
+    const counts = { ALL: products.length, NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0, UNASSIGNED: 0 };
+    products.forEach(p => {
+      const cat = p.internalCategory || '';
+      if (cat === 'NEW') counts.NEW++;
+      else if (cat === 'CURATED') counts.CURATED++;
+      else if (isArchiveCategory(cat)) counts.ARCHIVE++;
+      else if (isClearanceCategory(cat)) counts.CLEARANCE++;
+      else counts.UNASSIGNED++;
+    });
+    return counts;
+  }, [products]);
+
+  // 아카이브 세부 카운트
+  const archiveSubCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: 0 };
+    ARCHIVE_SUBS.forEach(s => { counts[s] = 0; });
+    counts['UNASSIGNED'] = 0;
+    products.forEach(p => {
+      const cat = p.internalCategory || '';
+      if (!isArchiveCategory(cat)) return;
+      counts.ALL++;
+      if (ARCHIVE_SUBS.includes(cat)) counts[cat]++;
+      else counts['UNASSIGNED']++;
+    });
+    return counts;
+  }, [products]);
+
+  // 클리어런스 세부 카운트
+  const clearanceSubCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: 0, CLEARANCE: 0, CLEARANCE_KEEP: 0, CLEARANCE_DISPOSE: 0, UNASSIGNED: 0 };
+    products.forEach(p => {
+      const cat = p.internalCategory || '';
+      if (!isClearanceCategory(cat)) return;
+      counts.ALL++;
+      if (cat === 'CLEARANCE_KEEP') counts.CLEARANCE_KEEP++;
+      else if (cat === 'CLEARANCE_DISPOSE') counts.CLEARANCE_DISPOSE++;
+      else counts.CLEARANCE++;
+    });
+    return counts;
+  }, [products]);
 
   // 개별 Vision 분석
   const analyzeProduct = async (e: React.MouseEvent, product: Product) => {
@@ -93,17 +146,62 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     }
   };
 
+  // 선택 상품 카테고리 강제 이동
+  const moveToCategory = async (category: string) => {
+    if (selectedIds.length === 0) return;
+    setMovingCategory(true);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: selectedIds, category })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${selectedIds.length}개 상품 → ${category} 이동 완료`);
+        setSelectedIds([]);
+        setShowMoveMenu(false);
+        onRefresh();
+      } else {
+        toast.error(data.error || '이동 실패');
+      }
+    } catch (err: any) {
+      toast.error('이동 오류: ' + err.message);
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
+  // 자동 분류로 복원 (internal_category를 NULL로)
+  const resetToAuto = async () => {
+    if (selectedIds.length === 0) return;
+    setMovingCategory(true);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: selectedIds, reset: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${selectedIds.length}개 상품 자동 분류로 복원`);
+        setSelectedIds([]);
+        setShowMoveMenu(false);
+        onRefresh();
+      } else {
+        toast.error(data.error || '복원 실패');
+      }
+    } catch (err: any) {
+      toast.error('복원 오류: ' + err.message);
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
   const handleCopy = (e: React.MouseEvent, text: string) => {
     e.stopPropagation();
     navigator.clipboard.writeText(text);
     toast.success('상품코드가 복사되었습니다: ' + text);
-  };
-
-  const statusCounts = {
-    ALL: products.length,
-    SALE: products.filter(p => p.statusType === 'SALE').length,
-    UNCATEGORIZED: products.filter(p => p.internalCategory === 'UNCATEGORIZED').length,
-    OUTOFSTOCK: products.filter(p => p.statusType === 'OUTOFSTOCK').length,
   };
 
   const toggleSelect = (id: string) => {
@@ -112,28 +210,92 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     );
   };
 
-  // Filter products
+  // 카테고리 기반 필터링
   const filtered = products.filter(p => {
     const matchSearch = !searchTerm ||
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.originProductNo.includes(searchTerm) ||
       (p.sellerManagementCode || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchStatus = true;
-    if (statusFilter === 'SALE') matchStatus = p.statusType === 'SALE';
-    else if (statusFilter === 'OUTOFSTOCK') matchStatus = p.statusType === 'OUTOFSTOCK';
-    else if (statusFilter === 'UNCATEGORIZED') matchStatus = p.internalCategory === 'UNCATEGORIZED';
+    if (!matchSearch) return false;
 
-    return matchSearch && matchStatus;
+    const cat = p.internalCategory || '';
+
+    // 스테이지 필터
+    if (stageFilter === 'ALL') return true;
+    if (stageFilter === 'NEW') return cat === 'NEW';
+    if (stageFilter === 'CURATED') return cat === 'CURATED';
+    if (stageFilter === 'UNASSIGNED') return !cat || cat === 'UNCATEGORIZED';
+    if (stageFilter === 'ARCHIVE') {
+      if (!isArchiveCategory(cat)) return false;
+      if (subFilter === 'ALL') return true;
+      if (subFilter === 'UNASSIGNED') return cat === 'ARCHIVE';
+      return cat === subFilter;
+    }
+    if (stageFilter === 'CLEARANCE') {
+      if (!isClearanceCategory(cat)) return false;
+      if (subFilter === 'ALL') return true;
+      return cat === subFilter;
+    }
+    return true;
   });
 
-  // Pagination logic
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // 정렬
+  const GRADE_ORDER: Record<string, number> = { 'S급': 0, 'A급': 1, 'B급': 2, 'C급': 3 };
+  const CATEGORY_ORDER: Record<string, number> = {
+    'MILITARY': 0, 'MILITARY ARCHIVE': 0,
+    'WORKWEAR': 1, 'WORKWEAR ARCHIVE': 1,
+    'JAPAN': 2, 'JAPANESE ARCHIVE': 2,
+    'HERITAGE': 3, 'HERITAGE EUROPE': 3,
+    'BRITISH': 4, 'BRITISH ARCHIVE': 4,
+    'OUTDOOR': 5, 'OUTDOOR ARCHIVE': 5,
+    'CLEARANCE_KEEP': 6, 'CLEARANCE_DISPOSE': 7,
+    'CLEARANCE': 8, 'NEW': 9, 'CURATED': 10, 'UNCATEGORIZED': 11,
+  };
 
-  // Reset page when filters or pageSize change
-  const handleFilterChange = (newStatus: string) => {
-    setStatusFilter(newStatus);
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    switch (sortBy) {
+      case 'date_desc':
+        return arr.sort((a, b) => new Date(b.regDate || 0).getTime() - new Date(a.regDate || 0).getTime());
+      case 'date_asc':
+        return arr.sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime());
+      case 'category':
+        return arr.sort((a, b) => {
+          const ca = CATEGORY_ORDER[a.internalCategory || 'UNCATEGORIZED'] ?? 99;
+          const cb = CATEGORY_ORDER[b.internalCategory || 'UNCATEGORIZED'] ?? 99;
+          return ca - cb;
+        });
+      case 'grade':
+        return arr.sort((a, b) => {
+          const ga = GRADE_ORDER[a.classification?.visionGrade || 'C급'] ?? 99;
+          const gb = GRADE_ORDER[b.classification?.visionGrade || 'C급'] ?? 99;
+          return ga - gb;
+        });
+      case 'price_desc':
+        return arr.sort((a, b) => (b.salePrice || 0) - (a.salePrice || 0));
+      case 'price_asc':
+        return arr.sort((a, b) => (a.salePrice || 0) - (b.salePrice || 0));
+      case 'confidence':
+        return arr.sort((a, b) => (b.classification?.confidence || 0) - (a.classification?.confidence || 0));
+      default:
+        return arr;
+    }
+  }, [filtered, sortBy]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(sorted.length / pageSize);
+  const paginatedItems = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Reset page when filters change
+  const handleStageChange = (stage: string) => {
+    setStageFilter(stage);
+    setSubFilter('ALL');
+    setCurrentPage(1);
+  };
+
+  const handleSubChange = (sub: string) => {
+    setSubFilter(sub);
     setCurrentPage(1);
   };
 
@@ -158,42 +320,186 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
       />
 
-      {/* 상태 필터 - 균등 분할 */}
-      <div className="grid grid-cols-4 gap-1.5">
-        {Object.entries(statusCounts).map(([key, count]) => (
-          <button
-            key={key}
-            onClick={() => handleFilterChange(key)}
-            className={`py-2.5 rounded-lg text-xs font-medium transition-all active:scale-95 border ${statusFilter === key
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
-          >
-            {key === 'ALL' ? '전체' : key === 'SALE' ? '판매중' : key === 'UNCATEGORIZED' ? '미분류' : '품절'}
-            <span className={`ml-1 opacity-70 ${statusFilter === key ? 'text-blue-300' : 'text-slate-400'}`}>({count})</span>
-          </button>
-        ))}
+      {/* 라이프사이클 스테이지 네비게이션 */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="grid grid-cols-6 divide-x divide-slate-100">
+          {([
+            ['ALL', '전체', stageCounts.ALL, 'text-slate-600'],
+            ['NEW', 'NEW', stageCounts.NEW, 'text-emerald-600'],
+            ['CURATED', 'CURATED', stageCounts.CURATED, 'text-indigo-600'],
+            ['ARCHIVE', 'ARCHIVE', stageCounts.ARCHIVE, 'text-slate-800'],
+            ['CLEARANCE', 'CLEARANCE', stageCounts.CLEARANCE, 'text-amber-600'],
+            ['UNASSIGNED', '미지정', stageCounts.UNASSIGNED, 'text-red-500'],
+          ] as [string, string, number, string][]).map(([key, label, count, color]) => (
+            <button
+              key={key}
+              onClick={() => handleStageChange(key)}
+              className={`py-3 text-center transition-all active:scale-95 ${stageFilter === key
+                ? 'bg-slate-900 text-white'
+                : 'bg-white hover:bg-slate-50'
+                }`}
+            >
+              <div className={`text-[10px] font-black uppercase tracking-tight ${stageFilter === key ? 'text-white' : color}`}>
+                {label}
+              </div>
+              <div className={`text-lg font-black leading-none mt-0.5 ${stageFilter === key ? 'text-white' : 'text-slate-900'}`}>
+                {count}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* ARCHIVE 세부 카테고리 */}
+        {stageFilter === 'ARCHIVE' && (
+          <div className="border-t border-slate-100 p-2 bg-slate-50">
+            <div className="flex gap-1 flex-wrap">
+              <button
+                onClick={() => handleSubChange('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === 'ALL' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+              >
+                전체 {archiveSubCounts.ALL}
+              </button>
+              {ARCHIVE_SUBS.map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => handleSubChange(sub)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === sub ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+                >
+                  {sub.replace(' ARCHIVE', '')} {archiveSubCounts[sub]}
+                </button>
+              ))}
+              <button
+                onClick={() => handleSubChange('UNASSIGNED')}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === 'UNASSIGNED' ? 'bg-red-600 text-white' : 'bg-white text-red-500 border border-red-200 hover:bg-red-50'}`}
+              >
+                미지정 {archiveSubCounts['UNASSIGNED']}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CLEARANCE 세부 카테고리 */}
+        {stageFilter === 'CLEARANCE' && (
+          <div className="border-t border-slate-100 p-2 bg-amber-50/50">
+            <div className="flex gap-1 flex-wrap">
+              {([
+                ['ALL', '전체', clearanceSubCounts.ALL],
+                ['CLEARANCE', '미분류', clearanceSubCounts.CLEARANCE],
+                ['CLEARANCE_KEEP', '판매유지', clearanceSubCounts.CLEARANCE_KEEP],
+                ['CLEARANCE_DISPOSE', '폐기결정', clearanceSubCounts.CLEARANCE_DISPOSE],
+              ] as [string, string, number][]).map(([key, label, count]) => (
+                <button
+                  key={key}
+                  onClick={() => handleSubChange(key)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === key ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'}`}
+                >
+                  {label} {count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 선택 액션 바 */}
       {selectedIds.length > 0 && (
-        <div className="bg-slate-900 text-white rounded-xl p-3 flex items-center justify-between shadow-lg ring-1 ring-white/10">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setSelectedIds([])} className="p-1 text-slate-400 hover:text-white transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-            <span className="text-sm">선택됨: <span className="text-blue-400 font-bold">{selectedIds.length}</span></span>
+        <div className="bg-slate-900 text-white rounded-xl p-3 shadow-lg ring-1 ring-white/10 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setSelectedIds([]); setShowMoveMenu(false); }} className="p-1 text-slate-400 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <span className="text-sm">선택됨: <span className="text-blue-400 font-bold">{selectedIds.length}</span></span>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setShowMoveMenu(!showMoveMenu)}
+                disabled={movingCategory}
+                className={`px-3 py-2 text-xs rounded-lg font-bold transition-colors ${showMoveMenu ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+              >
+                {movingCategory ? '이동 중...' : '카테고리 이동'}
+              </button>
+            </div>
           </div>
-          <div className="flex gap-1.5">
-            <button className="px-3 py-2 text-xs bg-emerald-500/20 text-emerald-400 rounded-lg font-bold hover:bg-emerald-500/30 transition-colors">승인</button>
-            <button className="px-3 py-2 text-xs bg-slate-700 text-slate-300 rounded-lg font-bold hover:bg-slate-600 transition-colors">이동</button>
-          </div>
+
+          {/* 카테고리 선택 메뉴 */}
+          {showMoveMenu && (
+            <div className="border-t border-white/10 pt-2 space-y-1.5">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">아카이브 (날짜 무시, 강제 배정)</p>
+              <div className="grid grid-cols-3 gap-1">
+                {['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE'].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => moveToCategory(cat)}
+                    disabled={movingCategory}
+                    className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-slate-300 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors text-center leading-tight"
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1 pt-1">클리어런스 (날짜 무시, 강제 배정)</p>
+              <div className="grid grid-cols-3 gap-1">
+                {['CLEARANCE', 'CLEARANCE_KEEP', 'CLEARANCE_DISPOSE'].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => moveToCategory(cat)}
+                    disabled={movingCategory}
+                    className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-amber-400 rounded-lg hover:bg-amber-600 hover:text-white transition-colors"
+                  >
+                    {cat === 'CLEARANCE' ? '클리어런스' : cat === 'CLEARANCE_KEEP' ? '판매유지' : '폐기결정'}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1 pt-1">기타</p>
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  onClick={() => moveToCategory('NEW')}
+                  disabled={movingCategory}
+                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-emerald-400 rounded-lg hover:bg-emerald-600 hover:text-white transition-colors"
+                >
+                  NEW
+                </button>
+                <button
+                  onClick={() => moveToCategory('CURATED')}
+                  disabled={movingCategory}
+                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-indigo-400 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors"
+                >
+                  CURATED
+                </button>
+                <button
+                  onClick={() => resetToAuto()}
+                  disabled={movingCategory}
+                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
+                >
+                  자동복원
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 결과 수 및 페이지 사이즈 선택 */}
+      {/* 정렬 + 결과 수 */}
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-slate-500">{filtered.length.toLocaleString()}개의 상품 목록</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">{sorted.length.toLocaleString()}개</span>
+          <select
+            value={sortBy}
+            onChange={e => { setSortBy(e.target.value); setCurrentPage(1); }}
+            className="text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="date_desc">최신순</option>
+            <option value="date_asc">오래된순</option>
+            <option value="category">카테고리별</option>
+            <option value="grade">등급순 (S→C)</option>
+            <option value="price_desc">가격 높은순</option>
+            <option value="price_asc">가격 낮은순</option>
+            <option value="confidence">신뢰도순</option>
+          </select>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">보기</span>
           <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
@@ -275,7 +581,17 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-extrabold text-blue-600">{p.salePrice?.toLocaleString()}원</span>
+                  {p.lifecycle && p.lifecycle.discountRate > 0 && p.lifecycle.stage !== 'NEW' ? (
+                    <>
+                      <span className="text-[11px] font-bold text-slate-400 line-through">{p.salePrice?.toLocaleString()}</span>
+                      <span className="text-[13px] font-extrabold text-red-600">
+                        {Math.round(p.salePrice * (1 - p.lifecycle.discountRate / 100)).toLocaleString()}원
+                      </span>
+                      <span className="text-[10px] font-black text-red-500 bg-red-50 px-1 py-px rounded">-{p.lifecycle.discountRate}%</span>
+                    </>
+                  ) : (
+                    <span className="text-[13px] font-extrabold text-blue-600">{p.salePrice?.toLocaleString()}원</span>
+                  )}
                   <div className="h-1 w-1 rounded-full bg-slate-300" />
                   <span className={`text-[11px] font-bold ${p.stockQuantity === 0 ? 'text-red-500' : 'text-slate-500'}`}>
                     재고 {p.stockQuantity}
@@ -449,7 +765,10 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
           <p className="text-sm font-bold text-slate-400">
-            {searchTerm ? '검색 결과가 없습니다.' : '표시할 상품이 없습니다.'}
+            {searchTerm ? '검색 결과가 없습니다.' :
+             stageFilter === 'UNASSIGNED' ? '미지정 상품이 없습니다.' :
+             stageFilter !== 'ALL' ? `${stageFilter} 카테고리에 상품이 없습니다.` :
+             '표시할 상품이 없습니다.'}
           </p>
         </div>
       )}

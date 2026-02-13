@@ -5,7 +5,7 @@
 
 import { classifyProductByVision } from './gemini-classifier';
 import { db } from '@/lib/db';
-import type { BatchProgress, GeminiVisionResult } from './types';
+import type { BatchProgress, BatchFailureDetail, GeminiVisionResult } from './types';
 
 interface QueueProduct {
   originProductNo: string;
@@ -100,11 +100,13 @@ export async function processBatch(
   const delayMs = options.delayMs || 4000; // Pro 모델은 속도보다 정확성 우선
   const startedAt = new Date().toISOString();
 
+  const failures: BatchFailureDetail[] = [];
   const progress: BatchProgress = {
     total: products.length,
     completed: 0,
     failed: 0,
-    startedAt
+    startedAt,
+    failures
   };
 
   // 큐 인덱스 관리 (Closure)
@@ -127,18 +129,34 @@ export async function processBatch(
       try {
         const success = await Promise.race([
           analyzeAndSave(product),
-          new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 90000)) // 90초 타임아웃
+          new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('90초 타임아웃 초과')), 90000))
         ]);
 
-        if (success) progress.completed++;
-        else progress.failed++;
-      } catch (e) {
+        if (success) {
+          progress.completed++;
+        } else {
+          progress.failed++;
+          failures.push({
+            productNo: product.originProductNo,
+            productName: product.name,
+            error: 'Gemini 응답 없음 (No result)',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (e: any) {
         progress.failed++;
+        failures.push({
+          productNo: product.originProductNo,
+          productName: product.name,
+          error: e?.message || '알 수 없는 오류',
+          timestamp: new Date().toISOString()
+        });
         console.error(`[Batch] Worker ${workerId} error on ${product.originProductNo}:`, e);
       }
 
       // 4. 완료 보고
-      options.onProgress?.({ ...progress });
+      progress.failures = failures;
+      options.onProgress?.({ ...progress, failures: [...failures] });
 
       // 5. Rate Limit 딜레이 (다음 작업 전 대기)
       if (currentIndex < products.length) {

@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
     );
 
     // 3. Text 분류와 merge
-    const textResult = classifyProduct(productName);
+    // 3. Text 분류와 merge
+    const textResult = await classifyProduct(productName);
 
     // 수동 브랜드 조회
     const { rows: brandRows } = await db.query(

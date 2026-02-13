@@ -13,8 +13,8 @@ export interface ClassificationResult {
     lifecycle: LifecycleStage;
 }
 
-export function classifyProduct(product: any, visionLabels: string[] = []): ClassificationResult {
-    const lifecycle = calculateLifecycle(product.regDate, product.overrideDate);
+export async function classifyProduct(product: any, visionLabels: string[] = []): Promise<ClassificationResult> {
+    const lifecycle = await calculateLifecycle(product.regDate, product.overrideDate);
     const text = `${product.name} ${product.sellerManagementCode || ''} ${product.description || ''}`;
 
     // 기본 결과 (NEW, CURATED, CLEARANCE 단계는 라이프사이클 우선)

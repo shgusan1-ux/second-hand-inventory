@@ -11,8 +11,12 @@ interface Product {
   statusType: string;
   thumbnailUrl?: string | null;
   regDate?: string;
-  lifecycle?: { stage: string; daysSince: number };
+  lifecycle?: { stage: string; daysSince: number; discount: number };
+  classification?: { visionGrade?: string; confidence?: number; brandTier?: string };
+  isMatched?: boolean;
 }
+
+type SortType = 'DATE_DESC' | 'DATE_ASC' | 'PRICE_DESC' | 'PRICE_ASC' | 'GRADE' | 'NAME';
 
 interface InventoryManagementTabProps {
   products: Product[];
@@ -25,6 +29,7 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
   const [searchTerm, setSearchTerm] = useState('');
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [sortBy, setSortBy] = useState<SortType>('DATE_DESC');
 
   // Sync internal filter with parent filter
   useMemo(() => {
@@ -57,8 +62,24 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
       list = list.filter(p => p.stockQuantity === 0 || p.statusType === 'OUTOFSTOCK');
     }
 
+    // Sorting
+    list.sort((a, b) => {
+      if (sortBy === 'DATE_DESC') return new Date(b.regDate || 0).getTime() - new Date(a.regDate || 0).getTime();
+      if (sortBy === 'DATE_ASC') return new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime();
+      if (sortBy === 'PRICE_DESC') return b.salePrice - a.salePrice;
+      if (sortBy === 'PRICE_ASC') return a.salePrice - b.salePrice;
+      if (sortBy === 'NAME') return a.name.localeCompare(b.name);
+      if (sortBy === 'GRADE') {
+        const gradeMap: Record<string, number> = { 'S급': 3, 'A급': 2, 'B급': 1 };
+        const gA = gradeMap[a.classification?.visionGrade || ''] || 0;
+        const gB = gradeMap[b.classification?.visionGrade || ''] || 0;
+        return gB - gA;
+      }
+      return 0;
+    });
+
     return list;
-  }, [products, filter, searchTerm]);
+  }, [products, filter, searchTerm, sortBy]);
 
   // Pagination logic
   const totalPages = Math.ceil(filtered.length / pageSize);
@@ -149,9 +170,23 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
         />
       </div>
 
-      {/* 결과 수 및 페이지 사이즈 선택 */}
+      {/* 정렬 및 결과 건수 */}
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-slate-500">{filtered.length.toLocaleString()}개 상품</span>
+        <div className="flex items-center gap-2">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortType)}
+            className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="DATE_DESC">최신순</option>
+            <option value="DATE_ASC">오래된순</option>
+            <option value="PRICE_DESC">가격높은순</option>
+            <option value="PRICE_ASC">가격낮은순</option>
+            <option value="GRADE">등급순 (S급우선)</option>
+            <option value="NAME">상품명순</option>
+          </select>
+          <span className="text-xs font-medium text-slate-500">{filtered.length.toLocaleString()}개 상품</span>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">보기</span>
           <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
@@ -181,8 +216,8 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                 {/* 썸네일 및 상태 아이콘 */}
                 <div className="relative shrink-0">
                   <div className={`w-14 h-14 rounded-xl overflow-hidden border shadow-sm flex items-center justify-center ${isSold ? 'bg-red-50 border-red-100' :
-                      isSuspended ? 'bg-orange-50 border-orange-100' :
-                        'bg-emerald-50 border-emerald-100'
+                    isSuspended ? 'bg-orange-50 border-orange-100' :
+                      'bg-emerald-50 border-emerald-100'
                     }`}>
                     {p.thumbnailUrl ? (
                       <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
@@ -198,10 +233,20 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                       </div>
                     )}
                   </div>
+                  {/* 등급 표시 배지 (마인드맵 사양) */}
+                  {p.classification?.visionGrade && (
+                    <div className={`absolute -top-1 -left-1 px-1.5 py-0.5 rounded-md text-[10px] font-black shadow-sm z-10 ${p.classification.visionGrade === 'S급' ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
+                      p.classification.visionGrade === 'A급' ? 'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-900' :
+                        'bg-gradient-to-br from-amber-600 to-amber-800 text-white'
+                      }`}>
+                      {p.classification.visionGrade.replace('급', '')}
+                    </div>
+                  )}
+
                   {/* 이미지 위에 오버레이된 작은 상태 배지 */}
-                  <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center shadow-sm ${isSold ? 'bg-red-500 text-white' :
-                      isSuspended ? 'bg-orange-500 text-white' :
-                        'bg-emerald-500 text-white'
+                  <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center shadow-sm z-10 ${isSold ? 'bg-red-500 text-white' :
+                    isSuspended ? 'bg-orange-500 text-white' :
+                      'bg-emerald-500 text-white'
                     }`}>
                     {isSold ? (
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -220,11 +265,26 @@ export function InventoryManagementTab({ products, parentFilter }: InventoryMana
                     {p.regDate && (
                       <span className="text-[9px] text-slate-400">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>
                     )}
-                    {isSuspended && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">판매중지</span>}
+                    {p.isMatched ? (
+                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 flex items-center gap-1">
+                        <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" /></svg>
+                        매칭 완료
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                        미매칭
+                      </span>
+                    )}
                   </div>
                   <p className="font-bold text-sm text-slate-800 truncate leading-snug">{p.name}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[12px] font-black text-blue-600">{p.salePrice?.toLocaleString()}원</span>
+                    {p.lifecycle && p.lifecycle.discount > 0 && (
+                      <span className="text-[11px] font-bold text-rose-500 bg-rose-50 px-1 rounded flex items-center gap-0.5">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12 7a1 1 0 110-2h5V10a1 1 0 11-2 0V7h-3zm-9 6l6-6 4 4 3-3 4 4a1 1 0 01-1.414 1.414L13 11.414l-4 4-4-4L3.414 13H3z" clipRule="evenodd" /></svg>
+                        {Math.floor(p.salePrice * (1 - p.lifecycle.discount / 100)).toLocaleString()}원 ({p.lifecycle.discount}%↓)
+                      </span>
+                    )}
                     <div className="w-1 h-1 rounded-full bg-slate-300" />
                     <span className={`text-[11px] font-bold ${isSold ? 'text-red-500' : 'text-slate-500'}`}>
                       재고 {p.stockQuantity}개

@@ -9,6 +9,7 @@ import { InventoryManagementTab } from '@/components/smartstore/inventory-manage
 import { PriceManagementTab } from '@/components/smartstore/price-management-tab';
 import { ImageManagementTab } from '@/components/smartstore/image-management-tab';
 import { AutomationWorkflowTab } from '@/components/smartstore/automation-workflow-tab';
+import { SettingsTab } from '@/components/smartstore/settings-tab';
 
 interface Product {
   originProductNo: string;
@@ -40,6 +41,7 @@ interface Product {
     confidence: number;
     suggestedNaverCategory?: string;
   };
+  naverCategoryId?: string;
 }
 
 interface ProgressState {
@@ -47,7 +49,13 @@ interface ProgressState {
   message: string;
 }
 
-type TabId = 'products' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation';
+interface SyncFailure {
+  id: string;
+  timestamp: Date;
+  message: string;
+}
+
+type TabId = 'products' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'settings';
 
 const TABS: { id: TabId; label: string; shortLabel: string }[] = [
   { id: 'products', label: '상품관리', shortLabel: '상품' },
@@ -56,6 +64,7 @@ const TABS: { id: TabId; label: string; shortLabel: string }[] = [
   { id: 'pricing', label: '가격', shortLabel: '가격' },
   { id: 'images', label: '이미지', shortLabel: '이미지' },
   { id: 'automation', label: '자동화', shortLabel: '자동화' },
+  { id: 'settings', label: '설정', shortLabel: '설정' },
 ];
 
 async function fetchProductsWithProgress(
@@ -109,6 +118,9 @@ export default function SmartstorePage() {
   const [activeTab, setActiveTab] = useState<TabId>('products');
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [syncFailures, setSyncFailures] = useState<SyncFailure[]>([]);
+  const [showFailures, setShowFailures] = useState(false);
+  const syncQueueRef = useRef(0);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -126,19 +138,17 @@ export default function SmartstorePage() {
   } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
-      // 서버 캐시에서 이전 데이터 로드 (네이버 API 호출 없음)
       const cacheRes = await fetch('/api/smartstore/products?cacheOnly=true');
       const cacheData = await cacheRes.json();
       if (cacheData.success && cacheData.data?.contents?.length > 0) {
         return cacheData;
       }
-      // 캐시 없으면 빈 데이터 반환 (자동 동기화 안 함)
       return { success: true, data: { contents: [], totalCount: 0, statusCounts: { total: 0, wait: 0, sale: 0, outofstock: 0, unapproved: 0, suspension: 0, ended: 0, prohibited: 0 }, cached: false } };
     },
     staleTime: Infinity,
     gcTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: true, // 페이지 진입 시 서버 캐시 확인
+    refetchOnMount: true,
   });
 
   const allProducts: Product[] = data?.data?.contents || [];
@@ -151,18 +161,51 @@ export default function SmartstorePage() {
 
   const autoSyncTriggered = useRef(false);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    setStatusFilter(null);
+  // 실제 동기화 실행
+  const executeSyncOnce = async () => {
     setProgress({ percent: 0, message: '동기화 시작...' });
-    queryClient.removeQueries({ queryKey: ['all-products'] });
     try {
       const freshData = await fetchProductsWithProgress(handleProgress);
       queryClient.setQueryData(['all-products'], freshData);
-    } catch (e) {
-      console.error('Refresh failed:', e);
+    } catch (e: any) {
+      const failure: SyncFailure = {
+        id: Date.now().toString(),
+        timestamp: new Date(),
+        message: e?.message || '알 수 없는 오류',
+      };
+      setSyncFailures(prev => [failure, ...prev].slice(0, 20)); // 최대 20개 보관
+      throw e;
+    } finally {
+      setProgress(null);
     }
-    setProgress(null);
+  };
+
+  // 대기열 포함 동기화
+  const handleRefresh = async () => {
+    // 이미 동기화 중이면 대기열에 추가
+    if (isRefreshing) {
+      syncQueueRef.current++;
+      setProgress(prev => prev ? { ...prev, message: `${prev.message} (대기 +${syncQueueRef.current})` } : prev);
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      await executeSyncOnce();
+    } catch (e) {
+      console.error('Sync failed:', e);
+    }
+
+    // 대기열 처리
+    while (syncQueueRef.current > 0) {
+      syncQueueRef.current--;
+      try {
+        await executeSyncOnce();
+      } catch (e) {
+        console.error('Queued sync failed:', e);
+      }
+    }
+
     setIsRefreshing(false);
   };
 
@@ -175,9 +218,7 @@ export default function SmartstorePage() {
   }, [isLoading, isFetching]);
 
   const handleStatusClick = (statusKey: string | null) => {
-    // 탭 이동 (사용자 요청: 해당재고가 나와야함)
     if (activeTab !== 'inventory') setActiveTab('inventory');
-
     if (statusFilter === statusKey) {
       setStatusFilter(null);
     } else {
@@ -185,9 +226,7 @@ export default function SmartstorePage() {
     }
   };
 
-  // 상태별 및 검색어 필터링 로직
   const displayedProducts = allProducts.filter(p => {
-    // 1. 상태 필터
     let statusMatch = true;
     if (statusFilter) {
       const status = p.statusType;
@@ -202,47 +241,23 @@ export default function SmartstorePage() {
       }
     }
 
-    // 2. 검색어 필터
     let searchMatch = true;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const name = p.name.toLowerCase();
       const brand = p.classification?.brand?.toLowerCase() || '';
       const productNo = String(p.originProductNo);
-
       searchMatch = name.includes(q) || brand.includes(q) || productNo.includes(q);
     }
 
     return statusMatch && searchMatch;
   });
 
-  // 동기화 진행 중
-  if (progress) {
-    const pct = progress?.percent || 0;
-    const msg = progress?.message || '준비 중...';
+  // 실패 기록 삭제
+  const clearFailure = (id: string) => {
+    setSyncFailures(prev => prev.filter(f => f.id !== id));
+  };
 
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-4">
-        <div className="w-full max-w-md">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-slate-700">{msg}</span>
-            <span className="text-sm font-bold text-blue-600">{pct}%</span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-400 mt-2 text-center">
-            네이버 스마트스토어에서 전체 상품을 동기화하고 있습니다
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 에러 상태 처리
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -274,21 +289,132 @@ export default function SmartstorePage() {
             {hasData ? `상품 현황 · ${totalCount.toLocaleString()}건` : '상품 동기화 전'}
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isFetching || isRefreshing}
-          className={`shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm rounded-lg disabled:opacity-50 transition-colors active:scale-95 ${
-            hasData
-              ? 'bg-white border border-slate-200 hover:bg-slate-50'
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
-          }`}
-        >
-          <svg className={`w-4 h-4 ${(isFetching || isRefreshing) ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span className="hidden sm:inline">{(isFetching || isRefreshing) ? '동기화 중...' : hasData ? '새로고침' : '상품 동기화'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 실패 알림 */}
+          {syncFailures.length > 0 && (
+            <button
+              onClick={() => setShowFailures(!showFailures)}
+              className="relative shrink-0 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 transition-colors active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                {syncFailures.length}
+              </span>
+            </button>
+          )}
+          <button
+            onClick={handleRefresh}
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-sm rounded-lg transition-colors active:scale-95 ${isRefreshing
+                ? 'bg-blue-600 text-white'
+                : hasData
+                  ? 'bg-white border border-slate-200 hover:bg-slate-50'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
+              }`}
+          >
+            <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="hidden sm:inline">
+              {isRefreshing
+                ? syncQueueRef.current > 0
+                  ? `동기화 중 (+${syncQueueRef.current} 대기)`
+                  : '동기화 중...'
+                : hasData ? '새로고침' : '상품 동기화'}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* 실패 기록 패널 */}
+      {showFailures && syncFailures.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-red-700">동기화 실패 기록</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSyncFailures([])}
+                className="text-[10px] text-red-400 hover:text-red-600 font-bold"
+              >
+                전체 삭제
+              </button>
+              <button onClick={() => setShowFailures(false)} className="text-red-400 hover:text-red-600">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {syncFailures.map(f => (
+              <div key={f.id} className="flex items-start justify-between gap-2 bg-white rounded-lg p-2 border border-red-100">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-red-600 truncate">{f.message}</p>
+                  <p className="text-[9px] text-red-400">{f.timestamp.toLocaleTimeString('ko-KR')}</p>
+                </div>
+                <button
+                  onClick={() => clearFailure(f.id)}
+                  className="shrink-0 text-red-300 hover:text-red-500"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 초기 로딩 / 동기화 상태 (데이터 없을 때) */}
+      {!hasData && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 mb-4 text-center">
+          {isLoading ? (
+            // react-query 초기 로드 (캐시 확인 중)
+            <>
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4">
+                <svg className="w-7 h-7 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+              <p className="text-sm font-bold text-slate-600 mb-1">캐시 확인 중...</p>
+              <p className="text-xs text-slate-400">저장된 상품 데이터를 불러오고 있습니다</p>
+            </>
+          ) : progress ? (
+            // SSE 스트리밍 동기화 중
+            <>
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mb-4">
+                <span className="text-xl font-black text-blue-600">{progress.percent}%</span>
+              </div>
+              <p className="text-sm font-bold text-slate-600 mb-3">네이버 상품 동기화 중</p>
+              <div className="w-full max-w-xs mx-auto">
+                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-blue-400 h-full rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">{progress.message}</p>
+              </div>
+            </>
+          ) : (
+            // 데이터 없고 동기화도 안 함
+            <>
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-slate-50 mb-4">
+                <svg className="w-7 h-7 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <p className="text-sm font-bold text-slate-600 mb-1">상품 데이터가 없습니다</p>
+              <p className="text-xs text-slate-400 mb-4">상품 동기화 버튼을 눌러 네이버에서 상품을 가져오세요</p>
+              <button
+                onClick={handleRefresh}
+                className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors active:scale-95 shadow-lg shadow-blue-200"
+              >
+                상품 동기화 시작
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 네이버 스타일 상품 현황 대시보드 */}
       {hasData && <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
@@ -328,9 +454,9 @@ export default function SmartstorePage() {
         )}
       </div>}
 
-      {/* 탭 네비게이션 - 6열 균등 분할 */}
+      {/* 탭 네비게이션 */}
       <div className="border-b border-slate-200 mb-4">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {TABS.map(tab => (
             <button
               key={tab.id}
@@ -371,7 +497,37 @@ export default function SmartstorePage() {
         {activeTab === 'automation' && (
           <AutomationWorkflowTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
+        {activeTab === 'settings' && (
+          <SettingsTab onRefresh={handleRefresh} />
+        )}
       </div>
+
+      {/* 동기화 진행 팝업 (하단 고정) */}
+      {progress && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md z-50">
+          <div className="bg-slate-900 text-white rounded-2xl shadow-2xl shadow-black/30 p-4 ring-1 ring-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-xs font-bold text-slate-300">
+                  동기화 중
+                  {syncQueueRef.current > 0 && (
+                    <span className="ml-1 text-amber-400">+{syncQueueRef.current} 대기</span>
+                  )}
+                </span>
+              </div>
+              <span className="text-sm font-black text-blue-400">{progress.percent}%</span>
+            </div>
+            <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-blue-400 h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progress.percent}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5 truncate">{progress.message}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

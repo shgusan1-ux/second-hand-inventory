@@ -188,7 +188,9 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                     <div>
                                         <div className="text-xs font-medium text-slate-500 mb-2">접근 권한</div>
                                         <div className="flex flex-wrap gap-1">
-                                            {user.permissions?.includes('ALL') ? (
+                                            {['대표자', '경영지원'].includes(user.job_title) ? (
+                                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">관리자 (전체 권한)</Badge>
+                                            ) : user.permissions?.includes('ALL') ? (
                                                 <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200">전체 권한</Badge>
                                             ) : (user.permissions?.length || 0) > 0 ? (
                                                 user.permissions?.map(p => {
@@ -238,8 +240,13 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                         <UserCog className="w-3 h-3 mr-1" /> 직책 변경
                                     </Button>
 
-                                    {!['대표자', '경영지원'].includes(user.job_title) && (
-                                        <Button variant="ghost" size="sm" className="w-full text-red-400 hover:text-red-600 h-6" onClick={() => handleDeleteUser(user)}>
+                                    {currentUser?.id !== user.id && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="w-full text-red-400 hover:text-red-600 h-6"
+                                            onClick={() => handleDeleteUser(user)}
+                                        >
                                             <Trash2 className="w-3 h-3 mr-1" /> 계정 삭제
                                         </Button>
                                     )}

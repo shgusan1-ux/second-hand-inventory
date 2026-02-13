@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { getNaverRealTimeCounts } from '@/lib/actions';
 
 interface Product {
   originProductNo: string;
@@ -13,6 +15,7 @@ interface Product {
   lifecycle?: { stage: string; daysSince: number };
   archiveInfo?: { category: string };
   internalCategory?: string;
+  naverCategoryId?: string;
 }
 
 interface CategoryManagementTabProps {
@@ -22,11 +25,18 @@ interface CategoryManagementTabProps {
 
 // 다이어그램 기준 ARCHIVE 하위 카테고리 (ETC 제거)
 const ARCHIVE_SUB_CATEGORIES = [
-  { id: 'MILITARY', name: 'MILITARY', description: 'M-65, MA-1, 필드자켓, 카고팬츠, Alpha Industries, Rothco', color: 'bg-green-600' },
-  { id: 'WORKWEAR', name: 'WORKWEAR', description: '칼하트, 디키즈, 데님, 캔버스, 초어자켓, Pointer', color: 'bg-amber-700' },
-  { id: 'JAPAN', name: 'JAPANESE ARCHIVE', description: '빔즈, 포터, 캐피탈, Visvim, 일본 데님', color: 'bg-red-600' },
-  { id: 'EUROPE', name: 'HERITAGE EUROPE', description: '프랑스/독일 빈티지, 몰스킨, Le Laboureur', color: 'bg-blue-700' },
-  { id: 'BRITISH', name: 'BRITISH ARCHIVE', description: '바버, 버버리, 아쿠아스큐텀, 트렌치/트위드', color: 'bg-indigo-700' },
+  { id: 'MILITARY ARCHIVE', name: 'MILITARY', description: 'M-65, MA-1, 필드자켓, 카고팬츠, Alpha Industries, Rothco', color: 'bg-emerald-700' },
+  { id: 'WORKWEAR ARCHIVE', name: 'WORKWEAR', description: '칼하트, 디키즈, 데님, 캔버스, 초어자켓, Pointer', color: 'bg-amber-600' },
+  { id: 'OUTDOOR ARCHIVE', name: 'OUTDOOR', description: '파타고니아, 노스페이스(빈티지), ACG, 아크테릭스', color: 'bg-teal-600' },
+  { id: 'JAPANESE ARCHIVE', name: 'JAPANESE ARCHIVE', description: '빔즈, 포터, 캐피탈, Visvim, 일본 데님', color: 'bg-red-500' },
+  { id: 'HERITAGE EUROPE', name: 'HERITAGE EUROPE', description: '프랑스/독일 빈티지, 몰스킨, Le Laboureur', color: 'bg-blue-500' },
+  { id: 'BRITISH ARCHIVE', name: 'BRITISH ARCHIVE', description: '바버, 버버리, 아쿠아스큐텀, 트렌치/트위드', color: 'bg-indigo-500' },
+];
+
+// CLEARANCE 하위 카테고리 (판매유지/폐기결정)
+const CLEARANCE_SUB_CATEGORIES = [
+  { id: 'CLEARANCE_KEEP', name: '판매유지', description: '할인 적용 후 계속 판매 유지', color: 'bg-amber-500' },
+  { id: 'CLEARANCE_DISPOSE', name: '폐기결정', description: '판매 중단 및 폐기 처리 대상', color: 'bg-red-600' },
 ];
 
 // 내부 카테고리 (라이프사이클 스테이지)
@@ -40,15 +50,20 @@ const LIFECYCLE_STAGES = [
 export function CategoryManagementTab({ products, onRefresh }: CategoryManagementTabProps) {
   const [section, setSection] = useState<'internal' | 'naver'>('internal');
   const [archiveExpanded, setArchiveExpanded] = useState(true);
+  const [clearanceExpanded, setClearanceExpanded] = useState(true);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [selectedArchiveSub, setSelectedArchiveSub] = useState<string | null>(null);
+  const [selectedClearanceSub, setSelectedClearanceSub] = useState<string | null>(null);
   const [naverSearch, setNaverSearch] = useState('');
   const [naverCategories, setNaverCategories] = useState<any[]>([]);
   const [naverLoading, setNaverLoading] = useState(false);
   const [naverLoaded, setNaverLoaded] = useState(false);
+  const [naverCounts, setNaverCounts] = useState<Record<string, number> | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // 스테이지별 카운트
   const stageCounts = useMemo(() => {
+    if (naverCounts) return { ...naverCounts, NONE: 0 }; // Use synced counts if available
     const counts: Record<string, number> = { NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0, NONE: 0 };
     for (const p of products) {
       const stage = p.lifecycle?.stage || 'NONE';
@@ -56,7 +71,7 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
       else counts['NONE']++;
     }
     return counts;
-  }, [products]);
+  }, [products, naverCounts]);
 
   // ARCHIVE 상품 하위 카테고리별 카운트
   const archiveSubCounts = useMemo(() => {
@@ -69,6 +84,21 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
       const found = ARCHIVE_SUB_CATEGORIES.find(c => c.id === cat);
       if (found) counts[found.id]++;
       else counts['UNCATEGORIZED']++;
+    }
+    return counts;
+  }, [products]);
+
+  // CLEARANCE 상품 하위 카테고리별 카운트
+  const clearanceSubCounts = useMemo(() => {
+    const clearanceProducts = products.filter(p => p.lifecycle?.stage === 'CLEARANCE');
+    const counts: Record<string, number> = {};
+    for (const cat of CLEARANCE_SUB_CATEGORIES) counts[cat.id] = 0;
+    counts['CLEARANCE_UNASSIGNED'] = 0;
+    for (const p of clearanceProducts) {
+      const cat = p.internalCategory || 'CLEARANCE';
+      const found = CLEARANCE_SUB_CATEGORIES.find(c => c.id === cat);
+      if (found) counts[found.id]++;
+      else counts['CLEARANCE_UNASSIGNED']++;
     }
     return counts;
   }, [products]);
@@ -86,11 +116,21 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
         return cat === selectedArchiveSub;
       });
     }
+    if (selectedClearanceSub) {
+      return products.filter(p => {
+        if (p.lifecycle?.stage !== 'CLEARANCE') return false;
+        if (selectedClearanceSub === 'CLEARANCE_UNASSIGNED') {
+          const cat = p.internalCategory || 'CLEARANCE';
+          return !CLEARANCE_SUB_CATEGORIES.find(c => c.id === cat);
+        }
+        return p.internalCategory === selectedClearanceSub;
+      });
+    }
     if (selectedStage) {
       return products.filter(p => p.lifecycle?.stage === selectedStage);
     }
     return [];
-  }, [products, selectedStage, selectedArchiveSub]);
+  }, [products, selectedStage, selectedArchiveSub, selectedClearanceSub]);
 
   // 네이버 카테고리 로드
   const loadNaverCategories = async () => {
@@ -109,27 +149,73 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
     setNaverLoaded(true);
   };
 
-  // 네이버 카테고리 필터링
+  // 네이버 카테고리별 상품 수
+  const naverCategoryProductCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of products) {
+      if (p.naverCategoryId) {
+        counts[p.naverCategoryId] = (counts[p.naverCategoryId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [products]);
+
+  // 네이버 카테고리 필터링 및 정렬
   const filteredNaverCategories = useMemo(() => {
-    if (!naverSearch.trim()) return naverCategories.slice(0, 100);
-    const term = naverSearch.toLowerCase();
-    return naverCategories
-      .filter((c: any) => {
+    let result = naverCategories;
+
+    // 검색 필터
+    if (naverSearch.trim()) {
+      const term = naverSearch.toLowerCase();
+      result = result.filter((c: any) => {
         const name = (c.name || c.wholeCategoryName || '').toLowerCase();
         const id = String(c.id || c.categoryId || '');
         return name.includes(term) || id.includes(term);
+      });
+    }
+
+    // 정렬 (상품 수 내림차순)
+    return [...result]
+      .sort((a: any, b: any) => {
+        const countA = naverCategoryProductCounts[a.id || a.categoryId] || 0;
+        const countB = naverCategoryProductCounts[b.id || b.categoryId] || 0;
+        return countB - countA;
       })
       .slice(0, 100);
-  }, [naverCategories, naverSearch]);
+  }, [naverCategories, naverSearch, naverCategoryProductCounts]);
 
   const handleStageClick = (stageId: string) => {
     setSelectedArchiveSub(null);
+    setSelectedClearanceSub(null);
     setSelectedStage(selectedStage === stageId ? null : stageId);
   };
 
   const handleArchiveSubClick = (subId: string) => {
     setSelectedStage(null);
+    setSelectedClearanceSub(null);
     setSelectedArchiveSub(selectedArchiveSub === subId ? null : subId);
+  };
+
+  const handleClearanceSubClick = (subId: string) => {
+    setSelectedStage(null);
+    setSelectedArchiveSub(null);
+    setSelectedClearanceSub(selectedClearanceSub === subId ? null : subId);
+  };
+
+  const handleSyncCounts = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await getNaverRealTimeCounts();
+      if (res.success && res.counts) {
+        setNaverCounts(res.counts);
+        toast.success('네이버 실제 수량과 동기화되었습니다.');
+      } else {
+        toast.error('동기화 실패: ' + (res.error || '알 수 없는 오류'));
+      }
+    } catch (e) {
+      toast.error('동기화 중 오류가 발생했습니다.');
+    }
+    setIsSyncing(false);
   };
 
   return (
@@ -138,9 +224,8 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={() => setSection('internal')}
-          className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            section === 'internal' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
+          className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${section === 'internal' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
         >
           내부카테고리
         </button>
@@ -149,9 +234,8 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
             setSection('naver');
             loadNaverCategories();
           }}
-          className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            section === 'naver' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
+          className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${section === 'naver' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
         >
           외부 네이버 카테고리
         </button>
@@ -163,7 +247,17 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
           <div className="bg-white rounded-xl border p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">라이프사이클 현황</span>
-              <span className="text-xs text-slate-400">{products.length}개 전체</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">{products.length}개 전체</span>
+                <button
+                  onClick={handleSyncCounts}
+                  disabled={isSyncing}
+                  className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                  title="네이버 실시간 수량 동기화"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isSyncing ? 'animate-spin text-blue-500' : ''}`} />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {LIFECYCLE_STAGES.map(stage => (
@@ -177,73 +271,116 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
 
           {/* 내부 카테고리 트리 */}
           <div className="bg-white rounded-xl border divide-y divide-slate-100">
-            {LIFECYCLE_STAGES.map(stage => (
-              <div key={stage.id}>
-                {/* 스테이지 행 */}
-                <button
-                  onClick={() => {
-                    if (stage.id === 'ARCHIVE') {
-                      setArchiveExpanded(!archiveExpanded);
-                    } else {
-                      handleStageClick(stage.id);
-                    }
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 active:bg-slate-100 ${
-                    selectedStage === stage.id ? stage.bg + ' border-l-4' : ''
-                  }`}
-                >
-                  <span className={`w-2.5 h-2.5 rounded-full ${stage.dot} shrink-0`} />
-                  <span className="text-sm font-bold text-slate-800 flex-1">{stage.name}</span>
-                  <span className={`text-sm font-bold ${stage.color}`}>{stageCounts[stage.id]}</span>
-                  {stage.id === 'ARCHIVE' ? (
-                    archiveExpanded
-                      ? <ChevronDown className="w-4 h-4 text-slate-400" />
-                      : <ChevronRight className="w-4 h-4 text-slate-400" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-300" />
-                  )}
-                </button>
+            {LIFECYCLE_STAGES.map(stage => {
+              const hasSubCategories = stage.id === 'ARCHIVE' || stage.id === 'CLEARANCE';
+              const isExpanded = stage.id === 'ARCHIVE' ? archiveExpanded : stage.id === 'CLEARANCE' ? clearanceExpanded : false;
 
-                {/* ARCHIVE 하위 카테고리 */}
-                {stage.id === 'ARCHIVE' && archiveExpanded && (
-                  <div className="bg-slate-50/50">
-                    {ARCHIVE_SUB_CATEGORIES.map(sub => (
-                      <button
-                        key={sub.id}
-                        onClick={() => handleArchiveSubClick(sub.id)}
-                        className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-slate-100 active:bg-slate-200 ${
-                          selectedArchiveSub === sub.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                        }`}
-                      >
-                        <span className={`w-2 h-2 rounded-sm ${sub.color} shrink-0`} />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs font-bold text-slate-700">{sub.name}</span>
-                          <span className="text-[10px] text-slate-400 ml-2 hidden md:inline">{sub.description}</span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-500">{archiveSubCounts[sub.id]}</span>
-                      </button>
-                    ))}
-                    {/* 미분류 */}
-                    {archiveSubCounts['UNCATEGORIZED'] > 0 && (
-                      <button
-                        onClick={() => handleArchiveSubClick('UNCATEGORIZED')}
-                        className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-slate-100 ${
-                          selectedArchiveSub === 'UNCATEGORIZED' ? 'bg-amber-50 border-l-4 border-amber-500' : ''
-                        }`}
-                      >
-                        <span className="w-2 h-2 rounded-sm bg-amber-400 shrink-0" />
-                        <span className="text-xs font-bold text-amber-700 flex-1">미분류</span>
-                        <span className="text-xs font-bold text-amber-600">{archiveSubCounts['UNCATEGORIZED']}</span>
-                      </button>
+              return (
+                <div key={stage.id}>
+                  {/* 스테이지 행 */}
+                  <button
+                    onClick={() => {
+                      if (stage.id === 'ARCHIVE') {
+                        setArchiveExpanded(!archiveExpanded);
+                      } else if (stage.id === 'CLEARANCE') {
+                        setClearanceExpanded(!clearanceExpanded);
+                      } else {
+                        handleStageClick(stage.id);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 active:bg-slate-100 ${selectedStage === stage.id ? stage.bg + ' border-l-4' : ''
+                      }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full ${stage.dot} shrink-0`} />
+                    <span className="text-sm font-bold text-slate-800 flex-1">{stage.name}</span>
+                    <span className={`text-sm font-bold ${stage.color}`}>{stageCounts[stage.id]}</span>
+                    {hasSubCategories ? (
+                      isExpanded
+                        ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                        : <ChevronRight className="w-4 h-4 text-slate-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-300" />
                     )}
-                  </div>
-                )}
-              </div>
-            ))}
+                  </button>
+
+                  {/* ARCHIVE 하위 카테고리 */}
+                  {stage.id === 'ARCHIVE' && archiveExpanded && (
+                    <div className="bg-slate-50/50">
+                      {ARCHIVE_SUB_CATEGORIES.map(sub => (
+                        <button
+                          key={sub.id}
+                          onClick={() => handleArchiveSubClick(sub.id)}
+                          className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-slate-100 active:bg-slate-200 ${selectedArchiveSub === sub.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                            }`}
+                        >
+                          <span className={`w-2 h-2 rounded-sm ${sub.color} shrink-0`} />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-bold text-slate-700">{sub.name}</span>
+                            <span className="text-[10px] text-slate-400 ml-2 hidden md:inline">{sub.description}</span>
+                          </div>
+                          <span className="text-xs font-bold text-slate-500">{archiveSubCounts[sub.id]}</span>
+                        </button>
+                      ))}
+                      {/* 미분류 */}
+                      {archiveSubCounts['UNCATEGORIZED'] > 0 && (
+                        <button
+                          onClick={() => handleArchiveSubClick('UNCATEGORIZED')}
+                          className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-slate-100 ${selectedArchiveSub === 'UNCATEGORIZED' ? 'bg-amber-50 border-l-4 border-amber-500' : ''
+                            }`}
+                        >
+                          <span className="w-2 h-2 rounded-sm bg-amber-400 shrink-0" />
+                          <span className="text-xs font-bold text-amber-700 flex-1">미분류</span>
+                          <span className="text-xs font-bold text-amber-600">{archiveSubCounts['UNCATEGORIZED']}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CLEARANCE 하위 카테고리 */}
+                  {stage.id === 'CLEARANCE' && clearanceExpanded && (
+                    <div className="bg-amber-50/30">
+                      {CLEARANCE_SUB_CATEGORIES.map(sub => (
+                        <button
+                          key={sub.id}
+                          onClick={() => handleClearanceSubClick(sub.id)}
+                          className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-amber-100/50 active:bg-amber-100 ${selectedClearanceSub === sub.id ? 'bg-amber-100 border-l-4 border-amber-500' : ''
+                            }`}
+                        >
+                          <span className={`w-2 h-2 rounded-sm ${sub.color} shrink-0`} />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-bold text-slate-700">{sub.name}</span>
+                            <span className="text-[10px] text-slate-400 ml-2 hidden md:inline">{sub.description}</span>
+                          </div>
+                          <span className="text-xs font-bold text-slate-500">{clearanceSubCounts[sub.id]}</span>
+                        </button>
+                      ))}
+                      {/* 미배정 */}
+                      {clearanceSubCounts['CLEARANCE_UNASSIGNED'] > 0 && (
+                        <button
+                          onClick={() => handleClearanceSubClick('CLEARANCE_UNASSIGNED')}
+                          className={`w-full flex items-center gap-3 pl-10 pr-4 py-2.5 text-left transition-colors hover:bg-amber-100/50 ${selectedClearanceSub === 'CLEARANCE_UNASSIGNED' ? 'bg-amber-100 border-l-4 border-amber-500' : ''
+                            }`}
+                        >
+                          <span className="w-2 h-2 rounded-sm bg-slate-400 shrink-0" />
+                          <span className="text-xs font-bold text-slate-500 flex-1">미배정</span>
+                          <span className="text-xs font-bold text-slate-400">{clearanceSubCounts['CLEARANCE_UNASSIGNED']}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
+          {naverCounts && (
+            <p className="text-[10px] text-center text-slate-400 mt-2">
+              * 수량은 네이버 스마트스토어 실시간 데이터입니다. (NEW는 전체에서 나머지를 뺀 추정치)
+            </p>
+          )}
+
           {/* 선택된 카테고리 상품 목록 */}
-          {(selectedStage || selectedArchiveSub) && (
+          {(selectedStage || selectedArchiveSub || selectedClearanceSub) && (
             <div className="bg-white rounded-xl border p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-slate-800 text-sm">
@@ -251,11 +388,15 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
                     ? selectedArchiveSub === 'UNCATEGORIZED'
                       ? 'ARCHIVE > 미분류'
                       : `ARCHIVE > ${ARCHIVE_SUB_CATEGORIES.find(c => c.id === selectedArchiveSub)?.name || selectedArchiveSub}`
-                    : selectedStage}
+                    : selectedClearanceSub
+                      ? selectedClearanceSub === 'CLEARANCE_UNASSIGNED'
+                        ? 'CLEARANCE > 미배정'
+                        : `CLEARANCE > ${CLEARANCE_SUB_CATEGORIES.find(c => c.id === selectedClearanceSub)?.name || selectedClearanceSub}`
+                      : selectedStage}
                   <span className="text-slate-400 font-normal ml-2">({selectedProducts.length}개)</span>
                 </h3>
                 <button
-                  onClick={() => { setSelectedStage(null); setSelectedArchiveSub(null); }}
+                  onClick={() => { setSelectedStage(null); setSelectedArchiveSub(null); setSelectedClearanceSub(null); }}
                   className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   닫기
@@ -272,6 +413,9 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
                         <p className="text-sm font-medium text-slate-700 truncate">{p.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] font-mono text-slate-400">#{p.originProductNo}</span>
+                          {p.regDate && (
+                            <span className="text-[9px] text-slate-400">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>
+                          )}
                           {p.salePrice && (
                             <span className="text-[10px] font-bold text-blue-600">{p.salePrice.toLocaleString()}원</span>
                           )}
@@ -343,6 +487,11 @@ export function CategoryManagementTab({ products, onRefresh }: CategoryManagemen
                       <p className="text-sm text-slate-700 truncate">
                         {cat.wholeCategoryName || cat.name || '이름 없음'}
                       </p>
+                      {naverCategoryProductCounts[cat.id || cat.categoryId] > 0 && (
+                        <span className="text-[10px] font-bold text-blue-600 ml-2">
+                          ({naverCategoryProductCounts[cat.id || cat.categoryId]}개)
+                        </span>
+                      )}
                     </div>
                     <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-2">
                       {cat.id || cat.categoryId}

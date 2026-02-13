@@ -146,12 +146,14 @@ async function initTables() {
       const seedData = [
         ['NEW', 'NEW IN', 1, 'NEW'],
         ['CURATED', 'CURATED', 2, 'CURATED'],
-        ['MILITARY', 'MILITARY', 3, 'ARCHIVE'],
-        ['WORKWEAR', 'WORKWEAR', 4, 'ARCHIVE'],
-        ['JAPAN', 'JAPANESE ARCHIVE', 5, 'ARCHIVE'],
-        ['EUROPE', 'HERITAGE EUROPE', 6, 'ARCHIVE'],
-        ['BRITISH', 'BRITISH ARCHIVE', 7, 'ARCHIVE'],
-        ['CLEARANCE', 'CLEARANCE', 8, 'CLEARANCE']
+        ['MILITARY ARCHIVE', 'MILITARY', 3, 'ARCHIVE'],
+        ['WORKWEAR ARCHIVE', 'WORKWEAR', 4, 'ARCHIVE'],
+        ['JAPANESE ARCHIVE', 'JAPANESE ARCHIVE', 5, 'ARCHIVE'],
+        ['HERITAGE EUROPE', 'HERITAGE EUROPE', 6, 'ARCHIVE'],
+        ['BRITISH ARCHIVE', 'BRITISH ARCHIVE', 7, 'ARCHIVE'],
+        ['CLEARANCE', 'CLEARANCE', 8, 'CLEARANCE'],
+        ['KEEP_SELLING', '판매유지', 9, 'CLEARANCE'],
+        ['DISCARD', '폐기 결정', 10, 'CLEARANCE']
       ];
       for (const [id, name, order, cls] of seedData) {
         await client.execute({
@@ -286,6 +288,7 @@ async function initTables() {
       `ALTER TABLE users ADD COLUMN security_memo TEXT`,
       `ALTER TABLE chat_messages ADD COLUMN attachment TEXT`,
       `ALTER TABLE naver_product_map ADD COLUMN inferred_brand TEXT`,
+      `ALTER TABLE users ADD COLUMN can_view_accounting BOOLEAN DEFAULT FALSE`,
     ];
     for (const sql of alterStatements) {
       try { await client.execute(sql); console.log('[DB] OK:', sql); } catch { }

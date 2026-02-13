@@ -608,7 +608,7 @@ export async function getUsers() {
 
     try {
         // Added security_memo to selection
-        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at, security_memo FROM users ORDER BY created_at DESC');
+        const result = await db.query('SELECT id, username, name, role, job_title, email, created_at, security_memo, can_view_accounting FROM users ORDER BY created_at DESC');
         return result.rows;
     } catch (e) {
         console.error('Failed to get users:', e);
@@ -767,48 +767,40 @@ export async function deleteUser(targetId: string) {
     }
 
     if (session.id === targetId) {
-        return { success: false, error: 'Cannot delete yourself' };
+        return { success: false, error: '자기 자신은 삭제할 수 없습니다.' };
     }
 
     try {
-        await db.query('BEGIN');
-
-        // Delete related data first
-        // 1. Attendance Logs
-        await db.query('DELETE FROM attendance_logs WHERE user_id = $1', [targetId]);
-
-        // 2. Audit Logs
-        await db.query('DELETE FROM audit_logs WHERE user_id = $1', [targetId]);
-
-        // 3. Security Logs
-        await db.query('DELETE FROM security_logs WHERE user_id = $1', [targetId]);
-
-        // 4. Messages (Both sent and received)
-        await db.query('DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $2', [targetId, targetId]);
-
-        // 5. User Permissions
-        await db.query('DELETE FROM user_permissions WHERE user_id = $1', [targetId]);
-
-        // 6. Delete User
-        const deleteRes = await db.query('DELETE FROM users WHERE id = $1', [targetId]);
-
-        if (deleteRes.rowCount === 0) {
-            throw new Error('User not found in database');
+        // 사용자 존재 확인
+        const userCheck = await db.query('SELECT id, name FROM users WHERE id = $1', [targetId]);
+        if (userCheck.rows.length === 0) {
+            return { success: false, error: '사용자를 찾을 수 없습니다.' };
         }
 
-        await db.query('COMMIT');
+        // 관련 데이터 순차 삭제 (Turso는 별도 execute()로 BEGIN/COMMIT 미지원)
+        const deleteTables = [
+            'DELETE FROM attendance_logs WHERE user_id = $1',
+            'DELETE FROM audit_logs WHERE user_id = $1',
+            'DELETE FROM security_logs WHERE user_id = $1',
+            'DELETE FROM user_permissions WHERE user_id = $1',
+        ];
+        for (const sql of deleteTables) {
+            try { await db.query(sql, [targetId]); } catch { /* 테이블 없으면 무시 */ }
+        }
+        // 메시지 (sender/receiver 모두)
+        try { await db.query('DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $1', [targetId]); } catch { }
 
-        // Log the action (System log?) - Can't log with the deleted user ID if valid FK required for logAction caller? 
-        // But the caller is 'session.id' (Admin), so it's fine.
+        // 사용자 삭제
+        await db.query('DELETE FROM users WHERE id = $1', [targetId]);
+
         await logAction('DELETE_USER', 'user', targetId, 'Deleted by admin');
 
         revalidatePath('/settings/users');
         revalidatePath('/members');
         return { success: true };
     } catch (e: any) {
-        await db.query('ROLLBACK');
         console.error('Failed to delete user:', e);
-        return { success: false, error: e.message || 'Failed to delete user' };
+        return { success: false, error: e.message || '사용자 삭제 실패' };
     }
 }
 
@@ -1352,3 +1344,102 @@ export async function clearSmartStoreCache() {
     revalidatePath('/smartstore');
     return { success: true };
 }
+
+export async function saveLifecycleSettings(settings: any) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원', '총매니저'].includes(session.job_title)) {
+        return { success: false, error: '권한이 없습니다.' };
+    }
+
+    try {
+        const query = `
+            INSERT INTO system_settings(key, value) VALUES('lifecycle_settings', $1)
+            ON CONFLICT(key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+        `;
+        // Ensure values are numbers
+        const sanitized = {
+            newDays: Number(settings.newDays),
+            curatedDays: Number(settings.curatedDays),
+            archiveDays: Number(settings.archiveDays),
+            curatedDiscount: Number(settings.curatedDiscount),
+            archiveDiscount: Number(settings.archiveDiscount),
+            clearanceDiscount: Number(settings.clearanceDiscount)
+        };
+
+        await db.query(`INSERT INTO system_settings(key, value) VALUES('lifecycle_settings', $1) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`, [JSON.stringify(sanitized)]);
+
+        await logAction('UPDATE_CONFIG', 'system', 'lifecycle', 'Updated Lifecycle Settings');
+        revalidatePath('/settings/smartstore');
+        return { success: true };
+    } catch (e) {
+        console.error('Save lifecycle settings failed:', e);
+        return { success: false, error: '설정 저장 실패' };
+    }
+}
+
+export async function getLifecycleSettings() {
+    try {
+        const res = await db.query("SELECT value FROM system_settings WHERE key = 'lifecycle_settings'");
+        if (res.rows.length > 0) {
+            return JSON.parse(res.rows[0].value);
+        }
+        return null;
+    } catch (e) {
+        console.error('Get lifecycle settings failed:', e);
+        return null;
+    }
+}
+
+export async function getNaverRealTimeCounts() {
+    try {
+        // Lifecycle Category IDs (from environment or defaults matching lifecycle-manager.ts)
+        const CATEGORY_IDS = {
+            CURATED: process.env.CURATED_ID || '4efdba18ec5c4bdfb72d25bf0b8ddcca',
+            ARCHIVE: process.env.ARCHIVE_ROOT_ID || '14ba5af8d3c64ec592ec94bbc9aad6de',
+            CLEARANCE: process.env.CLEARANCE_ID || '09f56197c74b4969ac44a18a7b5f8fb1',
+        };
+
+        const counts: any = { NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0 };
+
+        // Helper to fetch count (pageSize=1)
+        const fetchCount = async (categoryId: string) => {
+            if (!categoryId) return 0;
+            try {
+                // Use searchProducts(page, size, filters)
+                // @ts-ignore
+                const res = await searchProducts(1, 1, { categoryId }) as any;
+                return res.totalElements || res.totalCount || 0;
+            } catch (e) {
+                console.error(`Failed to fetch count for ${categoryId}`, e);
+                return 0;
+            }
+        };
+
+        const [curatedCount, archiveCount, clearanceCount] = await Promise.all([
+            fetchCount(CATEGORY_IDS.CURATED),
+            fetchCount(CATEGORY_IDS.ARCHIVE),
+            fetchCount(CATEGORY_IDS.CLEARANCE)
+        ]);
+
+        counts.CURATED = curatedCount;
+        counts.ARCHIVE = archiveCount;
+        counts.CLEARANCE = clearanceCount;
+
+        // NEW = Total - Others (Approx)
+        try {
+            // @ts-ignore
+            const totalRes = await searchProducts(1, 1, {}) as any;
+            const total = totalRes.totalElements || totalRes.totalCount || 0;
+            let newCount = total - (curatedCount + archiveCount + clearanceCount);
+            if (newCount < 0) newCount = 0;
+            counts.NEW = newCount;
+        } catch (e) { console.error('Total fetch error', e); }
+
+        return { success: true, counts };
+    } catch (e: any) {
+        console.error('getNaverRealTimeCounts failed', e);
+        return { success: false, error: e.message };
+    }
+}
+
+

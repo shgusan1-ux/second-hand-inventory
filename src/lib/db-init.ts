@@ -46,9 +46,15 @@ export async function initDatabase() {
         email TEXT,
         password_hint TEXT,
         security_memo TEXT,
+        can_view_accounting BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add can_view_accounting if missing
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN can_view_accounting BOOLEAN DEFAULT FALSE`);
+    } catch (e) { /* Column likely exists */ }
 
     // Attendance Logs 테이블 생성
     await db.query(`
@@ -85,7 +91,28 @@ export async function initDatabase() {
       )
     `);
 
+    // 네이버 상품 캐시 테이블 (동기화 데이터 영구 보관)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS naver_products (
+        origin_product_no TEXT PRIMARY KEY,
+        channel_product_no INTEGER,
+        name TEXT,
+        sale_price INTEGER,
+        stock_quantity INTEGER,
+        status_type TEXT,
+        category_id TEXT,
+        seller_management_code TEXT,
+        thumbnail_url TEXT,
+        brand_name TEXT,
+        reg_date TEXT,
+        mod_date TEXT,
+        raw_json TEXT,
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id)`);

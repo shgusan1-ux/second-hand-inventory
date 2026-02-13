@@ -2,8 +2,7 @@
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-import { Sidebar } from '@/components/layout/sidebar';
-import { MobileHeader } from '@/components/layout/mobile-header';
+import { AppShell } from '@/components/layout/app-shell';
 import { getSession } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -32,17 +31,11 @@ export default async function RootLayout({
   return (
     <html lang='ko'>
       <body className={cn(`${geistSans.variable} ${geistMono.variable} antialiased`)}>
-        <div className="flex h-screen bg-slate-50 flex-col md:flex-row">
-          <MobileHeader user={session} />
-          <aside className="hidden md:flex flex-shrink-0 h-full">
-            <Sidebar user={session} />
-          </aside>
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-8">
-            <Providers>
-              {children}
-            </Providers>
-          </main>
-        </div>
+        <Providers>
+          <AppShell user={session}>
+            {children}
+          </AppShell>
+        </Providers>
       </body>
     </html>
   );

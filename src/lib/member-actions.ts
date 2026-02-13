@@ -62,7 +62,7 @@ export async function updateUserPermissions(targetUserId: string, categories: st
             await db.query('INSERT INTO user_permissions (user_id, category) VALUES ($1, $2)', [targetUserId, cat]);
         }
 
-        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Updated permissions: ${categories.join(', ')}`);
+        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Updated permissions: ${categories.join(', ')}` /* 한글변환은 auth.ts translateDetails에서 처리 */);
         revalidatePath('/members');
         return { success: true };
     } catch (e) {
@@ -118,7 +118,7 @@ export async function checkIn() {
             VALUES ($1, $2, $3, $4)
         `, [id, session.id, dateStr, now]);
 
-        await logAction('CHECK_IN', 'attendance', id, 'Started work');
+        await logAction('CHECK_IN', 'attendance', id, '출근');
         revalidatePath('/');
         return { success: true };
     } catch (e) {
@@ -140,7 +140,7 @@ export async function checkOut() {
             WHERE user_id = $2 AND work_date = $3
         `, [now, session.id, dateStr]);
 
-        await logAction('CHECK_OUT', 'attendance', session.id, 'Ended work');
+        await logAction('CHECK_OUT', 'attendance', session.id, '퇴근');
         revalidatePath('/');
         return { success: true };
     } catch (e) {
@@ -170,7 +170,7 @@ export async function updateUserJobTitle(targetUserId: string, newJobTitle: stri
 
     try {
         await db.query('UPDATE users SET job_title = $1 WHERE id = $2', [newJobTitle, targetUserId]);
-        await logAction('UPDATE_JOB_TITLE', 'user', targetUserId, `Updated job title to ${newJobTitle}`);
+        await logAction('UPDATE_JOB_TITLE', 'user', targetUserId, `Updated job title to ${newJobTitle}` /* 한글변환은 auth.ts에서 처리 */);
         revalidatePath('/members');
         return { success: true };
     } catch (e) {

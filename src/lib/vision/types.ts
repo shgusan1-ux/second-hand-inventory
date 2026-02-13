@@ -36,6 +36,13 @@ export interface VisionAnalysisRecord {
   updated_at: string;
 }
 
+export interface BatchFailureDetail {
+  productNo: string;
+  productName: string;
+  error: string;
+  timestamp: string;
+}
+
 export interface BatchProgress {
   total: number;
   completed: number;
@@ -43,6 +50,7 @@ export interface BatchProgress {
   currentProduct?: string;
   currentProductNo?: string;
   startedAt: string;
+  failures?: BatchFailureDetail[];
 }
 
 export interface VisionStats {

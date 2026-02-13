@@ -1,12 +1,12 @@
 /**
  * Gemini 3.0 Pro Vision 기반 상품 분류기
- * 최신 모델 고정: gemini-3-pro-preview
+ * 모델 고정: gemini-3.0-pro
  */
 
 import type { GeminiVisionResult } from './types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = 'gemini-3-pro-preview';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 async function fetchImageAsBase64(url: string): Promise<string> {
@@ -60,73 +60,71 @@ export async function classifyProductByVision(
 다음 JSON 형식으로만 답변:
 {"brand":"","clothingType":"상의","clothingSubType":"셔츠","gender":"MAN","grade":"A급","gradeReason":"","colors":[""],"pattern":"솔리드","fabric":"","size":"","confidence":70}`;
 
-  try {
-    // 이미지 파트 준비 (최대 4장)
-    const imageParts = [];
-    const urls = imageUrls.slice(0, 4);
 
-    for (const url of urls) {
-      try {
-        const base64 = await fetchImageAsBase64(url);
-        imageParts.push({
-          inline_data: {
-            mime_type: 'image/jpeg',
-            data: base64
-          }
-        });
-      } catch (e) {
-        console.warn(`[Vision] 이미지 로드 실패: ${url}`, e);
-      }
+  // 이미지 파트 준비 (최대 4장)
+  const imageParts = [];
+  const urls = imageUrls.slice(0, 4);
+
+  for (const url of urls) {
+    try {
+      const base64 = await fetchImageAsBase64(url);
+      imageParts.push({
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: base64
+        }
+      });
+    } catch (e) {
+      console.warn(`[Vision] 이미지 로드 실패: ${url}`, e);
     }
+  }
 
-    if (imageParts.length === 0) return null;
+  if (imageParts.length === 0) return null;
 
-    console.log(`[Vision] Gemini API 호출: ${imageParts.length}장 이미지, key=${GEMINI_API_KEY.substring(0, 8)}...`);
+  console.log(`[Vision] Gemini API 호출: ${imageParts.length}장 이미지, key=${GEMINI_API_KEY.substring(0, 8)}...`);
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            ...imageParts
-          ]
-        }]
-      })
-    });
+  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          ...imageParts
+        ]
+      }]
+    })
+  });
 
-    const data = await response.json();
+  const data = await response.json();
 
-    if (!response.ok) {
-      console.error(`[Vision] Gemini API HTTP ${response.status}:`, JSON.stringify(data).substring(0, 500));
-      return null;
-    }
-
-    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      console.error('[Vision] Gemini 응답에 text 없음:', JSON.stringify(data).substring(0, 500));
-      return null;
-    }
-
-    const text = data.candidates[0].content.parts[0].text;
-    const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
-    const result = JSON.parse(jsonStr);
-
-    return {
-      brand: result.brand || '',
-      clothingType: result.clothingType || '기타',
-      clothingSubType: result.clothingSubType || '',
-      gender: result.gender || 'UNKNOWN',
-      grade: result.grade || 'A급',
-      gradeReason: result.gradeReason || '',
-      colors: Array.isArray(result.colors) ? result.colors : [],
-      pattern: result.pattern || '솔리드',
-      fabric: result.fabric || '',
-      size: result.size || '',
-      confidence: Math.min(100, Math.max(0, result.confidence || 0))
-    };
-  } catch (error) {
-    console.error('[Vision] classifyProductByVision error:', error);
+  if (!response.ok) {
+    console.error(`[Vision] Gemini API HTTP ${response.status}:`, JSON.stringify(data).substring(0, 500));
     return null;
   }
+
+  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    console.error('[Vision] Gemini 응답에 text 없음:', JSON.stringify(data).substring(0, 500));
+    return null;
+  }
+
+  const text = data.candidates[0].content.parts[0].text;
+  const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
+  const result = JSON.parse(jsonStr);
+
+  return {
+    brand: result.brand || '',
+    clothingType: result.clothingType || '기타',
+    clothingSubType: result.clothingSubType || '',
+    gender: result.gender || 'UNKNOWN',
+    grade: result.grade || 'A급',
+    gradeReason: result.gradeReason || '',
+    colors: Array.isArray(result.colors) ? result.colors : [],
+    pattern: result.pattern || '솔리드',
+    fabric: result.fabric || '',
+    size: result.size || '',
+    confidence: Math.min(100, Math.max(0, result.confidence || 0))
+  };
 }
+// Remove catch block to let error propagate to queue.ts for DB logging
+

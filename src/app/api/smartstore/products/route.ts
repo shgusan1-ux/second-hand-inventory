@@ -1,7 +1,8 @@
 
 import { NextResponse } from 'next/server';
 import { getNaverToken, searchProducts } from '@/lib/naver/client';
-import { calculateLifecycle } from '@/lib/classification/lifecycle';
+import { calculateLifecycle, fetchLifecycleSettings, CATEGORY_IDS } from '@/lib/classification/lifecycle';
+import type { LifecycleSettings } from '@/lib/classification/lifecycle';
 import { classifyArchive } from '@/lib/classification/archive';
 import { classifyProduct, logClassification } from '@/lib/classification';
 import { mergeClassifications } from '@/lib/classification/merger';
@@ -61,7 +62,17 @@ function calculateStatusCounts(contents: any[]) {
     return counts;
 }
 
-function processProducts(contents: any[], overrideMap: any) {
+// 내부 tier 키 → 표시용 아카이브명 매핑
+const TIER_TO_ARCHIVE: Record<string, string> = {
+    MILITARY: 'MILITARY ARCHIVE',
+    WORKWEAR: 'WORKWEAR ARCHIVE',
+    OUTDOOR: 'OUTDOOR ARCHIVE',
+    JAPAN: 'JAPANESE ARCHIVE',
+    HERITAGE: 'HERITAGE EUROPE',
+    BRITISH: 'BRITISH ARCHIVE',
+};
+
+function processProducts(contents: any[], overrideMap: any, lcSettings?: LifecycleSettings) {
     return contents.map(p => {
         const cp = p.channelProducts?.[0];
         if (!cp) return null;
@@ -73,7 +84,9 @@ function processProducts(contents: any[], overrideMap: any) {
         const baseDate = override.override_date || cp.regDate || override.first_seen_at || new Date().toISOString();
         const prodName = override.product_name || cp.name || 'Unknown Product';
 
-        const lifecycle = calculateLifecycle(baseDate);
+        // 날짜 기반 라이프사이클 계산 (settings는 미리 1회만 가져옴)
+        const lifecycle = calculateLifecycle(baseDate, undefined, lcSettings);
+
         const archiveInfo = lifecycle.stage === 'ARCHIVE'
             ? classifyArchive(prodName, [])
             : null;
@@ -134,38 +147,39 @@ function processProducts(contents: any[], overrideMap: any) {
             classification.visionStatus = visionData?.analysis_status || 'none';
         }
 
-        // 라이프사이클 기반 내부카테고리 결정
-        // NEW(0-30일) → "NEW", CURATED(30-60일) → "CURATED"
-        // ARCHIVE(60-120일) → 브랜드 tier ARCHIVE (예: "MILITARY ARCHIVE")
-        // CLEARANCE(120일+) → "CLEARANCE"
+        // 내부카테고리: DB에 수동 확정된 값이 있으면 절대 변경하지 않음
+        const savedCategory = override.internal_category;
         let internalCategory: string;
-        const savedArchiveTier = override.internal_category; // DB에 수동 확정된 값
 
-        switch (lifecycle.stage) {
-            case 'NEW':
-                internalCategory = 'NEW';
-                break;
-            case 'CURATED':
-                internalCategory = 'CURATED';
-                break;
-            case 'ARCHIVE': {
-                // 수동 확정값 우선, 없으면 AI 분류 tier, 없으면 텍스트 분류
-                if (savedArchiveTier && savedArchiveTier.includes('ARCHIVE')) {
-                    internalCategory = savedArchiveTier;
-                } else if (classification.brandTier && classification.brandTier !== 'OTHER') {
-                    internalCategory = classification.brandTier + ' ARCHIVE';
-                } else if (archiveInfo?.category && archiveInfo.category !== 'UNCATEGORIZED') {
-                    internalCategory = archiveInfo.category + ' ARCHIVE';
-                } else {
-                    internalCategory = 'ARCHIVE';
+        if (savedCategory) {
+            // 사용자가 확정한 카테고리 → 변경 요청 전까지 영구 보존
+            internalCategory = savedCategory;
+        } else {
+            // 확정값 없으면 라이프사이클 기반 자동 결정
+            switch (lifecycle.stage) {
+                case 'NEW':
+                    internalCategory = 'NEW';
+                    break;
+                case 'CURATED':
+                    internalCategory = 'CURATED';
+                    break;
+                case 'ARCHIVE': {
+                    if (classification.brandTier && classification.brandTier !== 'OTHER') {
+                        internalCategory = TIER_TO_ARCHIVE[classification.brandTier] || classification.brandTier + ' ARCHIVE';
+                    } else if (archiveInfo?.category && archiveInfo.category !== 'UNCATEGORIZED') {
+                        internalCategory = TIER_TO_ARCHIVE[archiveInfo.category] || archiveInfo.category;
+                    } else {
+                        internalCategory = 'ARCHIVE';
+                    }
+                    break;
                 }
-                break;
+                case 'CLEARANCE':
+                    // CLEARANCE 기본값 (사용자가 수동으로 CLEARANCE_KEEP/CLEARANCE_DISPOSE 배정)
+                    internalCategory = 'CLEARANCE';
+                    break;
+                default:
+                    internalCategory = 'NEW';
             }
-            case 'CLEARANCE':
-                internalCategory = 'CLEARANCE';
-                break;
-            default:
-                internalCategory = 'NEW';
         }
 
         return {
@@ -176,13 +190,15 @@ function processProducts(contents: any[], overrideMap: any) {
             lifecycle,
             archiveInfo,
             internalCategory,
-            archiveTier: savedArchiveTier, // 수동 확정된 아카이브 tier (lifecycle 무관하게 보존)
+            archiveTier: savedCategory, // 수동 확정된 카테고리 (lifecycle 무관하게 보존)
             classification,
             suggestedArchiveId: override.suggested_archive_id,
             suggestionReason: override.suggestion_reason,
             inferredBrand: override.inferred_brand,
             ocrText: override.ocr_text,
-            isApproved: override.is_approved
+            isApproved: override.is_approved,
+            isMatched: !!override.matched_id,
+            naverCategoryId: cp.categoryId,
         };
     }).filter(p => p !== null);
 }
@@ -193,13 +209,13 @@ async function fetchOverrideMap(ids: string[]) {
     try {
         // 1. Get user overrides
         const { rows: overrides } = await db.query(
-            `SELECT * FROM product_overrides WHERE id IN (${placeholders})`,
+            `SELECT id, override_date, internal_category, first_seen_at FROM product_overrides WHERE id IN (${placeholders})`,
             ids
         );
 
         // 2. Get Naver product map enrichment (including AI suggestions)
         const { rows: naverMap } = await db.query(
-            `SELECT * FROM naver_product_map WHERE origin_product_no IN (${placeholders})`,
+            `SELECT origin_product_no, suggested_archive_id, suggestion_reason, inferred_brand, ocr_text, is_approved FROM naver_product_map WHERE origin_product_no IN (${placeholders})`,
             ids
         );
 
@@ -221,6 +237,18 @@ async function fetchOverrideMap(ids: string[]) {
         try {
             const { rows } = await db.query('SELECT brand_name, brand_name_ko, tier, aliases FROM custom_brands WHERE is_active = TRUE');
             customBrands = rows;
+        } catch { /* 테이블 아직 없으면 무시 */ }
+
+        // 5. 내부 인벤토리 매칭 정보 조회
+        let matchedMap: any = {};
+        try {
+            const { rows: matchedRows } = await db.query(
+                `SELECT id FROM products WHERE id IN (
+                    SELECT seller_management_code FROM naver_products WHERE origin_product_no IN (${placeholders})
+                )`,
+                ids
+            );
+            matchedRows.forEach((row: any) => { matchedMap[row.id] = true; });
         } catch { /* 테이블 아직 없으면 무시 */ }
 
         const map: any = {};
@@ -245,10 +273,97 @@ async function fetchOverrideMap(ids: string[]) {
             map[id].customBrands = customBrands;
         });
 
+        // 6. 내부 인벤토리 매칭 정보 주입 (seller_management_code 기준)
+        const { rows: naverProducts } = await db.query(
+            `SELECT origin_product_no, seller_management_code FROM naver_products WHERE origin_product_no IN (${placeholders})`,
+            ids
+        );
+
+        naverProducts.forEach((np: any) => {
+            const id = np.origin_product_no;
+            if (map[id]) {
+                const smCode = np.seller_management_code;
+                if (smCode && matchedMap[smCode]) {
+                    map[id].matched_id = smCode;
+                }
+            }
+        });
+
         return map;
     } catch (dbError) {
         console.warn('[API/Products] DB Query failed, continuing without overrides:', dbError);
         return {};
+    }
+}
+
+// 네이버 상품 원본 데이터를 DB에 영구 저장
+async function saveProductsToDB(contents: any[]) {
+    const now = new Date().toISOString();
+    for (let i = 0; i < contents.length; i += 50) {
+        const batch = contents.slice(i, i + 50);
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        batch.forEach((p, idx) => {
+            const cp = p.channelProducts?.[0];
+            if (!cp) return;
+            const base = idx * 14;
+            values.push(
+                p.originProductNo.toString(),   // 1
+                cp.channelProductNo || 0,        // 2
+                cp.name || '',                   // 3
+                cp.salePrice || 0,               // 4
+                cp.stockQuantity || 0,           // 5
+                cp.statusType || '',             // 6
+                cp.categoryId || '',             // 7
+                cp.sellerManagementCode || '',   // 8
+                cp.representativeImage?.url || '', // 9
+                cp.brandName || '',              // 10
+                cp.regDate || '',                // 11
+                cp.modifiedDate || '',           // 12
+                JSON.stringify(cp),              // 13 raw_json
+                now                              // 14 synced_at
+            );
+            placeholders.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11},$${base + 12},$${base + 13},$${base + 14})`);
+        });
+        if (placeholders.length === 0) continue;
+        try {
+            await db.query(
+                `INSERT INTO naver_products (origin_product_no, channel_product_no, name, sale_price, stock_quantity, status_type, category_id, seller_management_code, thumbnail_url, brand_name, reg_date, mod_date, raw_json, synced_at)
+                 VALUES ${placeholders.join(',')}
+                 ON CONFLICT (origin_product_no) DO UPDATE SET
+                   name = EXCLUDED.name, sale_price = EXCLUDED.sale_price, stock_quantity = EXCLUDED.stock_quantity,
+                   status_type = EXCLUDED.status_type, category_id = EXCLUDED.category_id,
+                   seller_management_code = EXCLUDED.seller_management_code, thumbnail_url = EXCLUDED.thumbnail_url,
+                   brand_name = EXCLUDED.brand_name, reg_date = EXCLUDED.reg_date, mod_date = EXCLUDED.mod_date,
+                   raw_json = EXCLUDED.raw_json, synced_at = EXCLUDED.synced_at`,
+                values
+            );
+        } catch (e) {
+            console.warn('[saveProductsToDB] batch failed:', e);
+        }
+    }
+    console.log(`[saveProductsToDB] ${contents.length}개 상품 DB 저장 완료`);
+}
+
+// DB에서 저장된 상품 로드 (네이버 API 호출 없이)
+async function loadProductsFromDB(): Promise<any[] | null> {
+    try {
+        const { rows } = await db.query('SELECT raw_json, origin_product_no FROM naver_products');
+        if (!rows || rows.length === 0) return null;
+
+        // raw_json → 원래 네이버 API 형식으로 복원
+        const contents = rows.map((row: any) => {
+            const cp = JSON.parse(row.raw_json);
+            return {
+                originProductNo: parseInt(row.origin_product_no),
+                channelProducts: [cp],
+            };
+        });
+        console.log(`[loadProductsFromDB] DB에서 ${contents.length}개 상품 로드`);
+        return contents;
+    } catch (e) {
+        console.warn('[loadProductsFromDB] failed:', e);
+        return null;
     }
 }
 
@@ -306,8 +421,9 @@ export async function GET(request: Request) {
     try {
         await ensureDbInitialized();
 
-        // cacheOnly 모드: 서버 캐시가 있으면 반환, 없으면 빈 데이터 반환 (네이버 API 호출 안 함)
+        // cacheOnly 모드: 메모리 캐시 → DB → 빈 데이터 순서로 시도
         if (cacheOnly) {
+            // 1. 메모리 캐시
             if (productCache && (Date.now() - productCache.timestamp) < CACHE_TTL) {
                 return handleSuccess({
                     contents: productCache.data.contents,
@@ -317,7 +433,32 @@ export async function GET(request: Request) {
                     cachedAt: new Date(productCache.timestamp).toISOString()
                 });
             }
-            // 캐시 없음 → 빈 데이터 반환
+
+            // 2. DB에서 로드 (콜드스타트 대응)
+            const dbContents = await loadProductsFromDB();
+            if (dbContents && dbContents.length > 0) {
+                const ids = dbContents.map(p => p.originProductNo.toString());
+                const overrideMap = await fetchOverrideMap(ids);
+                const lcSettings = await fetchLifecycleSettings();
+                const processed = processProducts(dbContents, overrideMap, lcSettings);
+                const statusCounts = calculateStatusCounts(processed);
+
+                // 메모리 캐시에도 저장
+                productCache = {
+                    data: { contents: processed, totalCount: processed.length, statusCounts },
+                    timestamp: Date.now()
+                };
+
+                return handleSuccess({
+                    contents: processed,
+                    totalCount: processed.length,
+                    statusCounts,
+                    cached: true,
+                    source: 'db'
+                });
+            }
+
+            // 3. DB도 비어있음 → 빈 데이터
             return handleSuccess({
                 contents: [],
                 totalCount: 0,
@@ -433,7 +574,12 @@ export async function GET(request: Request) {
 
                         // 중복 제거
                         allContents = deduplicateContents(allContents);
-                        send({ type: 'progress', percent: 85, message: `${allContents.length}개 상품 처리 중...` });
+                        send({ type: 'progress', percent: 82, message: `${allContents.length}개 상품 DB 저장 중...` });
+
+                        // DB에 원본 데이터 영구 저장
+                        await saveProductsToDB(allContents);
+
+                        send({ type: 'progress', percent: 83, message: `${allContents.length}개 상품 처리 중...` });
 
                         // Get overrides
                         const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
@@ -442,11 +588,15 @@ export async function GET(request: Request) {
                         // first_seen_at이 없는 상품에 현재 시간 기록
                         await recordFirstSeen(ids, overrideMap);
 
-                        send({ type: 'progress', percent: 90, message: '분류 처리 중...' });
+                        send({ type: 'progress', percent: 90, message: '라이프사이클 설정 로드 중...' });
+                        const lcSettings = await fetchLifecycleSettings();
+
+                        send({ type: 'progress', percent: 93, message: '분류 처리 중...' });
 
                         // Process all products
-                        const processed = processProducts(allContents, overrideMap);
+                        const processed = processProducts(allContents, overrideMap, lcSettings);
                         const statusCounts = calculateStatusCounts(processed);
+
 
                         // Cache the full result
                         productCache = {
@@ -553,9 +703,14 @@ export async function GET(request: Request) {
             // 중복 제거
             allContents = deduplicateContents(allContents);
 
+            // DB에 원본 데이터 영구 저장
+            await saveProductsToDB(allContents);
+
             const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
             const overrideMap = await fetchOverrideMap(ids);
-            const processed = processProducts(allContents, overrideMap);
+
+            const lcSettings = await fetchLifecycleSettings();
+            const processed = processProducts(allContents, overrideMap, lcSettings);
             const statusCounts = calculateStatusCounts(processed);
 
             productCache = {
@@ -597,7 +752,8 @@ export async function GET(request: Request) {
 
             const ids = naverRes.contents.map(p => p.originProductNo.toString()).filter(id => !!id);
             const overrideMap = await fetchOverrideMap(ids);
-            const processed = processProducts(naverRes.contents, overrideMap);
+            const lcSettings = await fetchLifecycleSettings();
+            const processed = processProducts(naverRes.contents, overrideMap, lcSettings);
 
             let filtered = processed;
             if (stage !== 'ALL') {

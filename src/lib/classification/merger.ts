@@ -87,20 +87,19 @@ export function mergeClassifications(
   }
 
   // 의류 타입 결정
-  const visionTypeEn = clothingTypeKoToEn[visionResult.clothingType] || 'OTHER';
   let clothingType = textResult.clothingType;
   let clothingSubType = textResult.clothingSubType;
 
-  if (visionTypeEn === textResult.clothingType) {
+  if (visionResult.clothingType === textResult.clothingType) {
     // 일치 → 부스트
     baseConfidence = Math.min(100, baseConfidence + 10);
-  } else if (textResult.clothingType === 'UNKNOWN' || textResult.clothingType === 'OTHER') {
-    // Text 없으면 Vision 채택
-    clothingType = visionTypeEn as any;
+  } else if (textResult.clothingType === '기타' || textResult.clothingType === 'UNKNOWN' as any) {
+    // Text에서 분류 못했으면 Vision 채택 (Vision은 한국어로 상의/하의 등 반환함)
+    clothingType = visionResult.clothingType as any;
     clothingSubType = visionResult.clothingSubType as any;
   } else if (visionConf > textConf) {
     // Vision confidence가 더 높으면 Vision 채택
-    clothingType = visionTypeEn as any;
+    clothingType = visionResult.clothingType as any;
     clothingSubType = visionResult.clothingSubType as any;
   }
 

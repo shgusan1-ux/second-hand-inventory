@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
     try {
-        const res = await db.query('SELECT * FROM product_overrides');
+        const res = await db.query('SELECT id, override_date, internal_category FROM product_overrides');
         const overrides: Record<string, any> = {};
         res.rows.forEach(row => {
             overrides[row.id] = {

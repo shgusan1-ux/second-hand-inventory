@@ -66,6 +66,98 @@ export async function getCurrentUser() {
 }
 
 // Log action helper
+// 영어 → 한글 자동변환 (대시보드 공지용)
+const PERMISSION_KO: Record<string, string> = {
+    members: '직원관리', ads: '광고관리', returns: '반품관리',
+    inventory: '재고관리', smartstore: '스마트스토어', statistics: '통계', settings: '설정',
+};
+const FIELD_KO: Record<string, string> = {
+    category: '카테고리', status: '상태', condition: '상품상태', size: '사이즈',
+    price_sell: '판매가', price_consumer: '소비자가', brand: '브랜드',
+};
+
+function translateDetails(action: string, details?: string, targetId?: string): string {
+    const d = details || '';
+    switch (action) {
+        case 'CREATE_PRODUCT': return `신규 상품 등록: ${d}`;
+        case 'UPDATE_PRODUCT': return `상품 정보 수정: ${d}`;
+        case 'DISCARD_PRODUCT': return `상품 폐기 처리`;
+        case 'RESTORE_PRODUCT': return `상품 복원 처리`;
+        case 'PERMANENT_DELETE_PRODUCT': return `상품 영구 삭제`;
+        case 'BULK_CREATE_PRODUCTS': {
+            const m = d.match(/(\d+)/);
+            return m ? `대량 상품 등록: ${m[1]}개` : `대량 상품 등록: ${d}`;
+        }
+        case 'BULK_DELETE': {
+            const m = d.match(/(\d+)/);
+            return m ? `상품 일괄 삭제: ${m[1]}개` : `상품 일괄 삭제`;
+        }
+        case 'BULK_UPDATE': {
+            const m = d.match(/Updated (\d+) items: (.+)/);
+            if (m) {
+                const fields = m[2].split(', ').map(f => FIELD_KO[f.trim()] || f).join(', ');
+                return `상품 일괄 수정: ${m[1]}개 (${fields})`;
+            }
+            return `상품 일괄 수정: ${d}`;
+        }
+        case 'BULK_UPDATE_EXCEL': {
+            const m = d.match(/Updated (\d+) items.*Failed (\d+)/);
+            if (m) return `엑셀 일괄 수정: 성공 ${m[1]}개, 실패 ${m[2]}개`;
+            return `엑셀 일괄 수정: ${d}`;
+        }
+        case 'BULK_AI_UPDATE': {
+            const m = d.match(/(\d+)/);
+            return m ? `AI 일괄 분류: ${m[1]}개 완료` : `AI 일괄 분류 완료`;
+        }
+        case 'REGISTER': {
+            const m = d.match(/Registered user (\S+) \((.+)\)/);
+            return m ? `신규 직원 가입: ${m[1]} (${m[2]})` : `신규 직원 가입: ${d}`;
+        }
+        case 'CREATE_USER': {
+            const m = d.match(/Created by admin: (.+)/);
+            return m ? `관리자 직원 등록: ${m[1]}` : `직원 등록: ${d}`;
+        }
+        case 'UPDATE_USER': return `직원 정보 수정`;
+        case 'DELETE_USER': return `직원 삭제 처리`;
+        case 'UPDATE_PERMISSIONS': {
+            const m = d.match(/Updated permissions: (.+)/);
+            if (m) {
+                const perms = m[1].split(', ').map(p => PERMISSION_KO[p.trim()] || p).join(', ');
+                return `권한 변경: ${perms}`;
+            }
+            return `권한 변경: ${d}`;
+        }
+        case 'UPDATE_PERMISSION': {
+            const m = d.match(/Accounting view: (.+)/);
+            return m ? `회계 열람 권한: ${m[1] === 'true' ? '허용' : '거부'}` : `권한 수정: ${d}`;
+        }
+        case 'UPDATE_JOB_TITLE': {
+            const m = d.match(/Updated job title to (.+)/);
+            return m ? `직책 변경: ${m[1]}` : `직책 변경: ${d}`;
+        }
+        case 'CHANGE_PASSWORD': return `비밀번호 변경 완료`;
+        case 'UPDATE_CONFIG': return `시스템 설정 변경: API 인증정보`;
+        case 'APPROVE_AI_SUGGESTION': {
+            const m = d.match(/Approved category: (.+)/);
+            return m ? `AI 추천 카테고리 승인: ${m[1]}` : `AI 추천 승인: ${d}`;
+        }
+        case 'ADD_CATEGORY': return `카테고리 추가: ${d}`;
+        case 'DELETE_CATEGORY': return `카테고리 삭제`;
+        case 'ADD_TRANSACTION': {
+            const m = d.match(/(.+) (\d[\d,]*)/);
+            if (m) {
+                const typeKo = m[1] === 'income' ? '수입' : m[1] === 'expense' ? '지출' : m[1];
+                return `거래 등록: ${typeKo} ${Number(m[2]).toLocaleString()}원`;
+            }
+            return `거래 등록: ${d}`;
+        }
+        case 'DELETE_TRANSACTION': return `거래 삭제`;
+        case 'CHECK_IN': return `출근`;
+        case 'CHECK_OUT': return `퇴근`;
+        default: return `${action}: ${d}`;
+    }
+}
+
 export async function logAction(action: string, targetType?: string, targetId?: string, details?: string) {
     const user = await getSession();
     const userId = user?.id || 'anonymous';
@@ -80,19 +172,10 @@ export async function logAction(action: string, targetType?: string, targetId?: 
 
         // 2. Dashboard Notification (Auto Task)
         // Filter actions that should appear on dashboard
-        if (['CREATE', 'UPDATE', 'DELETE', 'BULK', 'REGISTER', 'CHANGE'].some(prefix => action.startsWith(prefix))) {
+        if (['CREATE', 'UPDATE', 'DELETE', 'BULK', 'REGISTER', 'CHANGE', 'CHECK', 'ADD', 'APPROVE'].some(prefix => action.startsWith(prefix))) {
             const taskId = Math.random().toString(36).substring(2, 10);
-            let content = '';
-
-            // User friendly messages
-            if (action === 'CREATE_PRODUCT') content = `[${userName}] 신규 상품 등록: ${details}`;
-            else if (action === 'UPDATE_PRODUCT') content = `[${userName}] 상품 정보 수정: ${details}`;
-            else if (action === 'DISCARD_PRODUCT') content = `[${userName}] 상품 폐기 처리: ID ${targetId}`;
-            else if (action === 'BULK_CREATE_PRODUCTS') content = `[${userName}] 대량 상품 등록: ${details}`;
-            else if (action === 'ADD_CATEGORY') content = `[${userName}] 카테고리 추가: ${details}`;
-            else if (action === 'DELETE_CATEGORY') content = `[${userName}] 카테고리 삭제: ID ${targetId}`;
-            else if (action === 'REGISTER') content = `[${userName}] 신규 직원 가입: ${details}`;
-            else content = `[${userName}] ${action}: ${details || ''}`;
+            const koDetails = translateDetails(action, details, targetId);
+            const content = `[${userName}] ${koDetails}`;
 
             // Ensure table exists (Handled by db.ts)
             try {

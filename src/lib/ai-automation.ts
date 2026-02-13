@@ -11,7 +11,7 @@
 
 // Gemini API 설정 (Google AI) - 3.0 Pro 고정
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 // Replicate API 설정 (가상 피팅용)
 const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';
@@ -244,15 +244,7 @@ export async function generateMDDescription(product: {
 요구사항:
 1. 3-5문장으로 간결하게
 2. 브랜드의 특징과 가치 강조
-3. 소재의 장점(착용감, 관리 등)과 상품의 활용도 설명
-4. 구매 욕구를 자극하는 표현 사용
-5. 이모지 적절히 활용
-6. HTML 태그 사용 (p, strong, br 등)
-
-요구사항:
-1. 3-5문장으로 간결하게
-2. 브랜드의 특징과 가치 강조
-3. 상품의 장점과 활용도 설명
+3. 소재의 장점과 상품의 활용도 설명
 4. 구매 욕구를 자극하는 표현 사용
 5. 이모지 적절히 활용
 6. HTML 태그 사용 (p, strong, br 등)

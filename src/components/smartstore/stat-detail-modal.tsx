@@ -26,8 +26,8 @@ const tierLabel: Record<string, string> = {
     MILITARY: 'MILITARY ARCHIVE',
     WORKWEAR: 'WORKWEAR ARCHIVE',
     OUTDOOR: 'OUTDOOR ARCHIVE',
-    JAPAN: 'JAPAN ARCHIVE',
-    HERITAGE: 'HERITAGE ARCHIVE',
+    JAPAN: 'JAPANESE ARCHIVE',
+    HERITAGE: 'HERITAGE EUROPE',
     BRITISH: 'BRITISH ARCHIVE',
     UNCATEGORIZED: 'UNCATEGORIZED'
 };
@@ -94,13 +94,15 @@ export function StatDetailModal({ type, products, onClose, onRefresh }: StatDeta
     };
 
     const categories = [
-        'UNCATEGORIZED',
-        'MILITARY ARCHIVE',
-        'WORKWEAR ARCHIVE',
-        'OUTDOOR ARCHIVE',
-        'JAPAN ARCHIVE',
-        'HERITAGE ARCHIVE',
-        'BRITISH ARCHIVE'
+        { value: 'UNCATEGORIZED', label: 'UNCATEGORIZED' },
+        { value: 'MILITARY ARCHIVE', label: 'MILITARY ARCHIVE' },
+        { value: 'WORKWEAR ARCHIVE', label: 'WORKWEAR ARCHIVE' },
+        { value: 'OUTDOOR ARCHIVE', label: 'OUTDOOR ARCHIVE' },
+        { value: 'JAPANESE ARCHIVE', label: 'JAPANESE ARCHIVE' },
+        { value: 'HERITAGE EUROPE', label: 'HERITAGE EUROPE' },
+        { value: 'BRITISH ARCHIVE', label: 'BRITISH ARCHIVE' },
+        { value: 'CLEARANCE_KEEP', label: '판매유지 (CLEARANCE)' },
+        { value: 'CLEARANCE_DISPOSE', label: '폐기결정 (CLEARANCE)' },
     ];
 
     return (
@@ -164,7 +166,7 @@ export function StatDetailModal({ type, products, onClose, onRefresh }: StatDeta
                                                 onChange={e => handleEditChange(p.originProductNo, 'category', e.target.value)}
                                             >
                                                 {categories.map(c => (
-                                                    <option key={c} value={c}>{c}</option>
+                                                    <option key={c.value} value={c.value}>{c.label}</option>
                                                 ))}
                                             </select>
                                         </div>

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const row = rows[0] || null;
 
   // 2. 텍스트 분류
-  const textResult = classifyProduct(productName);
+  const textResult = await classifyProduct(productName);
 
   // 3. Vision 결과 빌드
   let visionData = null;
@@ -121,7 +121,7 @@ export async function PUT(request: NextRequest) {
 
   // merged confidence 재계산
   if (productName) {
-    const textResult = classifyProduct(productName);
+    const textResult = await classifyProduct(productName);
     const visionResult = {
       brand: fields.brand || '',
       clothingType: fields.clothingType || '기타',

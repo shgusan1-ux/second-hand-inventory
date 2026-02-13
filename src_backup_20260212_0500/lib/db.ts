@@ -1,0 +1,370 @@
+import { createClient } from '@libsql/client';
+
+// Interface for Database Result
+export interface QueryResult<T = any> {
+  rows: T[];
+  rowCount: number;
+}
+
+let tursoClient: any = null;
+let initPromise: Promise<void> | null = null;
+
+async function initTables() {
+  const client = tursoClient!;
+
+  try {
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS product_overrides (
+        id TEXT PRIMARY KEY,
+        override_date TIMESTAMP,
+        internal_category TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        job_title TEXT,
+        email TEXT,
+        password_hint TEXT,
+        security_memo TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS attendance_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS security_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        user_name TEXT,
+        action TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS memos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        author_name VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS memo_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        memo_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        author_name VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dashboard_tasks (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        brand TEXT,
+        category TEXT,
+        price_consumer INTEGER DEFAULT 0,
+        price_sell INTEGER DEFAULT 0,
+        status TEXT DEFAULT '판매중',
+        condition TEXT,
+        image_url TEXT,
+        md_comment TEXT,
+        images TEXT DEFAULT '[]',
+        size TEXT,
+        fabric TEXT,
+        master_reg_date TIMESTAMP,
+        sold_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        classification TEXT DEFAULT 'NEW'
+      );
+    `);
+
+    // Seed Categories if empty
+    const catCheck = await client.execute('SELECT COUNT(*) as count FROM categories');
+    if (catCheck.rows[0].count === 0) {
+      console.log('[DB] Seeding categories...');
+      const seedData = [
+        ['NEW', 'NEW IN', 1, 'NEW'],
+        ['CURATED', 'CURATED', 2, 'CURATED'],
+        ['MILITARY', 'MILITARY', 3, 'ARCHIVE'],
+        ['WORKWEAR', 'WORKWEAR', 4, 'ARCHIVE'],
+        ['JAPAN', 'JAPANESE ARCHIVE', 5, 'ARCHIVE'],
+        ['EUROPE', 'HERITAGE EUROPE', 6, 'ARCHIVE'],
+        ['BRITISH', 'BRITISH ARCHIVE', 7, 'ARCHIVE'],
+        ['CLEARANCE', 'CLEARANCE', 8, 'CLEARANCE']
+      ];
+      for (const [id, name, order, cls] of seedData) {
+        await client.execute({
+          sql: 'INSERT INTO categories (id, name, sort_order, classification) VALUES (?, ?, ?, ?)',
+          args: [id, name, order, cls]
+        });
+      }
+    }
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type VARCHAR(10) NOT NULL,
+        amount INTEGER NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        description TEXT,
+        date VARCHAR(20) NOT NULL,
+        payment_method VARCHAR(20),
+        created_by VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Chat tables
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id TEXT NOT NULL,
+        sender_name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        attachment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS user_presence (
+        user_id TEXT PRIMARY KEY,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        name TEXT,
+        job_title TEXT
+      )
+    `);
+
+    // Naver category cache
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS naver_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        whole_category_name TEXT,
+        is_last BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Naver product sync tracking
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS naver_product_map (
+        origin_product_no TEXT PRIMARY KEY,
+        channel_product_no TEXT,
+        naver_category_id TEXT,
+        archive_category_id TEXT,
+        name TEXT,
+        sale_price INTEGER,
+        stock_quantity INTEGER,
+        status_type TEXT,
+        seller_management_code TEXT,
+        last_synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_category ON naver_product_map(naver_category_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_archive ON naver_product_map(archive_category_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_naver_product_status ON naver_product_map(status_type);`);
+
+    // Vision 분석 결과 테이블
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS product_vision_analysis (
+        origin_product_no TEXT PRIMARY KEY,
+        vision_brand TEXT,
+        vision_clothing_type TEXT,
+        vision_clothing_sub_type TEXT,
+        vision_gender TEXT,
+        vision_grade TEXT,
+        vision_grade_reason TEXT,
+        vision_color TEXT,
+        vision_pattern TEXT,
+        vision_fabric TEXT,
+        vision_size TEXT,
+        vision_confidence INTEGER DEFAULT 0,
+        merged_confidence INTEGER DEFAULT 0,
+        image_urls TEXT,
+        raw_response TEXT,
+        analysis_status TEXT DEFAULT 'pending',
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_vision_status ON product_vision_analysis(analysis_status);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_vision_confidence ON product_vision_analysis(vision_confidence);`);
+
+    // 수동 브랜드 관리 테이블
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS custom_brands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand_name TEXT NOT NULL UNIQUE,
+        brand_name_ko TEXT,
+        aliases TEXT,
+        tier TEXT DEFAULT 'OTHER',
+        country TEXT,
+        notes TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Add missing columns to existing tables (DEFAULT must be constant for ALTER TABLE in SQLite)
+    const alterStatements = [
+      `ALTER TABLE attendance_logs ADD COLUMN created_at TIMESTAMP`,
+      `ALTER TABLE users ADD COLUMN email TEXT`,
+      `ALTER TABLE users ADD COLUMN password_hint TEXT`,
+      `ALTER TABLE users ADD COLUMN security_memo TEXT`,
+      `ALTER TABLE chat_messages ADD COLUMN attachment TEXT`,
+      `ALTER TABLE naver_product_map ADD COLUMN inferred_brand TEXT`,
+    ];
+    for (const sql of alterStatements) {
+      try { await client.execute(sql); console.log('[DB] OK:', sql); } catch { }
+    }
+
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id);`);
+    try {
+      await client.execute(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at);`);
+    } catch {
+      console.log('[DB] Skipping idx_attendance_created index (column may not exist)');
+    }
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_memo_comments_memo ON memo_comments(memo_id);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);`);
+
+    console.log('[DB] Database initialized successfully');
+  } catch (e) {
+    console.error('[DB] Table initialization error:', e);
+    throw e; // Re-throw to prevent queries before initialization
+  }
+}
+
+function getTursoClient() {
+  if (!tursoClient) {
+    const url = process.env.TURSO_DATABASE_URL || 'file:/tmp/inventory.db';
+    const authToken = process.env.TURSO_AUTH_TOKEN || '';
+
+    console.log(`[DB] Initializing LibSQL client - URL: ${url}`);
+    tursoClient = createClient({ url, authToken });
+
+    // Initialize tables (only once)
+    if (!initPromise) {
+      initPromise = initTables();
+    }
+  }
+  return tursoClient;
+}
+
+// Unified Database Adapter for Turso
+export const db = {
+  query: async <T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> => {
+    const client = getTursoClient();
+
+    // Wait for initialization to complete
+    if (initPromise) {
+      await initPromise;
+    }
+
+    // Convert Postgres-style $1, $2... to SQLite-style ?
+    const newParams: any[] = [];
+    const tursoSql = text.replace(/\$(\d+)/g, (match, number) => {
+      const idx = parseInt(number, 10) - 1;
+      if (idx >= 0 && idx < params.length) {
+        newParams.push(params[idx]);
+        return '?';
+      }
+      return match;
+    });
+
+    try {
+      const result = await client.execute({
+        sql: tursoSql,
+        args: newParams
+      });
+
+      // Convert Turso Row objects to plain objects for React Server Components
+      const plainRows = JSON.parse(JSON.stringify(result.rows));
+
+      return {
+        rows: plainRows as T[],
+        rowCount: plainRows.length
+      };
+    } catch (e) {
+      console.error("Turso DB Error:", e);
+      console.error("Failed SQL:", tursoSql);
+      console.error("Parameters:", newParams);
+      throw e;
+    }
+  },
+};

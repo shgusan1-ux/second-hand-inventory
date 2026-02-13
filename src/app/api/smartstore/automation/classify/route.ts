@@ -28,11 +28,12 @@ export async function POST(request: Request) {
         const archiveResults = await classifyBulkArchive(products, useAI);
 
         // 3. 상세 분류 및 로그 기록
-        const detailedResults = products.map(p => {
-            const result = classifyProduct(p.name);
+        // 3. 상세 분류 및 로그 기록
+        const detailedResults = await Promise.all(products.map(async p => {
+            const result = await classifyProduct(p.name);
             logClassification(p.id, p.name, result);
             return { productId: p.id, ...result };
-        });
+        }));
 
         // 4. DB 업데이트 (product_overrides 및 naver_product_map)
         let updatedCount = 0;

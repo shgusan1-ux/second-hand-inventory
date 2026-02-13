@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
 import { processBatch } from '@/lib/vision/queue';
-import { db } from '@/lib/db';
 import { ensureDbInitialized } from '@/lib/db-init';
 
 // 배치는 오래 걸림 (상품당 ~10초)
@@ -44,8 +43,8 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = await processBatch(toProcess, {
-          concurrency: concurrency || 3, // Flash 모델은 빠르므로 동시성 증가
-          delayMs: 1000, // 딜레이 최소화
+          concurrency: concurrency || 3,
+          delayMs: 1000,
           onProgress: (progress) => {
             send({
               type: 'progress',
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        send({ type: 'complete', ...result });
+        send({ type: 'complete', ...result, failures: result.failures || [] });
       } catch (error: any) {
         send({ type: 'error', message: error.message });
       }

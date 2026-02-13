@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { StatDetailModal } from './stat-detail-modal';
 
 interface Classification {
@@ -25,6 +25,7 @@ interface Product {
   internalCategory?: string;
   archiveTier?: string; // 수동 확정된 아카이브 tier (lifecycle 무관)
   classification?: Classification & { visionStatus?: string; visionGrade?: string };
+  isMatched?: boolean;
 }
 
 interface AutomationWorkflowTabProps {
@@ -56,37 +57,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [logLoading, setLogLoading] = useState(false);
 
-  // Vision 배치 상태
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{ completed: number; failed: number; total: number; percent: number } | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  // Timer effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (batchRunning) {
-      interval = setInterval(() => {
-        setElapsedSeconds(prev => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [batchRunning]);
-
-  // 진행 상태에 따른 메시지 생성
-  const getProgressMessage = () => {
-    if (!batchProgress) return '대기 중...';
-    if (batchProgress.percent === 100) return '분석 완료!';
-
-    // 단순화된 작업 메시지 로직
-    const currentItemIndex = batchProgress.completed + batchProgress.failed + 1;
-    const isAnalyzing = batchProgress.percent < 90;
-
-    if (isAnalyzing) {
-      return `상품 #${currentItemIndex} 정밀 분석 중... (패턴, 재질, 오염도)`;
-    } else {
-      return '데이터베이스 동기화 및 저장 중...';
-    }
-  };
+  // Vision: 미분석 상품 수 표시용
 
   // 브랜드 관리 상태
   const [showBrands, setShowBrands] = useState(false);
@@ -113,7 +84,21 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
   }, [brands, brandSearch, listFilterTier]);
 
   // 분류 통계 산출
-  const stats = useMemo(() => {
+  const stats = useMemo<{
+    total: number;
+    classifiedCount: number;
+    avgConfidence: number;
+    byClothingType: Record<string, number>;
+    byBrandTier: Record<string, number>;
+    byGender: Record<string, number>;
+    highConf: number;
+    midConf: number;
+    lowConf: number;
+    topBrands: [string, number][];
+    byLifecycle: Record<string, number>;
+    matchedCount: number;
+    unmatchedCount: number;
+  }>(() => {
     const classified = products.filter(p => p.classification);
     const total = products.length;
     const classifiedCount = classified.length;
@@ -160,71 +145,33 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       byLifecycle[stage] = (byLifecycle[stage] || 0) + 1;
     });
 
+    // Vision 등급 분포 (S급/A급/B급)
+    const byGrade: Record<string, number> = { 'S급': 0, 'A급': 0, 'B급': 0 };
+    products.forEach(p => {
+      const grade = p.classification?.visionGrade;
+      if (grade && byGrade[grade] !== undefined) byGrade[grade]++;
+    });
+    const visionCompleted = products.filter(p => p.classification?.visionStatus === 'completed').length;
+
+    // 매칭 현황 (관리자 페이지 연동)
+    const matchedCount = products.filter(p => p.isMatched).length;
+    const unmatchedCount = total - matchedCount;
+
     return {
       total, classifiedCount, avgConfidence,
       byClothingType, byBrandTier, byGender,
       highConf, midConf, lowConf,
-      topBrands, byLifecycle
+      topBrands, byLifecycle,
+      matchedCount, unmatchedCount,
+      byGrade, visionCompleted
     };
   }, [products]);
 
-  // Vision 배치 시작
-  const startVisionBatch = async (limit: number = 20) => {
-    const eligible = products.filter(p => p.thumbnailUrl && (!p.classification?.visionStatus || p.classification.visionStatus === 'none'));
-    if (eligible.length === 0) {
-      import('sonner').then(({ toast }) => toast.info('분석할 상품이 없습니다'));
-      return;
-    }
-
-    const batch = eligible.slice(0, limit).map(p => ({
-      originProductNo: p.originProductNo,
-      name: p.name,
-      imageUrl: p.thumbnailUrl!
-    }));
-
-    setBatchRunning(true);
-    setElapsedSeconds(0);
-    setBatchProgress({ completed: 0, failed: 0, total: batch.length, percent: 0 });
-
-    try {
-      const res = await fetch('/api/smartstore/vision/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: batch, concurrency: 2, limit })
-      });
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (reader) {
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'progress') {
-                  setBatchProgress({ completed: data.completed, failed: data.failed, total: data.total, percent: data.percent });
-                } else if (data.type === 'complete') {
-                  setBatchProgress({ completed: data.completed, failed: data.failed, total: data.total, percent: 100 });
-                  import('sonner').then(({ toast }) => toast.success(`Vision 분석 완료: ${data.completed}개 성공, ${data.failed}개 실패`));
-                }
-              } catch { }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      import('sonner').then(({ toast }) => toast.error('배치 분석 실패: ' + err.message));
-    } finally {
-      setBatchRunning(false);
-    }
-  };
+  // 미분석 상품 목록
+  const eligibleProducts = useMemo(() =>
+    products.filter(p => p.thumbnailUrl && (!p.classification?.visionStatus || p.classification.visionStatus === 'none')),
+    [products]
+  );
 
   // 브랜드 로드
   const loadBrands = async () => {
@@ -381,8 +328,8 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     MILITARY: 'MILITARY ARCHIVE',
     WORKWEAR: 'WORKWEAR ARCHIVE',
     OUTDOOR: 'OUTDOOR ARCHIVE',
-    JAPAN: 'JAPAN ARCHIVE',
-    HERITAGE: 'HERITAGE ARCHIVE',
+    JAPAN: 'JAPANESE ARCHIVE',
+    HERITAGE: 'HERITAGE EUROPE',
     BRITISH: 'BRITISH ARCHIVE'
   };
 
@@ -455,6 +402,34 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
         </p>
       </div>
 
+      {/* 4단계 분류 파이프라인 */}
+      <div className="bg-white rounded-xl border p-4">
+        <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider">4단계 분류 파이프라인</h4>
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {[
+            { step: '1', name: '상품명', desc: '텍스트 분류', icon: '📝', color: 'bg-blue-500' },
+            { step: '2', name: '브랜드 DB', desc: '마스터 매칭', icon: '🏷️', color: 'bg-amber-500' },
+            { step: '3', name: 'Vision', desc: 'Gemini 3.0', icon: '🔮', color: 'bg-violet-500' },
+            { step: '4', name: 'Merge', desc: '통합 판정', icon: '🎯', color: 'bg-emerald-500' },
+          ].map((s, i) => (
+            <div key={s.step} className="flex items-center gap-1 shrink-0">
+              <div className="text-center min-w-[70px]">
+                <div className={`w-8 h-8 ${s.color} rounded-full flex items-center justify-center mx-auto mb-1 shadow-sm`}>
+                  <span className="text-sm">{s.icon}</span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-700">{s.name}</p>
+                <p className="text-[8px] text-slate-400">{s.desc}</p>
+              </div>
+              {i < 3 && (
+                <svg className="w-4 h-4 text-slate-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* 핵심 지표 */}
       <div className="grid grid-cols-4 gap-2">
         <div className="bg-white rounded-xl border p-3 text-center">
@@ -482,6 +457,73 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
         >
           <p className="text-[10px] text-slate-400 font-bold mb-1 group-hover:text-red-500 transition-colors">저신뢰</p>
           <p className="text-xl font-black text-red-500">{stats.lowConf}</p>
+        </div>
+      </div>
+
+      {/* Vision 등급 분포 + 자동가격조정 요약 */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* 등급 분포 */}
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Vision 등급 분포</h4>
+            <span className="text-[10px] text-slate-400">{stats.visionCompleted}개 분석완료</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { grade: 'S급', color: 'bg-amber-500', textColor: 'text-amber-600', bgLight: 'bg-amber-50' },
+              { grade: 'A급', color: 'bg-blue-500', textColor: 'text-blue-600', bgLight: 'bg-blue-50' },
+              { grade: 'B급', color: 'bg-slate-500', textColor: 'text-slate-600', bgLight: 'bg-slate-50' },
+            ].map(g => (
+              <div key={g.grade} className={`text-center p-2 rounded-lg ${g.bgLight}`}>
+                <div className={`w-full h-1 ${g.color} rounded-full mb-1.5`} />
+                <p className={`text-lg font-black ${g.textColor}`}>{stats.byGrade[g.grade] || 0}</p>
+                <p className="text-[9px] font-bold text-slate-600">{g.grade}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 자동가격조정 요약 */}
+        <div className="bg-white rounded-xl border p-4">
+          <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider">자동 가격 조정</h4>
+          <div className="space-y-1.5">
+            {[
+              { stage: 'CURATED', label: 'CURATED', discount: '20%', count: stats.byLifecycle['CURATED'] || 0 },
+              { stage: 'ARCHIVE', label: 'ARCHIVE', discount: '20%', count: stats.byLifecycle['ARCHIVE'] || 0 },
+              { stage: 'CLEARANCE', label: 'CLEARANCE', discount: '20%', count: stats.byLifecycle['CLEARANCE'] || 0 },
+            ].map(item => (
+              <div key={item.stage} className="flex items-center justify-between py-1.5 px-2 bg-slate-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-600">{item.label}</span>
+                  <span className="text-[9px] font-bold text-red-500">-{item.discount}</span>
+                </div>
+                <span className="text-xs font-black text-slate-800">{item.count}개</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] text-slate-400 mt-2 text-center">상품 송신 시 라이프사이클 할인 자동 적용</p>
+        </div>
+      </div>
+
+      {/* 스마트스토어 매칭 현황 (테크트리 사양) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-slate-50 rounded-xl border-2 border-dashed border-emerald-200 p-4 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-black text-emerald-600 uppercase mb-1">매칭 완료 상품</p>
+            <p className="text-2xl font-black text-slate-900">{stats.matchedCount.toLocaleString()}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" /></svg>
+          </div>
+        </div>
+        <div className="bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 p-4 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-black text-slate-400 uppercase mb-1">미매칭 상품</p>
+            <p className="text-2xl font-black text-slate-900">{stats.unmatchedCount.toLocaleString()}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
+            <svg className="w-6 h-6 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" /></svg>
+          </div>
         </div>
       </div>
 
@@ -541,7 +583,6 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                 {[
                   { key: 'MILITARY', label: 'MILITARY', color: 'bg-emerald-700' },
                   { key: 'WORKWEAR', label: 'WORKWEAR', color: 'bg-amber-600' },
-                  { key: 'OUTDOOR', label: 'OUTDOOR', color: 'bg-teal-600' },
                   { key: 'JAPAN', label: 'JAPANESE', color: 'bg-red-500' },
                   { key: 'HERITAGE', label: 'HERITAGE', color: 'bg-blue-500' },
                   { key: 'BRITISH', label: 'BRITISH', color: 'bg-indigo-500' },
@@ -622,65 +663,56 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
                 </svg>
                 <h4 className="text-sm font-bold text-violet-800">Gemini Vision 분석</h4>
               </div>
-              <span className="text-[10px] text-violet-500 font-mono">gemini-3.0-pro</span>
+              <span className="text-[10px] text-violet-500 font-mono">gemini-1.5-flash</span>
             </div>
 
-            {batchProgress && (
-              <div className="mb-4 bg-white/50 rounded-lg p-3 border border-violet-100 shadow-sm">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-bold text-violet-700 animate-pulse">
-                      {batchRunning ? getProgressMessage() : '대기 중'}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {batchProgress.completed + batchProgress.failed} / {batchProgress.total}개 완료
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-xs font-mono font-bold text-slate-700 block bg-slate-100 px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
-                      {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
-                    </span>
-                    <span className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-widest scale-75 origin-right font-bold">Elapsed</span>
-                  </div>
-                </div>
+            <p className="text-[11px] text-violet-600 mb-3">
+              미분석 상품 <span className="font-black">{eligibleProducts.length}개</span>를 새 창에서 자동 분석합니다.
+              분석 중에도 다른 작업을 할 수 있습니다.
+            </p>
 
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-1 relative border border-slate-100">
-                  <div
-                    className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-300 relative overflow-hidden"
-                    style={{ width: `${batchProgress.percent}%` }}
-                  />
-                </div>
+            <button
+              onClick={() => {
+                window.open('/smartstore/vision-analyzer', 'vision-analyzer', 'width=900,height=700,scrollbars=yes,resizable=yes');
+              }}
+              disabled={eligibleProducts.length === 0}
+              className="w-full py-2.5 text-xs font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-violet-200 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              새 창에서 자동 분석 시작 ({eligibleProducts.length}개)
+            </button>
+          </div>
 
-                <div className="flex justify-between text-[9px] font-medium text-slate-500">
-                  <span>진행률 {batchProgress.percent}%</span>
-                  {batchProgress.failed > 0 && <span className="text-red-500 font-bold ml-auto">{batchProgress.failed}개 실패</span>}
-                </div>
+          {/* 네이버 상품 송신 */}
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <h4 className="text-sm font-bold text-amber-800">네이버 상품 송신</h4>
               </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => startVisionBatch(1)}
-                disabled={batchRunning}
-                className="py-1.5 px-3 text-[11px] font-bold text-violet-600 bg-white border border-violet-200 hover:bg-violet-50 rounded-lg disabled:opacity-50"
-              >
-                {batchRunning ? '...' : '1개'}
-              </button>
-              <button
-                onClick={() => startVisionBatch(20)}
-                disabled={batchRunning}
-                className="flex-1 py-1.5 text-[11px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg disabled:opacity-50"
-              >
-                {batchRunning ? '분류 중...' : '20개 분석'}
-              </button>
-              <button
-                onClick={() => startVisionBatch(100)}
-                disabled={batchRunning}
-                className="flex-1 py-1.5 text-[11px] font-bold text-violet-700 bg-white border border-violet-200 hover:bg-violet-50 rounded-lg disabled:opacity-50"
-              >
-                100개 분석
-              </button>
+              <span className="text-[10px] text-amber-500 font-mono">PUT API</span>
             </div>
+
+            <p className="text-[11px] text-amber-700 mb-3">
+              라이프사이클 가격, 상태 변경 등을 네이버 스마트스토어에 실제 반영합니다.
+              송신 결과(성공/실패)를 새 창에서 확인할 수 있습니다.
+            </p>
+
+            <button
+              onClick={() => {
+                window.open('/smartstore/product-sender', 'product-sender', 'width=900,height=700,scrollbars=yes,resizable=yes');
+              }}
+              className="w-full py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-amber-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              새 창에서 상품 송신
+            </button>
           </div>
 
           {/* 브랜드 수동 관리 (엑셀 방식 대량 등록 지원) */}
