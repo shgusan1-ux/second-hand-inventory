@@ -127,12 +127,58 @@ export async function initDatabase() {
       )
     `);
 
+    // 은행 계좌 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bank_accounts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL, -- 계좌 별칭 (예: 유동 메인)
+        bank_name TEXT NOT NULL,
+        account_no TEXT NOT NULL,
+        balance INTEGER DEFAULT 0,
+        owner_entity TEXT, -- Yudong, HM, Pumeone, 33m2
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 계좌 내역 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS account_transactions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT, -- Nullable for manual transactions not linked to an account
+        transaction_date TIMESTAMP NOT NULL,
+        amount INTEGER NOT NULL,
+        type TEXT NOT NULL, -- IN, OUT (or INCOME, EXPENSE)
+        counterparty TEXT, -- 거래 상대방
+        description TEXT,
+        category TEXT, -- 고정비, 매출, 급여 등
+        payment_method TEXT, -- 카드, 현금 등
+        created_by TEXT, -- 작성자 ID
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 고정비 관리 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS fixed_costs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL, -- 인터넷, 전기, 가스, 임대료 등
+        amount INTEGER NOT NULL,
+        due_day INTEGER, -- 매월 N일
+        category TEXT, -- Utility, Rent, Insurance, etc.
+        account_id TEXT, -- 자동이체 계좌 ID
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_date ON product_overrides(override_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_account ON account_transactions(account_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON account_transactions(transaction_date)`);
 
     console.log('✅ DB 초기화 완료');
     isInitialized = true;

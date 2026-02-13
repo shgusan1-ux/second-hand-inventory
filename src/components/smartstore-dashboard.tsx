@@ -349,7 +349,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.curatedItems} tag="PICK" color="bg-indigo-600" discount={20} categoryName="CURATED" />
+                        <ProductList items={groups.curatedItems} tag="PICK" color="bg-indigo-600" discount={20} categoryName="CURATED" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -366,7 +366,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.militaryArchive} tag="MILITARY" color="bg-green-700" discount={40} categoryName="MILITARY" />
+                        <ProductList items={groups.militaryArchive} tag="MILITARY" color="bg-green-700" discount={40} categoryName="MILITARY" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -383,7 +383,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.workwearArchive} tag="WORK" color="bg-amber-700" discount={40} categoryName="WORKWEAR" />
+                        <ProductList items={groups.workwearArchive} tag="WORK" color="bg-amber-700" discount={40} categoryName="WORKWEAR" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -400,7 +400,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.japanArchive} tag="JAPAN" color="bg-red-600" discount={40} categoryName="JAPAN" />
+                        <ProductList items={groups.japanArchive} tag="JAPAN" color="bg-red-600" discount={40} categoryName="JAPAN" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -417,7 +417,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.heritageEurope} tag="HERITAGE" color="bg-purple-600" discount={40} categoryName="HERITAGE" />
+                        <ProductList items={groups.heritageEurope} tag="HERITAGE" color="bg-purple-600" discount={40} categoryName="HERITAGE" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -434,7 +434,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.britishArchive} tag="BRITISH" color="bg-blue-700" discount={40} categoryName="BRITISH" />
+                        <ProductList items={groups.britishArchive} tag="BRITISH" color="bg-blue-700" discount={40} categoryName="BRITISH" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -451,7 +451,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.clearanceItems} tag="SALE" color="bg-red-600" discount={70} categoryName="CLEARANCE" />
+                        <ProductList items={groups.clearanceItems} tag="SALE" color="bg-red-600" discount={70} categoryName="CLEARANCE" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -468,7 +468,7 @@ export function SmartStoreDashboard({ groups }: { groups: any }) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 md:p-6 pt-0">
-                        <ProductList items={groups.etcItems || []} tag="NORMAL" color="bg-slate-600" discount={0} categoryName="ETC" />
+                        <ProductList items={groups.etcItems || []} tag="NORMAL" color="bg-slate-600" discount={0} categoryName="ETC" selectedIds={selectedIds} onSelectChange={handleSelectChange} />
                     </CardContent>
                 </Card>
             </TabsContent>

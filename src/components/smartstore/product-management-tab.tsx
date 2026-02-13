@@ -211,19 +211,6 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     );
   };
 
-  // 현재 페이지 전체 선택/해제
-  const toggleSelectAll = () => {
-    const pageIds = paginatedItems.map(p => p.originProductNo);
-    const allSelected = pageIds.every(id => selectedIds.includes(id));
-    if (allSelected) {
-      setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
-    } else {
-      setSelectedIds(prev => [...new Set([...prev, ...pageIds])]);
-    }
-  };
-
-  const isAllPageSelected = paginatedItems.length > 0 && paginatedItems.every(p => selectedIds.includes(p.originProductNo));
-
   // 카테고리 기반 필터링
   const filtered = products.filter(p => {
     const matchSearch = !searchTerm ||
@@ -300,6 +287,19 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   // Pagination logic
   const totalPages = Math.ceil(sorted.length / pageSize);
   const paginatedItems = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // 현재 페이지 전체 선택/해제
+  const toggleSelectAll = () => {
+    const pageIds = paginatedItems.map(p => p.originProductNo);
+    const allSelected = pageIds.every(id => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
+    } else {
+      setSelectedIds(prev => [...new Set([...prev, ...pageIds])]);
+    }
+  };
+
+  const isAllPageSelected = paginatedItems.length > 0 && paginatedItems.every(p => selectedIds.includes(p.originProductNo));
 
   // Reset page when filters change
   const handleStageChange = (stage: string) => {
@@ -549,97 +549,122 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
       {/* 컴팩트 테이블 뷰 */}
       {viewMode === 'table' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          {/* 테이블 헤더 */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            <label className="flex items-center shrink-0 cursor-pointer" onClick={e => e.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={isAllPageSelected}
-                onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-            </label>
-            <div className="w-8 shrink-0"></div>
-            <div className="flex-1 min-w-0">상품명</div>
-            <div className="w-20 text-right shrink-0">가격</div>
-            <div className="w-24 text-center shrink-0">카테고리</div>
-            <div className="w-14 text-center shrink-0">D+</div>
-          </div>
-          {/* 테이블 행 */}
-          <div className="divide-y divide-slate-50">
-            {paginatedItems.map(p => {
-              const isSelected = selectedIds.includes(p.originProductNo);
-              const discounted = p.lifecycle && p.lifecycle.discountRate > 0 && p.lifecycle.stage !== 'NEW';
-              return (
-                <div
-                  key={p.originProductNo}
-                  className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors hover:bg-slate-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
-                  onClick={() => toggleSelect(p.originProductNo)}
-                >
-                  <label className="flex items-center shrink-0" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(p.originProductNo)}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                  </label>
-                  <div className="w-8 h-8 rounded overflow-hidden bg-slate-100 shrink-0">
-                    {p.thumbnailUrl ? (
-                      <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">IMG</div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {p.classification?.brand && (
-                        <span className="text-[9px] font-bold text-slate-400">{p.classification.brand}</span>
-                      )}
-                      {p.classification?.visionGrade && (
-                        <span className="text-[9px] font-bold text-violet-500">{p.classification.visionGrade}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="w-20 text-right shrink-0">
-                    {discounted ? (
-                      <div>
-                        <span className="text-[9px] text-slate-400 line-through block leading-none">{p.salePrice?.toLocaleString()}</span>
-                        <span className="text-[11px] font-bold text-red-600 leading-none">
-                          {Math.round(p.salePrice * (1 - p.lifecycle!.discountRate / 100)).toLocaleString()}
-                        </span>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[800px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="px-2 py-2 w-8 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllPageSelected}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </th>
+                <th className="px-2 py-2 text-left">상품코드</th>
+                <th className="px-1 py-2 w-9"></th>
+                <th className="px-2 py-2 text-left">상품명</th>
+                <th className="px-2 py-2 text-left">브랜드</th>
+                <th className="px-2 py-2 text-right">소비자가</th>
+                <th className="px-2 py-2 text-right">판매가</th>
+                <th className="px-2 py-2 text-center">GRADE</th>
+                <th className="px-2 py-2 text-center">등록일</th>
+                <th className="px-2 py-2 text-center">경과일</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {paginatedItems.map(p => {
+                const isSelected = selectedIds.includes(p.originProductNo);
+                const discountRate = p.lifecycle?.discountRate || 0;
+                const hasDiscount = discountRate > 0 && p.lifecycle?.stage !== 'NEW';
+                const discountedPrice = hasDiscount ? Math.round(p.salePrice * (1 - discountRate / 100)) : p.salePrice;
+                return (
+                  <tr
+                    key={p.originProductNo}
+                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
+                    onClick={() => toggleSelect(p.originProductNo)}
+                  >
+                    <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(p.originProductNo)}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <span className="text-[9px] font-mono font-bold text-violet-600 whitespace-nowrap">
+                        {p.sellerManagementCode || '-'}
+                      </span>
+                    </td>
+                    <td className="px-1 py-1">
+                      <div className="w-8 h-8 rounded overflow-hidden bg-slate-100 shrink-0">
+                        {p.thumbnailUrl ? (
+                          <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">IMG</div>
+                        )}
                       </div>
-                    ) : (
-                      <span className="text-[11px] font-bold text-slate-700">{p.salePrice?.toLocaleString()}</span>
-                    )}
-                  </div>
-                  <div className="w-24 text-center shrink-0">
-                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-none ${
-                      p.internalCategory === 'NEW' ? 'bg-emerald-100 text-emerald-700' :
-                      p.internalCategory === 'CURATED' ? 'bg-indigo-100 text-indigo-700' :
-                      p.internalCategory === 'UNCATEGORIZED' ? 'bg-amber-100 text-amber-700' :
-                      isClearanceCategory(p.internalCategory) ? 'bg-amber-100 text-amber-700' :
-                      isArchiveCategory(p.internalCategory) ? 'bg-slate-200 text-slate-700' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>
-                      {(p.internalCategory || '-').replace(' ARCHIVE', '')}
-                    </span>
-                  </div>
-                  <div className="w-14 text-center shrink-0">
-                    <span className={`text-[10px] font-bold ${
-                      (p.lifecycle?.daysSince || 0) > 120 ? 'text-red-500' :
-                      (p.lifecycle?.daysSince || 0) > 60 ? 'text-amber-500' :
-                      'text-slate-400'
-                    }`}>
-                      {p.lifecycle?.daysSince || 0}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[200px]">
+                      <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <span className="text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                        {p.classification?.brand || extractBrand(p.name)}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <span className={`text-[10px] font-bold whitespace-nowrap ${hasDiscount ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                        {p.salePrice?.toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {hasDiscount ? (
+                        <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">
+                          {discountedPrice.toLocaleString()}
+                          <span className="text-[8px] ml-0.5">-{discountRate}%</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-700 whitespace-nowrap">
+                          {p.salePrice?.toLocaleString()}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      {p.classification?.visionGrade ? (
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${
+                          p.classification.visionGrade === 'S급' ? 'bg-yellow-100 text-yellow-700' :
+                          p.classification.visionGrade === 'A급' ? 'bg-blue-100 text-blue-700' :
+                          p.classification.visionGrade === 'B급' ? 'bg-slate-100 text-slate-600' :
+                          'bg-red-100 text-red-600'
+                        }`}>
+                          {p.classification.visionGrade}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <span className="text-[9px] text-slate-500 whitespace-nowrap">
+                        {p.regDate ? new Date(p.regDate).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <span className={`text-[10px] font-bold ${
+                        (p.lifecycle?.daysSince || 0) > 120 ? 'text-red-500' :
+                        (p.lifecycle?.daysSince || 0) > 60 ? 'text-amber-500' :
+                        (p.lifecycle?.daysSince || 0) > 30 ? 'text-blue-500' :
+                        'text-slate-400'
+                      }`}>
+                        D+{p.lifecycle?.daysSince || 0}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

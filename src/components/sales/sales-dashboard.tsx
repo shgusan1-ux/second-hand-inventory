@@ -78,7 +78,7 @@ export function SalesDashboard({ currentUser }: { currentUser: any }) {
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string | number) => {
         if (!confirm('정말 삭제하시겠습니까?')) return;
         const res = await deleteTransaction(id);
         if (res.success) {
