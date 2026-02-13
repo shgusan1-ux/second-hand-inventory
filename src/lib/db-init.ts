@@ -218,6 +218,11 @@ export async function initDatabase() {
     `);
 
 
+    // naver_products에 description_grade 컬럼 추가 (상세페이지 GRADE: S/A/B/V)
+    try {
+      await db.query(`ALTER TABLE naver_products ADD COLUMN description_grade TEXT`);
+    } catch (e) { /* Column likely exists */ }
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);

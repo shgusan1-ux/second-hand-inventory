@@ -192,6 +192,7 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             internalCategory,
             archiveTier: savedCategory, // 수동 확정된 카테고리 (lifecycle 무관하게 보존)
             classification,
+            descriptionGrade: p.descriptionGrade || override.description_grade || null, // 네이버 상세페이지 GRADE
             suggestedArchiveId: override.suggested_archive_id,
             suggestionReason: override.suggestion_reason,
             inferredBrand: override.inferred_brand,
@@ -207,17 +208,21 @@ async function fetchOverrideMap(ids: string[]) {
     if (ids.length === 0) return {};
     const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
     try {
-        // 1. Get user overrides
+        // 1. Get user overrides (핵심: internal_category 포함)
         const { rows: overrides } = await db.query(
             `SELECT id, override_date, internal_category, first_seen_at FROM product_overrides WHERE id IN (${placeholders})`,
             ids
         );
 
-        // 2. Get Naver product map enrichment (including AI suggestions)
-        const { rows: naverMap } = await db.query(
-            `SELECT origin_product_no, suggested_archive_id, suggestion_reason, inferred_brand, ocr_text, is_approved FROM naver_product_map WHERE origin_product_no IN (${placeholders})`,
-            ids
-        );
+        // 2. Get Naver product map enrichment (optional — 컬럼 누락 가능)
+        let naverMap: any[] = [];
+        try {
+            const { rows } = await db.query(
+                `SELECT origin_product_no, inferred_brand FROM naver_product_map WHERE origin_product_no IN (${placeholders})`,
+                ids
+            );
+            naverMap = rows;
+        } catch { /* 테이블/컬럼 없으면 무시 */ }
 
         // 3. Vision 분석 결과 조회
         let visionMap: any = {};
@@ -273,21 +278,26 @@ async function fetchOverrideMap(ids: string[]) {
             map[id].customBrands = customBrands;
         });
 
-        // 6. 내부 인벤토리 매칭 정보 주입 (seller_management_code 기준)
-        const { rows: naverProducts } = await db.query(
-            `SELECT origin_product_no, seller_management_code FROM naver_products WHERE origin_product_no IN (${placeholders})`,
-            ids
-        );
+        // 6. 내부 인벤토리 매칭 정보 + description_grade 주입
+        try {
+            const { rows: naverProducts } = await db.query(
+                `SELECT origin_product_no, seller_management_code, description_grade FROM naver_products WHERE origin_product_no IN (${placeholders})`,
+                ids
+            );
 
-        naverProducts.forEach((np: any) => {
-            const id = np.origin_product_no;
-            if (map[id]) {
-                const smCode = np.seller_management_code;
-                if (smCode && matchedMap[smCode]) {
-                    map[id].matched_id = smCode;
+            naverProducts.forEach((np: any) => {
+                const id = np.origin_product_no;
+                if (map[id]) {
+                    const smCode = np.seller_management_code;
+                    if (smCode && matchedMap[smCode]) {
+                        map[id].matched_id = smCode;
+                    }
+                    if (np.description_grade) {
+                        map[id].description_grade = np.description_grade;
+                    }
                 }
-            }
-        });
+            });
+        } catch { /* naver_products 조회 실패 무시 */ }
 
         return map;
     } catch (dbError) {
@@ -348,7 +358,7 @@ async function saveProductsToDB(contents: any[]) {
 // DB에서 저장된 상품 로드 (네이버 API 호출 없이)
 async function loadProductsFromDB(): Promise<any[] | null> {
     try {
-        const { rows } = await db.query('SELECT raw_json, origin_product_no FROM naver_products');
+        const { rows } = await db.query('SELECT raw_json, origin_product_no, description_grade FROM naver_products');
         if (!rows || rows.length === 0) return null;
 
         // raw_json → 원래 네이버 API 형식으로 복원
@@ -357,6 +367,7 @@ async function loadProductsFromDB(): Promise<any[] | null> {
             return {
                 originProductNo: parseInt(row.origin_product_no),
                 channelProducts: [cp],
+                descriptionGrade: row.description_grade || null,
             };
         });
         console.log(`[loadProductsFromDB] DB에서 ${contents.length}개 상품 로드`);
@@ -364,6 +375,52 @@ async function loadProductsFromDB(): Promise<any[] | null> {
     } catch (e) {
         console.warn('[loadProductsFromDB] failed:', e);
         return null;
+    }
+}
+
+// 메모리 캐시된 상품에 DB 최신 internal_category 오버라이드 적용
+// (다른 Vercel 인스턴스에서 카테고리 변경 시 메모리 캐시가 stale 상태이므로)
+async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
+    const ids = contents.map((p: any) => p.originProductNo).filter(Boolean);
+    if (ids.length === 0) return contents;
+
+    try {
+        const placeholders = ids.map((_: any, i: number) => `$${i + 1}`).join(',');
+        const { rows } = await db.query(
+            `SELECT id, internal_category FROM product_overrides WHERE id IN (${placeholders}) AND internal_category IS NOT NULL`,
+            ids
+        );
+
+        // description_grade도 함께 패치
+        let gradeMap = new Map<string, string>();
+        try {
+            const { rows: gradeRows } = await db.query(
+                `SELECT origin_product_no, description_grade FROM naver_products WHERE origin_product_no IN (${placeholders}) AND description_grade IS NOT NULL`,
+                ids
+            );
+            gradeMap = new Map(gradeRows.map((r: any) => [r.origin_product_no, r.description_grade]));
+        } catch { /* 무시 */ }
+
+        if (rows.length === 0 && gradeMap.size === 0) return contents;
+
+        const overrideMap = new Map(rows.map((r: any) => [r.id, r.internal_category]));
+        return contents.map((p: any) => {
+            const dbCategory = overrideMap.get(p.originProductNo);
+            const dbGrade = gradeMap.get(p.originProductNo);
+            const catChanged = dbCategory !== undefined && dbCategory !== p.internalCategory;
+            const gradeNeeded = dbGrade && !p.descriptionGrade;
+            if (catChanged || gradeNeeded) {
+                return {
+                    ...p,
+                    ...(catChanged ? { internalCategory: dbCategory, archiveTier: dbCategory } : {}),
+                    ...(gradeNeeded ? { descriptionGrade: dbGrade } : {}),
+                };
+            }
+            return p;
+        });
+    } catch (e) {
+        console.warn('[patchCacheWithFreshOverrides] DB 조회 실패, 기존 캐시 반환:', e);
+        return contents;
     }
 }
 
@@ -421,12 +478,20 @@ export async function GET(request: Request) {
     try {
         await ensureDbInitialized();
 
+        // 캐시 무효화 요청 (카테고리 이동 후 서버 캐시 클리어)
+        const invalidateCache = searchParams.get('invalidateCache') === 'true';
+        if (invalidateCache) {
+            productCache = null;
+            return handleSuccess({ invalidated: true, message: '서버 캐시가 무효화되었습니다' });
+        }
+
         // cacheOnly 모드: 메모리 캐시 → DB → 빈 데이터 순서로 시도
         if (cacheOnly) {
-            // 1. 메모리 캐시
+            // 1. 메모리 캐시 (DB 최신 오버라이드 패치 적용)
             if (productCache && (Date.now() - productCache.timestamp) < CACHE_TTL) {
+                const patched = await patchCacheWithFreshOverrides(productCache.data.contents);
                 return handleSuccess({
-                    contents: productCache.data.contents,
+                    contents: patched,
                     totalCount: productCache.data.totalCount,
                     statusCounts: productCache.data.statusCounts,
                     cached: true,
@@ -470,8 +535,9 @@ export async function GET(request: Request) {
 
         // Return cached data if available and not expired (fetchAll only)
         if (fetchAll && !refresh && productCache && (Date.now() - productCache.timestamp) < CACHE_TTL) {
-            console.log('[API/Products] Returning cached data');
-            let filtered = productCache.data.contents;
+            console.log('[API/Products] Returning cached data (with fresh overrides)');
+            const patched = await patchCacheWithFreshOverrides(productCache.data.contents);
+            let filtered = patched;
             if (stage !== 'ALL') {
                 filtered = filtered.filter((p: any) => p.lifecycle?.stage === stage);
             }

@@ -20,9 +20,17 @@ async function ensureTables() {
                 user_id TEXT,
                 work_date TEXT,
                 check_in TEXT,
-                check_out TEXT
+                check_out TEXT,
+                correction_status TEXT, -- Pending, Approved, Rejected
+                correction_data TEXT, -- JSON
+                note TEXT
             )
         `);
+
+        // Add columns if they don't exist (for existing tables)
+        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN correction_status TEXT'); } catch (e) { }
+        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN correction_data TEXT'); } catch (e) { }
+        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN note TEXT'); } catch (e) { }
     } catch (e) {
         console.error("Member tables init error:", e);
     }
@@ -69,6 +77,8 @@ export async function updateUserPermissions(targetUserId: string, categories: st
         return { success: false, error: 'Failed to update permissions' };
     }
 }
+
+// --- Attendance ---
 
 // --- Attendance ---
 
@@ -163,6 +173,107 @@ export async function getMemberAttendanceStats(userId: string, month: string) { 
         return [];
     }
 }
+
+// --- Correction System ---
+
+export async function requestCorrection(date: string, checkIn: string, checkOut: string, reason: string) {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Login required' };
+
+    await ensureTables();
+
+    // Check if log exists for that date
+    const existing = await db.query('SELECT id FROM attendance_logs WHERE user_id = $1 AND work_date = $2', [session.id, date]);
+    let logId = existing.rows[0]?.id;
+
+    const correctionData = JSON.stringify({ checkIn, checkOut, reason });
+
+    try {
+        if (logId) {
+            await db.query(`
+                UPDATE attendance_logs 
+                SET correction_status = 'Pending', correction_data = $1
+                WHERE id = $2
+            `, [correctionData, logId]);
+        } else {
+            // Create new log if missing (e.g. forgot to check in at all)
+            logId = Math.random().toString(36).substring(2, 12);
+            await db.query(`
+                INSERT INTO attendance_logs (id, user_id, work_date, correction_status, correction_data)
+                VALUES ($1, $2, $3, 'Pending', $4)
+            `, [logId, session.id, date, correctionData]);
+        }
+
+        await logAction('REQ_CORRECTION', 'attendance', logId, `정정 요청: ${date}`);
+        revalidatePath('/business/hr/attendance');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function approveCorrection(id: string) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+
+    await ensureTables();
+
+    try {
+        const res = await db.query('SELECT correction_data FROM attendance_logs WHERE id = $1', [id]);
+        if (!res.rows[0]?.correction_data) return { success: false, error: 'No data' };
+
+        const data = JSON.parse(res.rows[0].correction_data);
+
+        await db.query(`
+            UPDATE attendance_logs 
+            SET check_in = $1, check_out = $2, correction_status = 'Approved', note = $3
+            WHERE id = $4
+        `, [data.checkIn, data.checkOut, 'Approved by ' + session.name, id]);
+
+        await logAction('APPROVE_CORRECTION', 'attendance', id, '정정 승인');
+        revalidatePath('/business/hr/attendance');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function rejectCorrection(id: string) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+
+    try {
+        await db.query(`
+            UPDATE attendance_logs 
+            SET correction_status = 'Rejected'
+            WHERE id = $1
+        `, [id]);
+        revalidatePath('/business/hr/attendance');
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: 'Failed' };
+    }
+}
+
+export async function getPendingCorrections() {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return [];
+
+    await ensureTables();
+    try {
+        const res = await db.query(`
+            SELECT l.*, u.name as user_name, u.job_title
+            FROM attendance_logs l
+            JOIN users u ON l.user_id = u.id
+            WHERE l.correction_status = 'Pending'
+            ORDER BY l.work_date DESC
+        `);
+        return res.rows;
+    } catch (e) {
+        return [];
+    }
+}
+
 
 export async function updateUserJobTitle(targetUserId: string, newJobTitle: string) {
     const session = await getSession();

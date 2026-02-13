@@ -20,6 +20,7 @@ interface Product {
   lifecycle?: { stage: string; daysSince: number; discountRate: number };
   archiveInfo?: { category: string };
   internalCategory?: string;
+  descriptionGrade?: string | null;
   suggestedArchiveId?: string;
   suggestionReason?: string;
   inferredBrand?: string;
@@ -66,10 +67,15 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [movingCategory, setMovingCategory] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
+  const [classifyingAI, setClassifyingAI] = useState(false);
+  const [aiProgress, setAiProgress] = useState<{ current: number; total: number; message: string; results: any[] } | null>(null);
+  const [syncingGrades, setSyncingGrades] = useState(false);
+  const [gradeProgress, setGradeProgress] = useState<{ current: number; total: number; message: string } | null>(null);
 
   // 카테고리 네비게이션
   const [stageFilter, setStageFilter] = useState<string>('ALL');
   const [subFilter, setSubFilter] = useState<string>('ALL');
+  const [curatedDaysFilter, setCuratedDaysFilter] = useState<number>(0); // 0=전체, 30, 60, 90
 
   const ARCHIVE_SUBS = ['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE'];
   const isArchiveCategory = (cat?: string) => cat === 'ARCHIVE' || ARCHIVE_SUBS.includes(cat || '');
@@ -100,6 +106,21 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       counts.ALL++;
       if (ARCHIVE_SUBS.includes(cat)) counts[cat]++;
       else counts['UNASSIGNED']++;
+    });
+    return counts;
+  }, [products]);
+
+  // CURATED 기간별 카운트
+  const curatedDaysCounts = useMemo(() => {
+    const counts = { ALL: 0, under30: 0, d30: 0, d60: 0, d90: 0 };
+    products.forEach(p => {
+      if (p.internalCategory !== 'CURATED') return;
+      counts.ALL++;
+      const days = p.lifecycle?.daysSince || 0;
+      if (days <= 30) counts.under30++;
+      if (days >= 30) counts.d30++;
+      if (days >= 60) counts.d60++;
+      if (days >= 90) counts.d90++;
     });
     return counts;
   }, [products]);
@@ -149,7 +170,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     }
   };
 
-  // 선택 상품 카테고리 강제 이동
+  // 선택 상품 카테고리 강제 이동 (네이버 동기화 없이 로컬 즉시 반영)
   const moveToCategory = async (category: string) => {
     if (selectedIds.length === 0) return;
     setMovingCategory(true);
@@ -162,9 +183,28 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       const data = await res.json();
       if (data.success) {
         toast.success(`${selectedIds.length}개 상품 → ${category} 이동 완료`);
+
+        // 네이버 동기화 없이 React Query 캐시 직접 업데이트
+        queryClient.setQueryData(['all-products'], (old: any) => {
+          if (!old?.data?.contents) return old;
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              contents: old.data.contents.map((p: any) =>
+                selectedIds.includes(p.originProductNo)
+                  ? { ...p, internalCategory: category, archiveTier: category }
+                  : p
+              )
+            }
+          };
+        });
+
+        // 서버 캐시 무효화 (백그라운드, 다음 페이지 로드 시 DB에서 재빌드)
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+
         setSelectedIds([]);
         setShowMoveMenu(false);
-        onRefresh();
       } else {
         toast.error(data.error || '이동 실패');
       }
@@ -175,7 +215,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     }
   };
 
-  // 자동 분류로 복원 (internal_category를 NULL로)
+  // 자동 분류로 복원 (internal_category를 NULL로, 라이프사이클 기반 자동 결정)
   const resetToAuto = async () => {
     if (selectedIds.length === 0) return;
     setMovingCategory(true);
@@ -188,9 +228,29 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       const data = await res.json();
       if (data.success) {
         toast.success(`${selectedIds.length}개 상품 자동 분류로 복원`);
+
+        // 네이버 동기화 없이 React Query 캐시 직접 업데이트
+        queryClient.setQueryData(['all-products'], (old: any) => {
+          if (!old?.data?.contents) return old;
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              contents: old.data.contents.map((p: any) => {
+                if (!selectedIds.includes(p.originProductNo)) return p;
+                // 라이프사이클 스테이지로 자동 복원
+                const stage = p.lifecycle?.stage || 'NEW';
+                return { ...p, internalCategory: stage, archiveTier: null };
+              })
+            }
+          };
+        });
+
+        // 서버 캐시 무효화
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+
         setSelectedIds([]);
         setShowMoveMenu(false);
-        onRefresh();
       } else {
         toast.error(data.error || '복원 실패');
       }
@@ -198,6 +258,139 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       toast.error('복원 오류: ' + err.message);
     } finally {
       setMovingCategory(false);
+    }
+  };
+
+  // AI 아카이브 자동 분류 (3-Phase: Brand Search → Vision → Fusion)
+  const classifyWithAI = async () => {
+    if (selectedIds.length === 0 || classifyingAI) return;
+
+    // 선택된 상품 데이터 수집
+    const selectedProducts = products
+      .filter(p => selectedIds.includes(p.originProductNo))
+      .map(p => ({
+        id: p.originProductNo,
+        name: p.name,
+        imageUrl: p.thumbnailUrl || '',
+      }));
+
+    setClassifyingAI(true);
+    setAiProgress({ current: 0, total: selectedProducts.length, message: 'AI 분류 시작...', results: [] });
+    setShowMoveMenu(false);
+
+    try {
+      const res = await fetch('/api/smartstore/automation/archive-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: selectedProducts }),
+      });
+
+      if (!res.body) throw new Error('SSE 스트림 없음');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const allResults: any[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === 'progress') {
+              setAiProgress(prev => prev ? { ...prev, current: event.current, message: event.message } : prev);
+            } else if (event.type === 'result') {
+              allResults.push(event);
+              setAiProgress(prev => prev ? { ...prev, current: event.current, message: `${event.product} → ${event.category}`, results: [...allResults] } : prev);
+              toast.success(`${event.product}... → ${event.category} (${event.confidence}%)`, { duration: 2000 });
+            } else if (event.type === 'error') {
+              allResults.push({ ...event, category: 'ARCHIVE' });
+              toast.error(`${event.product}... 분류 실패`, { duration: 2000 });
+            } else if (event.type === 'complete') {
+              // React Query 캐시 직접 업데이트 (네이버 동기화 없음)
+              queryClient.setQueryData(['all-products'], (old: any) => {
+                if (!old?.data?.contents) return old;
+                const categoryMap: Record<string, string> = {};
+                event.results.forEach((r: any) => { categoryMap[r.productId] = r.category; });
+                return {
+                  ...old,
+                  data: {
+                    ...old.data,
+                    contents: old.data.contents.map((p: any) =>
+                      categoryMap[p.originProductNo]
+                        ? { ...p, internalCategory: categoryMap[p.originProductNo], archiveTier: categoryMap[p.originProductNo] }
+                        : p
+                    ),
+                  },
+                };
+              });
+
+              toast.success(`AI 분류 완료: ${event.success}개 성공, ${event.failed}개 실패`);
+            }
+          } catch { /* JSON 파싱 실패 무시 */ }
+        }
+      }
+
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error('AI 분류 오류: ' + err.message);
+    } finally {
+      setClassifyingAI(false);
+      setAiProgress(null);
+    }
+  };
+
+  // GRADE 일괄 동기화 (네이버 상세페이지에서 추출)
+  const syncGrades = async () => {
+    if (syncingGrades) return;
+    setSyncingGrades(true);
+    setGradeProgress({ current: 0, total: 0, message: 'GRADE 동기화 시작...' });
+
+    try {
+      const res = await fetch('/api/smartstore/products/sync-grades', { method: 'POST' });
+      if (!res.body) throw new Error('스트림 없음');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'start') {
+              setGradeProgress({ current: 0, total: event.total, message: `${event.total}개 상품 GRADE 동기화 시작` });
+            } else if (event.type === 'progress') {
+              setGradeProgress({ current: event.current, total: event.total, message: `${event.product}... ${event.message}` });
+            } else if (event.type === 'complete') {
+              toast.success(`GRADE 동기화 완료: ${event.success}개 성공`);
+              // 서버 캐시 무효화 후 새로고침
+              fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+              onRefresh();
+            }
+          } catch { /* 무시 */ }
+        }
+      }
+    } catch (err: any) {
+      toast.error('GRADE 동기화 오류: ' + err.message);
+    } finally {
+      setSyncingGrades(false);
+      setGradeProgress(null);
     }
   };
 
@@ -227,7 +420,16 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     // 스테이지 필터
     if (stageFilter === 'ALL') return true;
     if (stageFilter === 'NEW') return cat === 'NEW';
-    if (stageFilter === 'CURATED') return cat === 'CURATED';
+    if (stageFilter === 'CURATED') {
+      if (cat !== 'CURATED') return false;
+      if (curatedDaysFilter === -30) {
+        return (p.lifecycle?.daysSince || 0) <= 30;
+      }
+      if (curatedDaysFilter > 0) {
+        return (p.lifecycle?.daysSince || 0) >= curatedDaysFilter;
+      }
+      return true;
+    }
     if (stageFilter === 'UNASSIGNED') return !cat || cat === 'UNCATEGORIZED';
     if (stageFilter === 'ARCHIVE') {
       if (!isArchiveCategory(cat)) return false;
@@ -244,7 +446,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   });
 
   // 정렬
-  const GRADE_ORDER: Record<string, number> = { 'S급': 0, 'A급': 1, 'B급': 2, 'C급': 3 };
+  const GRADE_ORDER: Record<string, number> = { 'V급': 0, 'S급': 1, 'A급': 2, 'B급': 3, 'C급': 4 };
   const CATEGORY_ORDER: Record<string, number> = {
     'MILITARY': 0, 'MILITARY ARCHIVE': 0,
     'WORKWEAR': 1, 'WORKWEAR ARCHIVE': 1,
@@ -271,8 +473,10 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
         });
       case 'grade':
         return arr.sort((a, b) => {
-          const ga = GRADE_ORDER[a.classification?.visionGrade || 'C급'] ?? 99;
-          const gb = GRADE_ORDER[b.classification?.visionGrade || 'C급'] ?? 99;
+          const gradeA = a.classification?.visionGrade || (a.descriptionGrade ? `${a.descriptionGrade}급` : 'C급');
+          const gradeB = b.classification?.visionGrade || (b.descriptionGrade ? `${b.descriptionGrade}급` : 'C급');
+          const ga = GRADE_ORDER[gradeA] ?? 99;
+          const gb = GRADE_ORDER[gradeB] ?? 99;
           return ga - gb;
         });
       case 'price_desc':
@@ -307,6 +511,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   const handleStageChange = (stage: string) => {
     setStageFilter(stage);
     setSubFilter('ALL');
+    setCuratedDaysFilter(0);
     setCurrentPage(1);
   };
 
@@ -364,6 +569,29 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             </button>
           ))}
         </div>
+
+        {/* CURATED 기간별 필터 */}
+        {stageFilter === 'CURATED' && (
+          <div className="border-t border-slate-100 p-2 bg-indigo-50/50">
+            <div className="flex gap-1 flex-wrap">
+              {([
+                [0, '전체', curatedDaysCounts.ALL],
+                [-30, '30일이하', curatedDaysCounts.under30],
+                [30, '30일+', curatedDaysCounts.d30],
+                [60, '60일+', curatedDaysCounts.d60],
+                [90, '90일+', curatedDaysCounts.d90],
+              ] as [number, string, number][]).map(([days, label, count]) => (
+                <button
+                  key={days}
+                  onClick={() => { setCuratedDaysFilter(days); setCurrentPage(1); }}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${curatedDaysFilter === days ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'}`}
+                >
+                  {label} {count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ARCHIVE 세부 카테고리 */}
         {stageFilter === 'ARCHIVE' && (
@@ -429,8 +657,17 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             </div>
             <div className="flex gap-1.5">
               <button
+                onClick={classifyWithAI}
+                disabled={classifyingAI || movingCategory}
+                className={`px-3 py-2 text-xs rounded-lg font-bold transition-colors ${classifyingAI ? 'bg-violet-600 text-white animate-pulse' : 'bg-violet-500/80 text-white hover:bg-violet-500'}`}
+              >
+                {classifyingAI
+                  ? `AI 분류 중 ${aiProgress ? `${aiProgress.current}/${aiProgress.total}` : '...'}`
+                  : 'AI 아카이브 분류'}
+              </button>
+              <button
                 onClick={() => setShowMoveMenu(!showMoveMenu)}
-                disabled={movingCategory}
+                disabled={movingCategory || classifyingAI}
                 className={`px-3 py-2 text-xs rounded-lg font-bold transition-colors ${showMoveMenu ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
               >
                 {movingCategory ? '이동 중...' : '카테고리 이동'}
@@ -438,8 +675,37 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             </div>
           </div>
 
+          {/* AI 분류 진행 상태 */}
+          {classifyingAI && aiProgress && (
+            <div className="border-t border-white/10 pt-2">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-violet-500 to-purple-400 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((aiProgress.current / aiProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-bold text-violet-300">{aiProgress.current}/{aiProgress.total}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">{aiProgress.message}</p>
+              {aiProgress.results.length > 0 && (
+                <div className="mt-1.5 max-h-20 overflow-y-auto space-y-0.5">
+                  {aiProgress.results.slice(-3).map((r: any, i: number) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[9px]">
+                      <span className={`px-1 py-px rounded font-bold ${r.category === 'ARCHIVE' ? 'bg-red-500/20 text-red-300' : 'bg-violet-500/20 text-violet-300'}`}>
+                        {r.category?.replace(' ARCHIVE', '') || '?'}
+                      </span>
+                      <span className="text-slate-400 truncate">{r.product}</span>
+                      {r.confidence > 0 && <span className="text-slate-500 ml-auto">{r.confidence}%</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 카테고리 선택 메뉴 */}
-          {showMoveMenu && (
+          {showMoveMenu && !classifyingAI && (
             <div className="border-t border-white/10 pt-2 space-y-1.5">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">아카이브 (날짜 무시, 강제 배정)</p>
               <div className="grid grid-cols-3 gap-1">
@@ -510,11 +776,18 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             <option value="date_desc">최신순</option>
             <option value="date_asc">오래된순</option>
             <option value="category">카테고리별</option>
-            <option value="grade">등급순 (S→C)</option>
+            <option value="grade">등급순 (V→B)</option>
             <option value="price_desc">가격 높은순</option>
             <option value="price_asc">가격 낮은순</option>
             <option value="confidence">신뢰도순</option>
           </select>
+          <button
+            onClick={syncGrades}
+            disabled={syncingGrades}
+            className={`text-[10px] font-bold px-2 py-1.5 rounded-lg transition-colors ${syncingGrades ? 'bg-emerald-100 text-emerald-600 animate-pulse' : 'bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 border border-slate-200'}`}
+          >
+            {syncingGrades ? `GRADE ${gradeProgress ? `${gradeProgress.current}/${gradeProgress.total}` : '...'}` : 'GRADE 동기화'}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {/* 뷰 모드 토글 */}
@@ -580,10 +853,20 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                 const discountRate = p.lifecycle?.discountRate || 0;
                 const hasDiscount = discountRate > 0 && p.lifecycle?.stage !== 'NEW';
                 const discountedPrice = hasDiscount ? Math.round(p.salePrice * (1 - discountRate / 100)) : p.salePrice;
+
+                // CURATED 그라데이션: 0일=흰색 → 90일=파란색
+                const isCurated = stageFilter === 'CURATED' && p.internalCategory === 'CURATED';
+                const curatedDays = p.lifecycle?.daysSince || 0;
+                const gradientIntensity = isCurated ? Math.min(curatedDays / 90, 1) : 0;
+                const rowBgStyle = isCurated && !isSelected
+                  ? { backgroundColor: `rgba(59, 130, 246, ${gradientIntensity * 0.15})` }
+                  : undefined;
+
                 return (
                   <tr
                     key={p.originProductNo}
                     className={`cursor-pointer transition-colors hover:bg-slate-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
+                    style={rowBgStyle}
                     onClick={() => toggleSelect(p.originProductNo)}
                   >
                     <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
@@ -634,18 +917,24 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                       )}
                     </td>
                     <td className="px-2 py-1.5 text-center">
-                      {p.classification?.visionGrade ? (
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${
-                          p.classification.visionGrade === 'S급' ? 'bg-yellow-100 text-yellow-700' :
-                          p.classification.visionGrade === 'A급' ? 'bg-blue-100 text-blue-700' :
-                          p.classification.visionGrade === 'B급' ? 'bg-slate-100 text-slate-600' :
-                          'bg-red-100 text-red-600'
-                        }`}>
-                          {p.classification.visionGrade}
-                        </span>
-                      ) : (
-                        <span className="text-[9px] text-slate-300">-</span>
-                      )}
+                      {(() => {
+                        // 우선순위: visionGrade > descriptionGrade
+                        const vg = p.classification?.visionGrade;
+                        const dg = p.descriptionGrade;
+                        const grade = vg || (dg ? `${dg}급` : null);
+                        if (!grade) return <span className="text-[9px] text-slate-300">-</span>;
+                        return (
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${
+                            grade.startsWith('S') ? 'bg-yellow-100 text-yellow-700' :
+                            grade.startsWith('A') ? 'bg-blue-100 text-blue-700' :
+                            grade.startsWith('B') ? 'bg-slate-100 text-slate-600' :
+                            grade.startsWith('V') ? 'bg-purple-100 text-purple-700' :
+                            'bg-red-100 text-red-600'
+                          }`}>
+                            {grade}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-2 py-1.5 text-center">
                       <span className="text-[9px] text-slate-500 whitespace-nowrap">
