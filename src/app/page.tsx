@@ -16,6 +16,9 @@ import { getUsersForOrgChart } from '@/lib/actions';
 import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 
+import { AttendanceClockWidget } from '@/components/layout/attendance-clock-widget';
+import { MeetingWidget } from '@/components/dashboard/meeting-widget';
+
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
@@ -37,6 +40,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Personal & Collaboration Widgets */}
+      <div className="grid gap-6 md:grid-cols-2 items-stretch h-[250px]">
+        <AttendanceClockWidget userId={session.id} />
+        <MeetingWidget />
+      </div>
+
       {/* Weather Strategy Widget & Map */}
       <div className="grid gap-6 md:grid-cols-7 lg:grid-cols-7 items-stretch">
         <div className="md:col-span-4 lg:col-span-5 flex flex-col h-full">
