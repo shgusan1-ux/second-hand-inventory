@@ -177,3 +177,15 @@ export async function updateUserJobTitle(targetUserId: string, newJobTitle: stri
         return { success: false, error: 'Failed to update job title' };
     }
 }
+
+export async function getUsers() {
+    const session = await getSession();
+    if (!session) return [];
+
+    try {
+        const res = await db.query('SELECT id, name, username, job_title FROM users ORDER BY name ASC');
+        return res.rows;
+    } catch (e) {
+        return [];
+    }
+}

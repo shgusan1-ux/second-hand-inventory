@@ -111,6 +111,22 @@ export async function initDatabase() {
       )
     `);
 
+    // 근로계약서 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS employment_contracts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL, -- 정규직, 계약직, 아르바이트 등
+        status TEXT DEFAULT 'draft', -- draft, pending(발송됨), signed
+        content_json TEXT, -- 계약 내용 (JSON)
+        signature_data TEXT, -- 서명 이미지 (Base64)
+        start_date TEXT,
+        end_date TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        signed_at TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
