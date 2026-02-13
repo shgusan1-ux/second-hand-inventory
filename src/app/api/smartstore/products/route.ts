@@ -185,7 +185,7 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
         return {
             ...cp,
             originProductNo: prodId,
-            sellerManagementCode: p.sellerManagementCode || '',
+            sellerManagementCode: cp.sellerManagementCode || '',
             thumbnailUrl: cp.representativeImage?.url || null,
             lifecycle,
             archiveInfo,

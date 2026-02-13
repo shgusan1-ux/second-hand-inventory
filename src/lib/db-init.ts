@@ -171,6 +171,53 @@ export async function initDatabase() {
       )
     `);
 
+    // 부동산 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS properties (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT, -- Building, Apartment, Land, Hospitality
+        address TEXT,
+        purchase_date TEXT,
+        purchase_price INTEGER,
+        current_value INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 임대 호실 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS units (
+        id TEXT PRIMARY KEY,
+        property_id TEXT NOT NULL,
+        unit_number TEXT NOT NULL, -- 101호, 2층 전체 등
+        status TEXT DEFAULT 'Vacant', -- Vacant, Occupied, Maintenance
+        area INTEGER, -- 평수
+        deposit INTEGER, -- 표준 보증금
+        monthly_rent INTEGER, -- 표준 월세
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 임대차 계약 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS lease_contracts (
+        id TEXT PRIMARY KEY,
+        unit_id TEXT NOT NULL,
+        tenant_name TEXT NOT NULL,
+        tenant_contact TEXT,
+        deposit INTEGER NOT NULL,
+        monthly_rent INTEGER NOT NULL,
+        management_fee INTEGER DEFAULT 0, -- 관리비
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        payment_day INTEGER NOT NULL, -- 매월 N일
+        status TEXT DEFAULT 'Active', -- Active, Expired, Terminated
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
