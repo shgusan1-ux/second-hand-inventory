@@ -94,9 +94,9 @@ export async function POST(request: Request) {
                         });
                     }
 
-                    // Rate limiting: 네이버 API 속도 제한 (0.5초)
+                    // Rate limiting: 네이버 API 속도 제한 (0.2초)
                     if (i < products.length - 1) {
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 200));
                     }
                 }
 

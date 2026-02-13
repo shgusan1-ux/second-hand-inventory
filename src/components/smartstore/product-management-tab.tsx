@@ -95,6 +95,17 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     return counts;
   }, [products]);
 
+  // NEW 초과분 (300개 초과시 오래된 순으로)
+  const NEW_LIMIT = 300;
+  const newOverflowCount = Math.max(0, stageCounts.NEW - NEW_LIMIT);
+  const newOverflowIds = useMemo(() => {
+    if (newOverflowCount <= 0) return [];
+    const newProducts = products
+      .filter(p => p.internalCategory === 'NEW')
+      .sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime());
+    return newProducts.slice(0, newOverflowCount).map(p => p.originProductNo);
+  }, [products, newOverflowCount]);
+
   // 아카이브 세부 카운트
   const archiveSubCounts = useMemo(() => {
     const counts: Record<string, number> = { ALL: 0 };
@@ -205,6 +216,46 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
         setSelectedIds([]);
         setShowMoveMenu(false);
+      } else {
+        toast.error(data.error || '이동 실패');
+      }
+    } catch (err: any) {
+      toast.error('이동 오류: ' + err.message);
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
+  // NEW 초과분 → CURATED 일괄 이동
+  const moveOverflowToCurated = async () => {
+    if (newOverflowIds.length === 0) return;
+    if (!confirm(`NEW 상품 중 가장 오래된 ${newOverflowIds.length}개를 CURATED로 이동하시겠습니까?`)) return;
+    setMovingCategory(true);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: newOverflowIds, category: 'CURATED' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${newOverflowIds.length}개 상품 → CURATED 이동 완료`);
+        queryClient.setQueryData(['all-products'], (old: any) => {
+          if (!old?.data?.contents) return old;
+          const moveSet = new Set(newOverflowIds);
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              contents: old.data.contents.map((p: any) =>
+                moveSet.has(p.originProductNo)
+                  ? { ...p, internalCategory: 'CURATED', archiveTier: 'CURATED' }
+                  : p
+              )
+            }
+          };
+        });
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
       } else {
         toast.error(data.error || '이동 실패');
       }
@@ -569,6 +620,25 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             </button>
           ))}
         </div>
+
+        {/* NEW 초과 경고 + 일괄 이동 */}
+        {newOverflowCount > 0 && (stageFilter === 'ALL' || stageFilter === 'NEW') && (
+          <div className="border-t border-amber-200 p-2.5 bg-amber-50 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-amber-600 text-sm font-bold shrink-0">!</span>
+              <span className="text-[11px] font-bold text-amber-800 truncate">
+                NEW {stageCounts.NEW}개 (제한 {NEW_LIMIT}) — <span className="text-red-600">{newOverflowCount}개 초과</span>
+              </span>
+            </div>
+            <button
+              onClick={moveOverflowToCurated}
+              disabled={movingCategory}
+              className="shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {movingCategory ? '이동 중...' : `오래된 ${newOverflowCount}개 → CURATED`}
+            </button>
+          </div>
+        )}
 
         {/* CURATED 기간별 필터 */}
         {stageFilter === 'CURATED' && (
