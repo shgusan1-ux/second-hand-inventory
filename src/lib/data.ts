@@ -124,6 +124,7 @@ export async function getSmartStoreGroups() {
       japanArchive: [],
       heritageEurope: [],
       britishArchive: [],
+      unisexArchive: [],
       clearanceItems: [],
       etcItems: [],
     };
@@ -139,6 +140,8 @@ export async function getSmartStoreGroups() {
         case 'JAPAN': groups.japanArchive.push(p); break;
         case 'EUROPE': groups.heritageEurope.push(p); break;
         case 'BRITISH': groups.britishArchive.push(p); break;
+        case 'UNISEX':
+        case 'UNISEX ARCHIVE': groups.unisexArchive.push(p); break;
         case 'CLEARANCE': groups.clearanceItems.push(p); break;
         default: groups.etcItems.push(p); break;
       }

@@ -83,3 +83,33 @@
     max-width: 100vw;
   }
 }
+
+/* Anti-Gravity Animations */
+@keyframes ag-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes ag-float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.ag-float-1 { animation: ag-float 7s ease-in-out infinite; }
+.ag-float-2 { animation: ag-float 9s ease-in-out infinite 1.5s; }
+.ag-float-3 { animation: ag-float-slow 8s ease-in-out infinite 0.5s; }
+.ag-float-4 { animation: ag-float 10s ease-in-out infinite 2s; }
+.ag-float-5 { animation: ag-float-slow 11s ease-in-out infinite 3s; }
+.ag-card {
+  will-change: transform;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+}
+.ag-card:hover {
+  transform: scale(1.02) translateY(-3px);
+  z-index: 10;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #d1d5db; }

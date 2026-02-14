@@ -1,11 +1,10 @@
-import { getUsersForOrgChart } from '@/lib/actions';
+import { getUsersWithPermissions } from '@/lib/member-actions';
 import { MemberManagement } from '@/components/members/member-management';
 import { getSession } from '@/lib/auth';
 import { getContracts } from '@/lib/contract-actions';
 import { redirect } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { FileText, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { FileText, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
@@ -18,7 +17,7 @@ export default async function MembersPage() {
     }
 
     const [users, myContracts] = await Promise.all([
-        getUsersForOrgChart(),
+        getUsersWithPermissions(),
         getContracts()
     ]);
 

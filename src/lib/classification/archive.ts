@@ -1,7 +1,7 @@
 
 import { ARCHIVE_KEYWORDS } from './keywords';
 
-export type ArchiveCategory = 'MILITARY ARCHIVE' | 'WORKWEAR ARCHIVE' | 'JAPANESE ARCHIVE' | 'HERITAGE EUROPE' | 'BRITISH ARCHIVE' | 'OUTDOOR ARCHIVE';
+export type ArchiveCategory = 'MILITARY ARCHIVE' | 'WORKWEAR ARCHIVE' | 'JAPANESE ARCHIVE' | 'HERITAGE EUROPE' | 'BRITISH ARCHIVE' | 'OUTDOOR ARCHIVE' | 'UNISEX ARCHIVE';
 
 export interface ArchiveClassification {
     category: ArchiveCategory | 'UNCATEGORIZED';

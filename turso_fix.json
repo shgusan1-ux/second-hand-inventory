@@ -1,0 +1,1 @@
+{"baton":null,"base_url":null,"results":[{"type":"ok","response":{"type":"execute","result":{"cols":[],"rows":[],"affected_row_count":4,"last_insert_rowid":null,"replication_index":null,"rows_read":13,"rows_written":8,"query_duration_ms":16.571}}},{"type":"ok","response":{"type":"close"}}]}

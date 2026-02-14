@@ -41,36 +41,61 @@ async function ensureTables() {
 export async function getUserPermissions(userId: string) {
     await ensureTables();
     try {
-        // Super Admin Bypass
+        // 1. Check explicit permissions
+        const res = await db.query('SELECT category FROM user_permissions WHERE user_id = $1', [userId]);
+        const permissions = res.rows.map((r: any) => r.category);
+
+        // 2. Super Admin Bypass (Job Title) OR 'ADMIN' permission
         const userRes = await db.query('SELECT job_title FROM users WHERE id = $1', [userId]);
         const user = userRes.rows[0];
-        if (user && ['대표자', '경영지원'].includes(user.job_title)) {
-            return ['ALL'];
+
+        // ADMIN permission flag OR specific job titles
+        // '점장' added as requested
+        if (permissions.includes('ADMIN') || (user && ['대표자', '경영지원', '점장'].includes(user.job_title))) {
+            if (!permissions.includes('ALL')) return ['ALL', ...permissions];
+            return permissions;
         }
 
-        const res = await db.query('SELECT category FROM user_permissions WHERE user_id = $1', [userId]);
-        return res.rows.map((r: any) => r.category);
+        return permissions;
     } catch (e) {
         return [];
     }
 }
 
-export async function updateUserPermissions(targetUserId: string, categories: string[]) {
+async function isAuthorized() {
     const session = await getSession();
-    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+    if (!session) return false;
+    const perms = await getUserPermissions(session.id);
+    return perms.includes('ALL');
+}
+
+export async function updateUserPermissions(targetUserId: string, categories: string[]) {
+    // Check Auth
+    if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
 
     await ensureTables();
 
     try {
+        // Preserve ADMIN permission if it exists, as UI usually sends only standard categories
+        const existingAdmin = await db.query('SELECT 1 FROM user_permissions WHERE user_id = $1 AND category = $2', [targetUserId, 'ADMIN']);
+        const hasAdmin = existingAdmin.rows.length > 0;
+
         // Clear existing
         await db.query('DELETE FROM user_permissions WHERE user_id = $1', [targetUserId]);
 
         // Insert new
         for (const cat of categories) {
-            await db.query('INSERT INTO user_permissions (user_id, category) VALUES ($1, $2)', [targetUserId, cat]);
+            if (cat !== 'ADMIN') {
+                await db.query('INSERT INTO user_permissions (user_id, category) VALUES ($1, $2)', [targetUserId, cat]);
+            }
         }
 
-        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Updated permissions: ${categories.join(', ')}` /* 한글변환은 auth.ts translateDetails에서 처리 */);
+        // Restore ADMIN
+        if (hasAdmin) {
+            await db.query('INSERT INTO user_permissions (user_id, category) VALUES ($1, $2)', [targetUserId, 'ADMIN']);
+        }
+
+        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Updated permissions: ${categories.join(', ')}`);
         revalidatePath('/members');
         return { success: true };
     } catch (e) {
@@ -78,7 +103,30 @@ export async function updateUserPermissions(targetUserId: string, categories: st
     }
 }
 
-// --- Attendance ---
+export async function toggleAdminPermission(targetUserId: string, isAdmin: boolean) {
+    // Check Auth
+    if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
+
+    await ensureTables();
+
+    try {
+        if (isAdmin) {
+            // Check existence to avoid unique constraint if simplistic DB
+            const check = await db.query('SELECT 1 FROM user_permissions WHERE user_id = $1 AND category = $2', [targetUserId, 'ADMIN']);
+            if (check.rows.length === 0) {
+                await db.query('INSERT INTO user_permissions (user_id, category) VALUES ($1, $2)', [targetUserId, 'ADMIN']);
+            }
+        } else {
+            await db.query(`DELETE FROM user_permissions WHERE user_id = $1 AND category = 'ADMIN'`, [targetUserId]);
+        }
+
+        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Admin permission ${isAdmin ? 'granted' : 'revoked'}`);
+        revalidatePath('/members');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
 
 // --- Attendance ---
 
@@ -213,8 +261,8 @@ export async function requestCorrection(date: string, checkIn: string, checkOut:
 }
 
 export async function approveCorrection(id: string) {
-    const session = await getSession();
-    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+    if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
+    const session = await getSession(); // needed for name
 
     await ensureTables();
 
@@ -228,7 +276,7 @@ export async function approveCorrection(id: string) {
             UPDATE attendance_logs 
             SET check_in = $1, check_out = $2, correction_status = 'Approved', note = $3
             WHERE id = $4
-        `, [data.checkIn, data.checkOut, 'Approved by ' + session.name, id]);
+        `, [data.checkIn, data.checkOut, 'Approved by ' + session!.name, id]);
 
         await logAction('APPROVE_CORRECTION', 'attendance', id, '정정 승인');
         revalidatePath('/business/hr/attendance');
@@ -239,8 +287,7 @@ export async function approveCorrection(id: string) {
 }
 
 export async function rejectCorrection(id: string) {
-    const session = await getSession();
-    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+    if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
 
     try {
         await db.query(`
@@ -256,8 +303,7 @@ export async function rejectCorrection(id: string) {
 }
 
 export async function getPendingCorrections() {
-    const session = await getSession();
-    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return [];
+    if (!(await isAuthorized())) return [];
 
     await ensureTables();
     try {
@@ -276,8 +322,7 @@ export async function getPendingCorrections() {
 
 
 export async function updateUserJobTitle(targetUserId: string, newJobTitle: string) {
-    const session = await getSession();
-    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+    if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
 
     try {
         await db.query('UPDATE users SET job_title = $1 WHERE id = $2', [newJobTitle, targetUserId]);
@@ -299,4 +344,36 @@ export async function getUsers() {
     } catch (e) {
         return [];
     }
+}
+
+export async function getUsersWithPermissions() {
+    const session = await getSession();
+    if (!session) return [];
+
+    // Fetch users
+    const usersRes = await db.query('SELECT id, username, name, job_title, email, created_at, role FROM users ORDER BY name ASC');
+    const users = usersRes.rows;
+
+    // Fetch permissions
+    const permsRes = await db.query('SELECT user_id, category FROM user_permissions');
+    const permsMap: Record<string, string[]> = {};
+
+    permsRes.rows.forEach(r => {
+        if (!permsMap[r.user_id]) permsMap[r.user_id] = [];
+        permsMap[r.user_id].push(r.category);
+    });
+
+    return users.map(u => {
+        let permissions = permsMap[u.id] || [];
+
+        // Admin Logic - Sync with getUserPermissions
+        if (permissions.includes('ADMIN') || ['대표자', '경영지원', '점장'].includes(u.job_title)) {
+            if (!permissions.includes('ALL')) permissions = ['ALL', ...permissions];
+        }
+
+        return {
+            ...u,
+            permissions
+        };
+    });
 }

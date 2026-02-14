@@ -4,7 +4,7 @@ import { getNaverToken, searchProducts } from '@/lib/naver/client';
 import { calculateLifecycle, fetchLifecycleSettings, CATEGORY_IDS } from '@/lib/classification/lifecycle';
 import type { LifecycleSettings } from '@/lib/classification/lifecycle';
 import { classifyArchive } from '@/lib/classification/archive';
-import { classifyProduct, logClassification } from '@/lib/classification';
+import { classifyProduct } from '@/lib/classification';
 import { mergeClassifications } from '@/lib/classification/merger';
 import { db } from '@/lib/db';
 import { handleApiError, handleAuthError, handleSuccess } from '@/lib/api-utils';
@@ -62,6 +62,13 @@ function calculateStatusCounts(contents: any[]) {
     return counts;
 }
 
+// 유효 카테고리 (모듈 레벨 캐시)
+const VALID_CATEGORIES_SET = new Set([
+    'NEW', 'CURATED', 'ARCHIVE', 'CLEARANCE', 'CLEARANCE_KEEP', 'CLEARANCE_DISPOSE',
+    'MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE',
+    'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE',
+]);
+
 // 내부 tier 키 → 표시용 아카이브명 매핑
 const TIER_TO_ARCHIVE: Record<string, string> = {
     MILITARY: 'MILITARY ARCHIVE',
@@ -72,7 +79,9 @@ const TIER_TO_ARCHIVE: Record<string, string> = {
     BRITISH: 'BRITISH ARCHIVE',
 };
 
-function processProducts(contents: any[], overrideMap: any, lcSettings?: LifecycleSettings) {
+function processProducts(contents: any[], overrideMap: any, lcSettings?: LifecycleSettings, customBrands?: any[]) {
+    const brands = customBrands || [];
+
     return contents.map(p => {
         const cp = p.channelProducts?.[0];
         if (!cp) return null;
@@ -87,13 +96,16 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
         // 날짜 기반 라이프사이클 계산 (settings는 미리 1회만 가져옴)
         const lifecycle = calculateLifecycle(baseDate, undefined, lcSettings);
 
-        const archiveInfo = lifecycle.stage === 'ARCHIVE'
+        // DB에 확정된 카테고리가 있으면 불필요한 분류 스킵
+        const savedCategory = override.internal_category;
+        const hasValidSaved = savedCategory && VALID_CATEGORIES_SET.has(savedCategory);
+
+        const archiveInfo = (!hasValidSaved && lifecycle.stage === 'ARCHIVE')
             ? classifyArchive(prodName, [])
             : null;
 
         // 다차원 자동 분류 (텍스트 기반)
         const textClassification = classifyProduct(prodName);
-        logClassification(prodId, prodName, textClassification);
 
         // Vision 결과와 merge (DB에 결과가 있는 경우)
         const visionData = override.visionAnalysis;
@@ -101,9 +113,8 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
 
         if (visionData?.analysis_status === 'completed') {
             // 수동 브랜드 매칭
-            const customBrands = override.customBrands || [];
             const brandName = (visionData.vision_brand || textClassification.brand || '').toUpperCase();
-            const customBrand = customBrands.find((b: any) =>
+            const customBrand = brands.find((b: any) =>
                 b.brand_name === brandName ||
                 (b.aliases && JSON.parse(b.aliases).some((a: string) => a.toUpperCase() === brandName))
             ) || null;
@@ -128,9 +139,8 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             classification.visionColors = visionData.vision_color ? JSON.parse(visionData.vision_color) : [];
         } else {
             // Vision 미완료: 수동 브랜드만 체크
-            const customBrands = override.customBrands || [];
             const brandName = (textClassification.brand || '').toUpperCase();
-            const customBrand = customBrands.find((b: any) =>
+            const customBrand = brands.find((b: any) =>
                 b.brand_name === brandName ||
                 (b.aliases && JSON.parse(b.aliases).some((a: string) => a.toUpperCase() === brandName))
             ) || null;
@@ -148,11 +158,10 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
         }
 
         // 내부카테고리: DB에 수동 확정된 값이 있으면 절대 변경하지 않음
-        const savedCategory = override.internal_category;
         let internalCategory: string;
 
-        if (savedCategory) {
-            // 사용자가 확정한 카테고리 → 변경 요청 전까지 영구 보존
+        if (hasValidSaved) {
+            // 사용자가 확정한 유효한 카테고리 → 변경 요청 전까지 영구 보존
             internalCategory = savedCategory;
         } else {
             // 확정값 없으면 라이프사이클 기반 자동 결정
@@ -217,56 +226,45 @@ async function batchInQuery(sql: string, ids: string[], batchSize = 500): Promis
     return allRows;
 }
 
-async function fetchOverrideMap(ids: string[]) {
-    if (ids.length === 0) return {};
+async function fetchOverrideMap(ids: string[]): Promise<{ map: any; customBrands: any[] }> {
+    if (ids.length === 0) return { map: {}, customBrands: [] };
     try {
-        // 1. Get user overrides (핵심: internal_category 포함)
-        const overrides = await batchInQuery(
-            `SELECT id, override_date, internal_category, first_seen_at FROM product_overrides WHERE id IN (__PH__)`,
-            ids
-        );
-        console.log(`[fetchOverrideMap] product_overrides: ${overrides.length}개 (with category: ${overrides.filter((r: any) => r.internal_category).length}개)`);
-
-        // 2. Get Naver product map enrichment (optional)
-        let naverMap: any[] = [];
-        try {
-            naverMap = await batchInQuery(
+        // 병렬 DB 쿼리 (독립적인 5개 쿼리를 동시 실행)
+        const [overrides, naverMap, visionRows, customBrandsResult, naverProducts] = await Promise.all([
+            // 1. User overrides (핵심: internal_category 포함)
+            batchInQuery(
+                `SELECT id, override_date, internal_category, first_seen_at FROM product_overrides WHERE id IN (__PH__)`,
+                ids
+            ),
+            // 2. Naver product map enrichment
+            batchInQuery(
                 `SELECT origin_product_no, inferred_brand FROM naver_product_map WHERE origin_product_no IN (__PH__)`,
                 ids
-            );
-        } catch { /* 테이블/컬럼 없으면 무시 */ }
-
-        // 3. Vision 분석 결과 조회
-        let visionMap: any = {};
-        try {
-            const visionRows = await batchInQuery(
+            ).catch(() => [] as any[]),
+            // 3. Vision 분석 결과
+            batchInQuery(
                 `SELECT origin_product_no, vision_brand, vision_clothing_type, vision_clothing_sub_type,
                         vision_gender, vision_grade, vision_grade_reason, vision_color, vision_pattern,
                         vision_fabric, vision_size, vision_confidence, merged_confidence, analysis_status
                  FROM product_vision_analysis WHERE origin_product_no IN (__PH__)`,
                 ids
-            );
-            visionRows.forEach((row: any) => { visionMap[row.origin_product_no] = row; });
-        } catch { /* 테이블 아직 없으면 무시 */ }
-
-        // 4. 수동 브랜드 조회
-        let customBrands: any[] = [];
-        try {
-            const { rows } = await db.query('SELECT brand_name, brand_name_ko, tier, aliases FROM custom_brands WHERE is_active = TRUE');
-            customBrands = rows;
-        } catch { /* 테이블 아직 없으면 무시 */ }
-
-        // 5. 내부 인벤토리 매칭 정보 조회
-        let matchedMap: any = {};
-        try {
-            const matchedRows = await batchInQuery(
-                `SELECT id FROM products WHERE id IN (
-                    SELECT seller_management_code FROM naver_products WHERE origin_product_no IN (__PH__)
-                )`,
+            ).catch(() => [] as any[]),
+            // 4. 수동 브랜드 (전역 테이블, id 무관)
+            db.query('SELECT brand_name, brand_name_ko, tier, aliases FROM custom_brands WHERE is_active = TRUE')
+                .then(r => r.rows)
+                .catch(() => [] as any[]),
+            // 5. naver_products (description_grade + seller_management_code)
+            batchInQuery(
+                `SELECT origin_product_no, seller_management_code, description_grade FROM naver_products WHERE origin_product_no IN (__PH__)`,
                 ids
-            );
-            matchedRows.forEach((row: any) => { matchedMap[row.id] = true; });
-        } catch { /* 테이블 아직 없으면 무시 */ }
+            ).catch(() => [] as any[]),
+        ]);
+
+        console.log(`[fetchOverrideMap] overrides: ${overrides.length}개, vision: ${visionRows.length}개 (병렬 쿼리)`);
+
+        // Vision 맵 구축
+        const visionMap: any = {};
+        visionRows.forEach((row: any) => { visionMap[row.origin_product_no] = row; });
 
         const map: any = {};
 
@@ -275,7 +273,7 @@ async function fetchOverrideMap(ids: string[]) {
             map[row.origin_product_no] = { ...row };
         });
 
-        // User overrides take precedence for certain fields
+        // User overrides take precedence
         overrides.forEach((row: any) => {
             if (map[row.id]) {
                 map[row.id] = { ...map[row.id], ...row };
@@ -284,36 +282,25 @@ async function fetchOverrideMap(ids: string[]) {
             }
         });
 
-        // Vision 결과 + 수동 브랜드 첨부
+        // Vision 결과 첨부 (customBrands는 별도 반환)
         Object.keys(map).forEach(id => {
             map[id].visionAnalysis = visionMap[id] || null;
-            map[id].customBrands = customBrands;
         });
 
-        // 6. 내부 인벤토리 매칭 정보 + description_grade 주입
-        try {
-            const naverProducts = await batchInQuery(
-                `SELECT origin_product_no, seller_management_code, description_grade FROM naver_products WHERE origin_product_no IN (__PH__)`,
-                ids
-            );
-            naverProducts.forEach((np: any) => {
-                const id = np.origin_product_no;
-                if (map[id]) {
-                    const smCode = np.seller_management_code;
-                    if (smCode && matchedMap[smCode]) {
-                        map[id].matched_id = smCode;
-                    }
-                    if (np.description_grade) {
-                        map[id].description_grade = np.description_grade;
-                    }
+        // description_grade + 매칭 정보 주입
+        naverProducts.forEach((np: any) => {
+            const id = np.origin_product_no;
+            if (map[id]) {
+                if (np.description_grade) {
+                    map[id].description_grade = np.description_grade;
                 }
-            });
-        } catch { /* naver_products 조회 실패 무시 */ }
+            }
+        });
 
-        return map;
+        return { map, customBrands: customBrandsResult };
     } catch (dbError: any) {
         console.error('[fetchOverrideMap] DB Query FAILED:', dbError.message);
-        return {};
+        return { map: {}, customBrands: [] };
     }
 }
 
@@ -396,22 +383,19 @@ async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
     if (ids.length === 0) return contents;
 
     try {
-        // 배치 쿼리로 SQL 파라미터 제한 회피
-        const rows = await batchInQuery(
-            `SELECT id, internal_category FROM product_overrides WHERE id IN (__PH__) AND internal_category IS NOT NULL`,
-            ids
-        );
-        console.log(`[patchCache] overrides: ${rows.length}개 (from ${ids.length} products)`);
-
-        // description_grade도 함께 패치
-        let gradeMap = new Map<string, string>();
-        try {
-            const gradeRows = await batchInQuery(
+        // 병렬 배치 쿼리
+        const [rows, gradeRows] = await Promise.all([
+            batchInQuery(
+                `SELECT id, internal_category FROM product_overrides WHERE id IN (__PH__) AND internal_category IS NOT NULL`,
+                ids
+            ),
+            batchInQuery(
                 `SELECT origin_product_no, description_grade FROM naver_products WHERE origin_product_no IN (__PH__) AND description_grade IS NOT NULL`,
                 ids
-            );
-            gradeMap = new Map(gradeRows.map((r: any) => [String(r.origin_product_no), r.description_grade]));
-        } catch { /* 무시 */ }
+            ).catch(() => [] as any[]),
+        ]);
+
+        const gradeMap = new Map<string, string>(gradeRows.map((r: any) => [String(r.origin_product_no), r.description_grade]));
 
         if (rows.length === 0 && gradeMap.size === 0) return contents;
 
@@ -521,11 +505,12 @@ export async function GET(request: Request) {
             const dbContents = await loadProductsFromDB();
             if (dbContents && dbContents.length > 0) {
                 const ids = dbContents.map(p => p.originProductNo.toString());
-                const overrideMap = await fetchOverrideMap(ids);
-                const withCat = Object.values(overrideMap).filter((v: any) => v.internal_category).length;
-                console.log(`[cacheOnly] DB 로드 완료: ${dbContents.length}개 상품, ${withCat}개 카테고리 override`);
-                const lcSettings = await fetchLifecycleSettings();
-                const processed = processProducts(dbContents, overrideMap, lcSettings);
+                const [{ map: overrideMap, customBrands }, lcSettings] = await Promise.all([
+                    fetchOverrideMap(ids),
+                    fetchLifecycleSettings(),
+                ]);
+                console.log(`[cacheOnly] DB 로드 완료: ${dbContents.length}개 상품`);
+                const processed = processProducts(dbContents, overrideMap, lcSettings, customBrands);
                 const statusCounts = calculateStatusCounts(processed);
 
                 // 메모리 캐시에도 저장
@@ -667,20 +652,20 @@ export async function GET(request: Request) {
 
                         send({ type: 'progress', percent: 83, message: `${allContents.length}개 상품 처리 중...` });
 
-                        // Get overrides
+                        // Get overrides + lifecycle settings 병렬
                         const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
-                        const overrideMap = await fetchOverrideMap(ids);
+                        const [{ map: overrideMap, customBrands }, lcSettings] = await Promise.all([
+                            fetchOverrideMap(ids),
+                            fetchLifecycleSettings(),
+                        ]);
 
                         // first_seen_at이 없는 상품에 현재 시간 기록
                         await recordFirstSeen(ids, overrideMap);
 
-                        send({ type: 'progress', percent: 90, message: '라이프사이클 설정 로드 중...' });
-                        const lcSettings = await fetchLifecycleSettings();
-
                         send({ type: 'progress', percent: 93, message: '분류 처리 중...' });
 
                         // Process all products
-                        const processed = processProducts(allContents, overrideMap, lcSettings);
+                        const processed = processProducts(allContents, overrideMap, lcSettings, customBrands);
                         const statusCounts = calculateStatusCounts(processed);
 
 
@@ -793,10 +778,11 @@ export async function GET(request: Request) {
             await saveProductsToDB(allContents);
 
             const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
-            const overrideMap = await fetchOverrideMap(ids);
-
-            const lcSettings = await fetchLifecycleSettings();
-            const processed = processProducts(allContents, overrideMap, lcSettings);
+            const [{ map: overrideMap, customBrands }, lcSettings] = await Promise.all([
+                fetchOverrideMap(ids),
+                fetchLifecycleSettings(),
+            ]);
+            const processed = processProducts(allContents, overrideMap, lcSettings, customBrands);
             const statusCounts = calculateStatusCounts(processed);
 
             productCache = {
@@ -837,9 +823,11 @@ export async function GET(request: Request) {
             }
 
             const ids = naverRes.contents.map(p => p.originProductNo.toString()).filter(id => !!id);
-            const overrideMap = await fetchOverrideMap(ids);
-            const lcSettings = await fetchLifecycleSettings();
-            const processed = processProducts(naverRes.contents, overrideMap, lcSettings);
+            const [{ map: overrideMap, customBrands }, lcSettings] = await Promise.all([
+                fetchOverrideMap(ids),
+                fetchLifecycleSettings(),
+            ]);
+            const processed = processProducts(naverRes.contents, overrideMap, lcSettings, customBrands);
 
             let filtered = processed;
             if (stage !== 'ALL') {

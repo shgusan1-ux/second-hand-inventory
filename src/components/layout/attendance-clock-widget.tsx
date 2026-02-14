@@ -174,7 +174,7 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                 {isWorking ? (
                     <>
                         <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-emerald-900 text-emerald-100 px-1.5 py-0 rounded border border-emerald-700 shadow-sm animate-pulse">
-                            WORKING
+                            근무중
                         </span>
                         <Clock className="w-4 h-4 animate-spin-slow" style={{ animationDuration: '4s' }} />
                         <span className="font-mono text-lg font-bold tracking-widest leading-none">
@@ -187,7 +187,7 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                             "absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0 rounded border transition-colors shadow-sm",
                             isDone ? "bg-slate-800 text-slate-500 border-slate-700" : "bg-slate-800 text-slate-400 border-slate-700 group-hover:bg-emerald-900 group-hover:text-emerald-100 group-hover:border-emerald-700"
                         )}>
-                            {isDone ? 'DONE' : 'CLOCK IN'}
+                            {isDone ? '퇴근완료' : '출근하기'}
                         </span>
                         <Clock className={cn("w-4 h-4", isDone ? "opacity-50" : "")} />
                         <span className="font-mono text-lg font-bold tracking-widest leading-none">

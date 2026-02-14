@@ -22,9 +22,11 @@ export type ClothingSubType =
 export type BrandTier =
   | 'MILITARY'
   | 'WORKWEAR'
+  | 'OUTDOOR'
   | 'JAPAN'
   | 'HERITAGE'
   | 'BRITISH'
+  | 'UNISEX'
   | 'OTHER';
 
 export interface ProductClassification {

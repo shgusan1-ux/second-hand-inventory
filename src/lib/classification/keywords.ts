@@ -4,31 +4,67 @@ export const ARCHIVE_KEYWORDS = {
         'M-65', 'MA-1', 'N-3B', 'N-2B', 'N-1', 'BDU',
         'Army', 'Navy', 'Air Force', 'Military',
         'Combat', 'Field Jacket', 'Cargo', 'Fatigue', 'Deck Jacket',
-        'Alpha Industries', 'Rothco', 'Propper', '미군', '군용', '개파카', '밀리터리'
+        'Alpha Industries', 'Rothco', 'Propper', 'Buzz Rickson', 'Real McCoy',
+        'USMC', 'USAF', 'CWU', 'Camo', 'Camouflage',
+        'Liner', 'Parka', 'Tanker', 'Deck',
+        '미군', '군용', '개파카', '밀리터리', '군복', '야상', '카모', '카고'
     ],
     'WORKWEAR ARCHIVE': [
-        'Carhartt', 'Dickies', 'Pointer', 'Roundhouse', 'Ben Davis',
+        'Carhartt', 'Dickies', 'Pointer', 'Roundhouse', 'Round House', 'Ben Davis',
+        'Red Kap', 'Stan Ray', 'Key Imperial', 'Filson',
         'Work', 'Chore', 'Overall', 'Coverall', 'Logger',
-        'Denim', 'Canvas', 'Duck', 'Hickory', '워크웨어', '칼하트', '디키즈', '작업복'
+        'Denim', 'Canvas', 'Duck', 'Hickory', 'Double Knee',
+        'Bib', 'Painter', 'Dungaree',
+        '워크웨어', '칼하트', '디키즈', '작업복', '초어', '커버올', '오버올', '더블니', '히코리'
+    ],
+    'OUTDOOR ARCHIVE': [
+        'Patagonia', 'The North Face', 'North Face', 'Arc\'teryx', 'Arcteryx',
+        'Columbia', 'Mammut', 'Helly Hansen', 'Marmot', 'Salomon',
+        'L.L.Bean', 'LL Bean', 'Eddie Bauer', 'Sierra Designs',
+        'Pendleton', 'Woolrich', 'Mont-bell', 'Montbell',
+        'Outdoor', 'Gore-Tex', 'Goretex', 'Fleece', 'Hiking', 'Climbing',
+        'Anorak', 'Nuptse', 'Retro X', 'Shell', 'Pertex', 'DWR',
+        '파타고니아', '노스페이스', '아크테릭스', '아웃도어', '고어텍스',
+        '플리스', '아노락', '눕시', '윈드브레이커'
     ],
     'JAPANESE ARCHIVE': [
         'Visvim', 'Kapital', '45rpm', 'Evisu', 'Porter', 'Needles',
-        'Beams', 'United Arrows', 'Nanamica', 'Yohji Yamamoto', 'Comme des Garcons',
-        'Japanese', 'Japan', 'Selvedge', 'Indigo', '일본', '빔즈', '니들스', '아메카지'
+        'Beams', 'United Arrows', 'Nanamica', 'Ships', 'Journal Standard',
+        'Yohji Yamamoto', 'Comme des Garcons', 'CDG', 'Issey Miyake',
+        'Sacai', 'Undercover', 'WTAPS', 'Neighborhood', 'Human Made',
+        'Wacko Maria', 'Engineered Garments',
+        'Japanese', 'Japan', 'Selvedge', 'Indigo', 'Sashiko', 'Boro',
+        '일본', '빔즈', '니들스', '아메카지', '캐피탈', '비스빔',
+        '셀비지', '인디고', '사시코', '보로', '꼼데가르송'
     ],
     'HERITAGE EUROPE': [
+        'Ralph Lauren', 'Polo', 'Brooks Brothers', 'Tommy Hilfiger',
+        'Lacoste', 'Gant', 'J.Crew', 'J.Press',
+        'Gucci', 'Prada', 'Louis Vuitton', 'Hermes', 'Dior', 'Chanel',
+        'Valentino', 'Fendi', 'Bottega Veneta', 'Versace', 'Armani',
+        'A.P.C.', 'Acne Studios', 'COS', 'Our Legacy', 'Lemaire', 'AMI',
+        'Levi\'s', 'Champion', 'Nike', 'Adidas',
         'French', 'German', 'Swedish', 'Italian', 'Euro',
-        'Le Laboureur', 'Vetra', 'Moleskine', 'Mont Saint Michel',
-        'Euro Vintage', 'European Workwear', '유럽', '프랑스', '독일', '헤리티지'
+        'Heritage', 'Vintage', 'Classic', 'Preppy', 'Ivy',
+        '유럽', '프랑스', '독일', '헤리티지', '프레피', '아이비',
+        '랄프로렌', '폴로', '라코스테', '구찌', '프라다'
     ],
     'BRITISH ARCHIVE': [
         'Burberry', 'Aquascutum', 'Grenfell', 'Barbour', 'Belstaff',
-        'Mackintosh', 'British', 'UK', 'England', 'London',
-        'Trench Coat', 'Waxed Cotton', 'Tweed', '영국', '바버', '버버리', '브리티시'
+        'Mackintosh', 'Fred Perry', 'Baracuta', 'Gloverall',
+        'Paul Smith', 'Vivienne Westwood', 'Ted Baker', 'Nigel Cabourn',
+        'Dunhill', 'Dr. Martens', 'Clarks',
+        'British', 'UK', 'England', 'London', 'Scottish',
+        'Trench Coat', 'Waxed Cotton', 'Waxed', 'Tweed', 'Harris Tweed',
+        'Tartan', 'Duffle', 'Harrington',
+        '영국', '바버', '버버리', '브리티시', '왁스', '타탄', '트위드', '트렌치', '더플'
     ],
-    'OUTDOOR ARCHIVE': [
-        'Patagonia', 'The North Face', 'Arc\'teryx', 'Columbia', 'Mammut',
-        'Helly Hansen', 'Outdoor', 'Gore-Tex', 'Hiking', 'Climbing',
-        '파타고니아', '노스페이스', '아크테릭스', '아웃도어', '고어텍스'
+    'UNISEX ARCHIVE': [
+        'Unisex', '남녀공용', '유니섹스', '남녀', '공용',
+        '프리사이즈', 'Free Size', 'Freesize', 'One Size',
+        '오버사이즈', 'Oversize', 'Oversized', '오버핏',
+        '박시핏', 'Boxy', '젠더리스', 'Genderless', 'Gender Neutral',
+        '무지', 'Basic', 'Plain', 'Essential',
+        '노브랜드', 'No Brand', 'Generic'
     ]
 };

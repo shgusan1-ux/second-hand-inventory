@@ -1,18 +1,25 @@
 /**
- * 3-Phase AI Archive Classification Engine
- * Phase 1: Brand Intelligence (Gemini + Google Search Grounding)
- * Phase 2: Visual Intelligence (Gemini Vision)
- * Phase 3: Fusion Decision (Brand 40% + Vision 40% + Keyword 20%)
+ * AI 아카이브 분류 엔진 v3.0 — 속도 최적화
+ *
+ * 핵심 변경: 상품당 1번의 통합 API 콜 (브랜드+이미지 동시 분석)
+ * + 3개 상품 동시 병렬 처리
+ *
+ * 속도 비교:
+ * v2.0: Brand(3s) → Vision(3s) → delay(3s) = 9s/상품, 10개 = 90s
+ * v3.0: Combined(3s) + delay(1s) = 4s/상품, 3병렬 → 10개 = ~15s
+ *
+ * Gemini 3 Pro (무조건 사용) + Gemini 2.5 Flash (fallback)
  */
 
 import { classifyArchive } from '@/lib/classification/archive';
+import { lookupBrand } from '@/lib/classification/brand-tier-database';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-// Gemini 2.0 Flash (Google Search Grounding 지원)
-const GEMINI_2_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-// Fallback: Gemini 1.5 Flash
-const GEMINI_15_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+// Gemini 3 Pro — 세계 최고 멀티모달 모델
+const GEMINI_3_PRO_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+// Fallback: Gemini 2.5 Flash
+const GEMINI_25_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const ARCHIVE_CATEGORIES = [
     'MILITARY ARCHIVE',
@@ -21,6 +28,7 @@ const ARCHIVE_CATEGORIES = [
     'JAPANESE ARCHIVE',
     'HERITAGE EUROPE',
     'BRITISH ARCHIVE',
+    'UNISEX ARCHIVE',
 ] as const;
 
 type ArchiveCat = typeof ARCHIVE_CATEGORIES[number];
@@ -41,6 +49,8 @@ export interface VisualAnalysis {
     pattern: string;
     details: string;
     structure: string;
+    colorPalette: string;
+    genderPresentation: string;
     category: ArchiveCat | 'NONE';
     confidence: number;
     reason: string;
@@ -56,359 +66,410 @@ export interface ArchiveAIResult {
     reason: string;
 }
 
-// ─── Phase 1: Brand Intelligence ─────────────────────────────────────
+// ─── 통합 프롬프트 (1번의 API 콜로 브랜드+이미지 동시 분석) ──────────
 
-const BRAND_PROMPT = (productName: string) => `당신은 세계 최고의 빈티지/중고 의류 큐레이터입니다.
-다음 상품의 브랜드를 분석하세요. 브랜드에 대해 알고 있는 모든 지식을 활용하세요.
+const COMBINED_PROMPT = (productName: string, hasImage: boolean) => `당신은 세계 최고의 빈티지·중고 의류 큐레이터입니다.
+상품명${hasImage ? '과 이미지' : ''}를 분석하여 7개 아카이브 카테고리 중 하나로 분류하세요.
 
-상품명: ${productName}
+상품명: "${productName}"
 
-6개 아카이브 카테고리:
-1. MILITARY ARCHIVE - 군용/밀리터리 의류. Alpha Industries, Rothco, Propper, M-65, MA-1, BDU, 군복, 카모
-2. WORKWEAR ARCHIVE - 워크웨어/작업복. Carhartt, Dickies, Red Kap, Pointer, Ben Davis, 더블니, 덕캔버스, 히코리
-3. OUTDOOR ARCHIVE - 아웃도어/테크웨어. Patagonia, The North Face, Arc'teryx, Columbia, Mammut, Gore-Tex, 플리스
-4. JAPANESE ARCHIVE - 일본 브랜드/아메카지. Visvim, Kapital, 45rpm, Beams, Needles, United Arrows, Nanamica, 셀비지, 인디고
-5. HERITAGE EUROPE - 유럽 헤리티지/클래식. Ralph Lauren, Lacoste, Brooks Brothers, Tommy Hilfiger, Polo, 프레피, 아이비
-6. BRITISH ARCHIVE - 영국 전통. Barbour, Burberry, Aquascutum, Fred Perry, Mackintosh, 왁스코튼, 타탄, 트위드
+━━━ 7개 ARCHIVE 카테고리 ━━━
+1. MILITARY ARCHIVE — 군용/밀리터리 (Alpha Industries, Rothco, M-65, MA-1, BDU, 카모, 야상)
+2. WORKWEAR ARCHIVE — 워크웨어/작업복 (Carhartt, Dickies, Red Kap, 초어코트, 커버올, 더블니, 히코리)
+3. OUTDOOR ARCHIVE — 아웃도어 (Patagonia, TNF, Arc'teryx, Gore-Tex, 플리스, 눕시, 아노락)
+4. JAPANESE ARCHIVE — 일본/아메카지 (Visvim, Kapital, Beams, Needles, 셀비지, 인디고, 보로)
+5. HERITAGE EUROPE — 유럽 헤리티지 (Ralph Lauren, Gucci, Prada, Dior, Lacoste, 프레피, 럭셔리)
+6. BRITISH ARCHIVE — 영국 전통 (Barbour, Burberry, Fred Perry, Mackintosh, 왁스코튼, 타탄, 트위드)
+7. UNISEX ARCHIVE — 유니섹스 (남녀공용, 프리사이즈, 오버사이즈, 노브랜드, 젠더리스)
 
-분석 항목을 JSON으로 응답:
+분류 규칙:
+- 브랜드 식별이 최우선. 브랜드 원산지와 DNA를 고려
+- 동일 브랜드라도 아이템 특성에 따라 다를 수 있음 (Nike 카고 → MILITARY)
+- 일본 브랜드 → JAPANESE, 영국 브랜드 → BRITISH 우선
+- 이탈리아/프랑스/독일/미국 클래식 → HERITAGE EUROPE
+- 브랜드 불명 + 성별 무관 기본 아이템 → UNISEX ARCHIVE
+- 확신 없으면 confidence 30 이하
+${hasImage ? '\n- 이미지에서 소재, 패턴, 디테일, 구조를 관찰하여 판단에 활용' : ''}
+
+JSON으로만 응답:
 {
-  "brand": "정확한 영문 브랜드명",
-  "country": "브랜드 국가",
-  "founded": "설립년도 (모르면 빈문자열)",
-  "styleLineage": "밀리터리/워크웨어/아웃도어/일본감성/유럽헤리티지/영국전통/기타",
-  "category": "MILITARY ARCHIVE 또는 WORKWEAR ARCHIVE 또는 OUTDOOR ARCHIVE 또는 JAPANESE ARCHIVE 또는 HERITAGE EUROPE 또는 BRITISH ARCHIVE 또는 NONE",
-  "confidence": 0~100,
-  "reason": "분류 근거 (한국어, 1-2문장)"
-}
+  "brand": { "name": "영문 브랜드명", "country": "국가", "category": "7개 중 하나 또는 NONE", "confidence": 0~100, "reason": "근거" },
+  "visual": { "clothingType": "아우터/상의/하의/기타", "fabric": "소재", "pattern": "패턴", "category": "7개 중 하나 또는 NONE", "confidence": 0~100, "reason": "근거" },
+  "finalCategory": "최종 카테고리 (7개 중 하나 또는 NONE)",
+  "finalConfidence": 0~100,
+  "finalReason": "최종 판정 근거 (한국어)"
+}`;
 
-중요:
-- DOLCE&GABBANA, GUCCI 등 이탈리아 럭셔리 → HERITAGE EUROPE
-- Nike, Adidas 등 스포츠 → 스타일에 따라 OUTDOOR 또는 NONE
-- 일본에서 만든 미국풍 브랜드(Beams+, Engineered Garments) → JAPANESE ARCHIVE
-- 확실하지 않으면 NONE (confidence 30 이하)
-- JSON만 응답하세요.`;
-
-export async function analyzeBrand(productName: string): Promise<BrandAnalysis> {
-    const defaultResult: BrandAnalysis = {
-        brand: '', country: '', founded: '', styleLineage: '기타',
-        category: 'NONE', confidence: 0, reason: '분석 실패'
-    };
-
-    if (!GEMINI_API_KEY) return defaultResult;
-
-    // Phase 1: Gemini 2.0 Flash + Google Search Grounding
-    try {
-        const result = await callGeminiWithSearch(BRAND_PROMPT(productName));
-        if (result) return result as BrandAnalysis;
-    } catch (e) {
-        console.warn('[AI-Archive] Phase 1 Grounding 실패, fallback 시도:', (e as Error).message);
-    }
-
-    // Fallback: Gemini 2.0 Flash without grounding
-    try {
-        const result = await callGeminiText(GEMINI_2_URL, BRAND_PROMPT(productName));
-        if (result) return result as BrandAnalysis;
-    } catch (e) {
-        console.warn('[AI-Archive] Phase 1 Gemini 2.0 실패, 1.5 fallback:', (e as Error).message);
-    }
-
-    // Final fallback: Gemini 1.5 Flash
-    try {
-        const result = await callGeminiText(GEMINI_15_URL, BRAND_PROMPT(productName));
-        if (result) return result as BrandAnalysis;
-    } catch (e) {
-        console.error('[AI-Archive] Phase 1 완전 실패:', (e as Error).message);
-    }
-
-    return defaultResult;
-}
-
-// ─── Phase 2: Visual Intelligence ────────────────────────────────────
-
-const VISUAL_PROMPT = (productName: string, brandContext: BrandAnalysis) => `당신은 세계 최고의 빈티지 의류 감정사입니다.
-
-브랜드 분석 결과:
-- 브랜드: ${brandContext.brand || '미확인'}
-- 국가: ${brandContext.country || '미확인'}
-- 스타일: ${brandContext.styleLineage || '미확인'}
-- 1차 판정: ${brandContext.category} (신뢰도: ${brandContext.confidence})
-
-상품명: ${productName}
-
-이 정보를 참고하여 상품 이미지의 시각적 특성을 정밀 분석하세요.
-
-6개 아카이브 카테고리별 시각적 특성:
-1. MILITARY ARCHIVE - 카모플라주, 올리브/카키/탄, 에폴릿, 벨크로, 패치, 유틸리티포켓, 나일론 리플스탑
-2. WORKWEAR ARCHIVE - 덕캔버스, 히코리스트라이프, 더블니, 트리플스티치, 대형포켓, 견고한 구조, 바이브립
-3. OUTDOOR ARCHIVE - 나일론셸, 고어텍스멤브레인, 플리스, 드로코드, 벨크로탭, 반사테이프, 레이어링
-4. JAPANESE ARCHIVE - 인디고염색, 셀비지데님, 보로/사시코패치, 천연소재, 핸드크래프트디테일
-5. HERITAGE EUROPE - 울블렌드, 옥스포드, 피케, 니트웨어, 클래식핏, 자수로고, 금속버튼
-6. BRITISH ARCHIVE - 왁스드코튼, 해리스트위드, 타탄체크, 코듀로이, 가죽패치, 벨벳칼라
-
-JSON으로 응답:
-{
-  "clothingType": "아우터/상의/하의/원피스/기타",
-  "fabric": "관찰된 소재 특성",
-  "pattern": "패턴 (카모/타탄/히코리/솔리드/인디고 등)",
-  "details": "핵심 디테일 (에폴릿/더블니/플리스 등)",
-  "structure": "구조 특성 (밀리터리커팅/워크웨어구조 등)",
-  "category": "MILITARY ARCHIVE 또는 WORKWEAR ARCHIVE 또는 OUTDOOR ARCHIVE 또는 JAPANESE ARCHIVE 또는 HERITAGE EUROPE 또는 BRITISH ARCHIVE 또는 NONE",
-  "confidence": 0~100,
-  "reason": "시각 분석 근거 (한국어, 1-2문장)"
-}
-
-중요: 브랜드 분석과 시각 분석이 다를 수 있습니다. 이미지에서 보이는 것을 우선하세요.
-JSON만 응답하세요.`;
-
-export async function analyzeVisual(
-    imageUrl: string,
-    productName: string,
-    brandContext: BrandAnalysis
-): Promise<VisualAnalysis> {
-    const defaultResult: VisualAnalysis = {
-        clothingType: '기타', fabric: '', pattern: '', details: '', structure: '',
-        category: 'NONE', confidence: 0, reason: '시각 분석 실패'
-    };
-
-    if (!GEMINI_API_KEY || !imageUrl) return defaultResult;
-
-    const prompt = VISUAL_PROMPT(productName, brandContext);
-
-    // Gemini 2.0 Flash Vision
-    try {
-        const result = await callGeminiVision(GEMINI_2_URL, prompt, imageUrl);
-        if (result) return result as VisualAnalysis;
-    } catch (e) {
-        console.warn('[AI-Archive] Phase 2 Gemini 2.0 Vision 실패, 1.5 fallback:', (e as Error).message);
-    }
-
-    // Fallback: Gemini 1.5 Flash Vision
-    try {
-        const result = await callGeminiVision(GEMINI_15_URL, prompt, imageUrl);
-        if (result) return result as VisualAnalysis;
-    } catch (e) {
-        console.error('[AI-Archive] Phase 2 완전 실패:', (e as Error).message);
-    }
-
-    return defaultResult;
-}
-
-// ─── Phase 3: Fusion Decision ────────────────────────────────────────
+// ─── 핵심: 1번의 API 콜로 모든 것을 분석 ────────────────────────────
 
 export async function classifyForArchive(product: {
     id: string;
     name: string;
     imageUrl?: string;
 }): Promise<ArchiveAIResult> {
-    // Phase 1: Brand Intelligence
-    const brandResult = await analyzeBrand(product.name);
+    // 즉시 계산 (0ms)
+    const keywordResult = classifyArchive(product.name, []);
+    const contextScore = analyzeContext(product.name);
+    const localBrand = lookupBrand(product.name);
 
-    // Phase 2: Visual Intelligence (이미지 있는 경우만)
-    let visualResult: VisualAnalysis | null = null;
-    if (product.imageUrl) {
-        visualResult = await analyzeVisual(product.imageUrl, product.name, brandResult);
+    // 로컬 DB 힌트
+    const localHint = localBrand.info
+        ? `\n[참고: "${localBrand.info.canonical}" (${localBrand.info.origin}, ${localBrand.tier})]`
+        : '';
+
+    const hasImage = !!product.imageUrl;
+    const prompt = COMBINED_PROMPT(product.name, hasImage) + localHint;
+
+    let combinedResult: any = null;
+
+    // 1차: Gemini 3 Pro (이미지 있으면 Vision, 없으면 Text)
+    try {
+        if (hasImage) {
+            combinedResult = await callGeminiVision(GEMINI_3_PRO_URL, prompt, product.imageUrl!);
+        } else {
+            combinedResult = await callGeminiText(GEMINI_3_PRO_URL, prompt);
+        }
+    } catch (e) {
+        console.warn('[AI-Archive] Gemini 3 Pro 실패:', (e as Error).message);
     }
 
-    // Phase 3-1: Keyword matching (기존 엔진)
-    const keywordResult = classifyArchive(product.name, []);
+    // 2차: Gemini 2.5 Flash fallback
+    if (!combinedResult?.finalCategory) {
+        try {
+            if (hasImage) {
+                combinedResult = await callGeminiVision(GEMINI_25_FLASH_URL, prompt, product.imageUrl!);
+            } else {
+                combinedResult = await callGeminiText(GEMINI_25_FLASH_URL, prompt);
+            }
+        } catch (e) {
+            console.warn('[AI-Archive] Gemini 2.5 Flash도 실패:', (e as Error).message);
+        }
+    }
 
-    // Phase 3-2: Fusion scoring
+    // AI 결과 파싱
+    const brandResult = parseBrandFromCombined(combinedResult);
+    const visualResult = parseVisualFromCombined(combinedResult);
+    const aiCategory = normalizeCategory(combinedResult?.finalCategory);
+    const aiConfidence = Math.min(100, Math.max(0, combinedResult?.finalConfidence || 0));
+
+    // Fusion scoring
     const scores: Record<string, number> = {};
     ARCHIVE_CATEGORIES.forEach(cat => {
         scores[cat] = 0;
 
-        // Brand signal (40%)
+        // AI 통합 판정 (50%)
+        if (aiCategory === cat) {
+            scores[cat] += aiConfidence * 0.50;
+        }
+
+        // Brand 개별 판정 (20%)
         if (brandResult.category === cat) {
-            scores[cat] += brandResult.confidence * 0.4;
+            scores[cat] += brandResult.confidence * 0.20;
         }
 
-        // Visual signal (40%) - 이미지 없으면 Brand 80%로 보상
-        if (visualResult) {
-            if (visualResult.category === cat) {
-                scores[cat] += visualResult.confidence * 0.4;
-            }
-        } else {
-            // 이미지 없으면 Brand weight 증가
-            if (brandResult.category === cat) {
-                scores[cat] += brandResult.confidence * 0.3;
-            }
+        // Visual 개별 판정 (15%)
+        if (visualResult && visualResult.category === cat) {
+            scores[cat] += visualResult.confidence * 0.15;
         }
 
-        // Keyword signal (20%)
+        // Keyword signal (10%)
         if (keywordResult.category === cat) {
-            scores[cat] += keywordResult.score * 0.2;
+            scores[cat] += keywordResult.score * 0.10;
+        }
+
+        // Context signal (5%)
+        if (contextScore.category === cat) {
+            scores[cat] += contextScore.confidence * 0.05;
         }
     });
 
-    // 동의 보너스: 2개 이상 동일 카테고리면 +10
+    // 동의 보너스
     ARCHIVE_CATEGORIES.forEach(cat => {
         let agreements = 0;
+        if (aiCategory === cat) agreements++;
         if (brandResult.category === cat) agreements++;
         if (visualResult?.category === cat) agreements++;
         if (keywordResult.category === cat) agreements++;
-        if (agreements >= 2) scores[cat] += 10;
+        if (agreements >= 3) scores[cat] += 12;
+        else if (agreements >= 2) scores[cat] += 6;
     });
 
-    // 최고 점수 카테고리 선택
     const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
     const [bestCat, bestScore] = entries[0];
 
     // 이유 생성
     const reasons: string[] = [];
-    if (brandResult.category !== 'NONE') {
-        reasons.push(`브랜드(${brandResult.brand || '?'}): ${brandResult.category}`);
-    }
-    if (visualResult && visualResult.category !== 'NONE') {
-        reasons.push(`시각: ${visualResult.category}`);
-    }
-    if (keywordResult.category !== 'UNCATEGORIZED') {
-        reasons.push(`키워드: ${keywordResult.category}`);
+    if (combinedResult?.finalReason) reasons.push(combinedResult.finalReason);
+    else {
+        if (brandResult.category !== 'NONE') reasons.push(`브랜드:${brandResult.brand}→${brandResult.category}`);
+        if (visualResult?.category !== 'NONE') reasons.push(`시각:${visualResult.category}`);
     }
 
     return {
-        category: bestScore > 30 ? bestCat as ArchiveCat : 'ARCHIVE',
+        category: bestScore > 20 ? bestCat as ArchiveCat : 'ARCHIVE',
         confidence: Math.round(Math.min(100, bestScore)),
         brandAnalysis: brandResult,
         visualAnalysis: visualResult,
         keywordCategory: keywordResult.category,
         keywordScore: keywordResult.score,
-        reason: reasons.length > 0 ? reasons.join(' | ') : '분류 근거 부족 → 미분류',
+        reason: reasons.length > 0 ? reasons.join(' | ') : '분류 근거 부족',
     };
+}
+
+// ─── Combined 결과 파싱 헬퍼 ─────────────────────────────────────────
+
+function parseBrandFromCombined(data: any): BrandAnalysis {
+    const b = data?.brand;
+    if (!b) return { brand: '', country: '', founded: '', styleLineage: '기타', category: 'NONE', confidence: 0, reason: '' };
+    return {
+        brand: b.name || b.brand || '',
+        country: b.country || '',
+        founded: b.founded || '',
+        styleLineage: b.styleLineage || '기타',
+        category: normalizeCategory(b.category) as ArchiveCat | 'NONE',
+        confidence: Math.min(100, Math.max(0, b.confidence || 0)),
+        reason: b.reason || '',
+    };
+}
+
+function parseVisualFromCombined(data: any): VisualAnalysis | null {
+    const v = data?.visual;
+    if (!v) return null;
+    return {
+        clothingType: v.clothingType || '기타',
+        fabric: v.fabric || '',
+        pattern: v.pattern || '',
+        details: v.details || '',
+        structure: v.structure || '',
+        colorPalette: v.colorPalette || '',
+        genderPresentation: v.genderPresentation || '중성적',
+        category: normalizeCategory(v.category) as ArchiveCat | 'NONE',
+        confidence: Math.min(100, Math.max(0, v.confidence || 0)),
+        reason: v.reason || '',
+    };
+}
+
+function normalizeCategory(cat: string | undefined | null): ArchiveCat | 'NONE' {
+    if (!cat) return 'NONE';
+    const catMap: Record<string, ArchiveCat> = {
+        'MILITARY ARCHIVE': 'MILITARY ARCHIVE', 'MILITARY': 'MILITARY ARCHIVE',
+        'WORKWEAR ARCHIVE': 'WORKWEAR ARCHIVE', 'WORKWEAR': 'WORKWEAR ARCHIVE',
+        'OUTDOOR ARCHIVE': 'OUTDOOR ARCHIVE', 'OUTDOOR': 'OUTDOOR ARCHIVE',
+        'JAPANESE ARCHIVE': 'JAPANESE ARCHIVE', 'JAPAN ARCHIVE': 'JAPANESE ARCHIVE',
+        'JAPAN': 'JAPANESE ARCHIVE', 'JAPANESE': 'JAPANESE ARCHIVE',
+        'HERITAGE EUROPE': 'HERITAGE EUROPE', 'HERITAGE ARCHIVE': 'HERITAGE EUROPE', 'HERITAGE': 'HERITAGE EUROPE',
+        'BRITISH ARCHIVE': 'BRITISH ARCHIVE', 'BRITISH': 'BRITISH ARCHIVE',
+        'UNISEX ARCHIVE': 'UNISEX ARCHIVE', 'UNISEX': 'UNISEX ARCHIVE',
+    };
+    return catMap[cat.toUpperCase()] || 'NONE';
+}
+
+// ─── Context Analysis ────────────────────────────────────────────────
+
+function analyzeContext(productName: string): { category: ArchiveCat | 'NONE'; confidence: number } {
+    const name = productName.toUpperCase();
+
+    const patterns: [string[], ArchiveCat, number][] = [
+        [['남녀공용', '유니섹스', 'UNISEX', '프리사이즈', 'FREE SIZE', 'FREESIZE'], 'UNISEX ARCHIVE', 60],
+        [['M-65', 'M65', 'MA-1', 'MA1', 'N-3B', 'BDU', 'FIELD JACKET', 'CARGO', 'CAMO', 'CAMOUFLAGE', '군용', '군복', '밀리터리', '야상'], 'MILITARY ARCHIVE', 55],
+        [['CHORE', 'COVERALL', 'OVERALL', 'DOUBLE KNEE', 'HICKORY', '초어', '커버올', '오버올', '더블니', '워크웨어'], 'WORKWEAR ARCHIVE', 55],
+        [['GORE-TEX', 'GORETEX', 'FLEECE', 'ANORAK', 'NUPTSE', '플리스', '고어텍스', '아노락', '눕시'], 'OUTDOOR ARCHIVE', 55],
+        [['WAXED', 'TARTAN', 'HARRIS TWEED', 'TRENCH', 'DUFFLE', 'HARRINGTON', '왁스', '타탄', '트위드', '더플'], 'BRITISH ARCHIVE', 50],
+        [['SELVEDGE', 'SASHIKO', 'BORO', '셀비지', '사시코', '보로', '아메카지'], 'JAPANESE ARCHIVE', 50],
+    ];
+
+    for (const [keywords, category, confidence] of patterns) {
+        if (keywords.some(k => name.includes(k))) return { category, confidence };
+    }
+
+    return { category: 'NONE', confidence: 0 };
+}
+
+// ─── 하위 호환 export (기존 코드용) ──────────────────────────────────
+
+export async function analyzeBrand(productName: string): Promise<BrandAnalysis> {
+    const localBrand = lookupBrand(productName);
+    if (localBrand.info) {
+        const tierToCat: Record<string, ArchiveCat> = {
+            'MILITARY': 'MILITARY ARCHIVE', 'WORKWEAR': 'WORKWEAR ARCHIVE',
+            'OUTDOOR': 'OUTDOOR ARCHIVE', 'JAPAN': 'JAPANESE ARCHIVE',
+            'HERITAGE': 'HERITAGE EUROPE', 'BRITISH': 'BRITISH ARCHIVE',
+            'UNISEX': 'UNISEX ARCHIVE',
+        };
+        return {
+            brand: localBrand.info.canonical, country: localBrand.info.origin,
+            founded: '', styleLineage: localBrand.tier,
+            category: tierToCat[localBrand.tier] || 'NONE', confidence: 45,
+            reason: `로컬 DB: ${localBrand.info.canonical}`,
+        };
+    }
+    return { brand: '', country: '', founded: '', styleLineage: '기타', category: 'NONE', confidence: 0, reason: '' };
+}
+
+export async function analyzeVisual(): Promise<VisualAnalysis> {
+    return { clothingType: '기타', fabric: '', pattern: '', details: '', structure: '', colorPalette: '', genderPresentation: '중성적', category: 'NONE', confidence: 0, reason: '' };
 }
 
 // ─── Gemini API Helpers ──────────────────────────────────────────────
 
-async function callGeminiWithSearch(prompt: string): Promise<any> {
-    const res = await fetch(`${GEMINI_2_URL}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ googleSearch: {} }],
-        }),
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini Search API ${res.status}: ${errText.substring(0, 200)}`);
-    }
-
-    return parseGeminiResponse(await res.json());
-}
-
 async function callGeminiText(apiUrl: string, prompt: string): Promise<any> {
-    const res = await fetch(`${apiUrl}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-        }),
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini Text API ${res.status}: ${errText.substring(0, 200)}`);
-    }
-
-    return parseGeminiResponse(await res.json());
-}
-
-async function callGeminiVision(apiUrl: string, prompt: string, imageUrl: string): Promise<any> {
-    // 이미지를 base64로 변환
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
 
-    let base64: string;
     try {
-        const imgRes = await fetch(imageUrl, { signal: controller.signal });
-        if (!imgRes.ok) throw new Error(`Image fetch ${imgRes.status}`);
-        const buffer = await imgRes.arrayBuffer();
-        base64 = Buffer.from(buffer).toString('base64');
+        const res = await fetch(`${apiUrl}?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.1,
+                    responseMimeType: 'application/json',
+                },
+            }),
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Gemini ${res.status}: ${errText.substring(0, 200)}`);
+        }
+
+        return parseGeminiResponse(await res.json());
     } finally {
         clearTimeout(timeoutId);
     }
+}
 
-    const res = await fetch(`${apiUrl}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-                ],
-            }],
-        }),
-    });
+async function callGeminiVision(apiUrl: string, prompt: string, imageUrl: string): Promise<any> {
+    // 이미지 다운로드 (10초 타임아웃)
+    const imgController = new AbortController();
+    const imgTimeout = setTimeout(() => imgController.abort(), 10000);
 
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini Vision API ${res.status}: ${errText.substring(0, 200)}`);
+    let base64: string;
+    let mimeType = 'image/jpeg';
+    try {
+        const imgRes = await fetch(imageUrl, { signal: imgController.signal });
+        if (!imgRes.ok) throw new Error(`Image ${imgRes.status}`);
+        const contentType = imgRes.headers.get('content-type') || '';
+        if (contentType.includes('png')) mimeType = 'image/png';
+        else if (contentType.includes('webp')) mimeType = 'image/webp';
+        const buffer = await imgRes.arrayBuffer();
+        base64 = Buffer.from(buffer).toString('base64');
+    } catch (e) {
+        // 이미지 실패 → text-only fallback
+        console.warn('[AI-Archive] 이미지 다운 실패, text-only:', (e as Error).message);
+        return callGeminiText(apiUrl, prompt);
+    } finally {
+        clearTimeout(imgTimeout);
     }
 
-    return parseGeminiResponse(await res.json());
+    // Gemini Vision 호출 (30초 타임아웃)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+        const res = await fetch(`${apiUrl}?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inline_data: { mime_type: mimeType, data: base64 } },
+                    ],
+                }],
+                generationConfig: {
+                    temperature: 0.1,
+                    responseMimeType: 'application/json',
+                },
+            }),
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Gemini Vision ${res.status}: ${errText.substring(0, 200)}`);
+        }
+
+        return parseGeminiResponse(await res.json());
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 function parseGeminiResponse(data: any): any {
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-        console.warn('[AI-Archive] Gemini 응답에 text 없음:', JSON.stringify(data).substring(0, 300));
-        return null;
-    }
-
-    const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
-
-    try {
-        return JSON.parse(jsonStr);
-    } catch {
-        // JSON 추출 시도: 첫 번째 { ... } 블록 찾기
-        const match = jsonStr.match(/\{[\s\S]*\}/);
-        if (match) {
-            return JSON.parse(match[0]);
+    // 모든 parts에서 텍스트 추출 시도
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+        if (part.text) {
+            const jsonStr = part.text.replace(/```json\n?|\n?```/g, '').trim();
+            try {
+                return JSON.parse(jsonStr);
+            } catch {
+                const match = jsonStr.match(/\{[\s\S]*\}/);
+                if (match) {
+                    try { return JSON.parse(match[0]); } catch { continue; }
+                }
+            }
         }
-        console.error('[AI-Archive] JSON 파싱 실패:', jsonStr.substring(0, 200));
-        return null;
     }
+    console.warn('[AI-Archive] 응답 파싱 실패:', JSON.stringify(data).substring(0, 300));
+    return null;
 }
 
-// ─── Rate Limiter ────────────────────────────────────────────────────
+// ─── Batch Processing (3개 동시 병렬) ────────────────────────────────
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+const CONCURRENCY = 3; // 동시 처리 수
+const BATCH_DELAY = 1000; // 배치 간 딜레이 (1초)
 
 export async function classifyBatchForArchive(
     products: { id: string; name: string; imageUrl?: string }[],
     onProgress?: (current: number, total: number, product: string, phase: string) => void
 ): Promise<{ productId: string; result: ArchiveAIResult }[]> {
     const results: { productId: string; result: ArchiveAIResult }[] = [];
+    const total = products.length;
 
-    for (let i = 0; i < products.length; i++) {
-        const product = products[i];
+    // CONCURRENCY개씩 배치 처리
+    for (let i = 0; i < total; i += CONCURRENCY) {
+        const batch = products.slice(i, i + CONCURRENCY);
 
-        try {
-            onProgress?.(i + 1, products.length, product.name.substring(0, 30), 'brand');
-            const result = await classifyForArchive(product);
-            results.push({ productId: product.id, result });
-            onProgress?.(i + 1, products.length, product.name.substring(0, 30), 'done');
-        } catch (e) {
-            console.error(`[AI-Archive] 분류 실패 ${product.id}:`, (e as Error).message);
-            results.push({
-                productId: product.id,
-                result: {
-                    category: 'ARCHIVE',
-                    confidence: 0,
-                    brandAnalysis: null,
-                    visualAnalysis: null,
-                    keywordCategory: 'UNCATEGORIZED',
-                    keywordScore: 0,
-                    reason: `분류 실패: ${(e as Error).message}`,
-                },
-            });
-        }
+        // 배치 내 병렬 실행
+        const batchResults = await Promise.all(
+            batch.map(async (product, batchIdx) => {
+                const globalIdx = i + batchIdx;
+                const shortName = product.name.substring(0, 30);
+                onProgress?.(globalIdx + 1, total, shortName, 'analyzing');
 
-        // Rate limiting: Gemini 15 RPM → 상품당 2콜 → ~4초 간격
-        if (i < products.length - 1) {
-            await delay(2500);
+                try {
+                    const result = await classifyForArchive(product);
+                    onProgress?.(globalIdx + 1, total, shortName, 'done');
+                    return { productId: product.id, result };
+                } catch (e) {
+                    console.error(`[AI-Archive] 분류 실패 ${product.id}:`, (e as Error).message);
+                    return {
+                        productId: product.id,
+                        result: {
+                            category: 'ARCHIVE' as const,
+                            confidence: 0,
+                            brandAnalysis: null,
+                            visualAnalysis: null,
+                            keywordCategory: 'UNCATEGORIZED',
+                            keywordScore: 0,
+                            reason: `분류 실패: ${(e as Error).message}`,
+                        },
+                    };
+                }
+            })
+        );
+
+        results.push(...batchResults);
+
+        // 마지막 배치가 아니면 딜레이
+        if (i + CONCURRENCY < total) {
+            await delay(BATCH_DELAY);
         }
     }
 

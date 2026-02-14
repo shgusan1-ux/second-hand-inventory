@@ -57,7 +57,7 @@ export function UpdateLogWidget({ tasks: initialTasks }: { tasks: any[] }) {
                         paginatedTasks.map((task) => (
                             <div key={task.id} className="group flex items-start gap-4 p-4 rounded-lg bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-md transition-all">
                                 <div className="bg-indigo-100 text-indigo-600 px-2 py-1 rounded text-xs font-bold font-mono mt-0.5">
-                                    {task.id.startsWith('sys-') ? task.id.replace('sys-', '') : 'NOTICE'}
+                                    {task.id.startsWith('sys-') ? task.id.replace('sys-', '') : '공지'}
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-sm text-slate-700 font-medium">{task.content}</p>

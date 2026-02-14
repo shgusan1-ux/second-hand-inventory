@@ -5,6 +5,7 @@ import { Providers } from './providers';
 import { AppShell } from '@/components/layout/app-shell';
 import { getSession } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { Toaster } from 'sonner';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -35,6 +36,7 @@ export default async function RootLayout({
           <AppShell user={session}>
             {children}
           </AppShell>
+          <Toaster position="top-center" richColors />
         </Providers>
       </body>
     </html>

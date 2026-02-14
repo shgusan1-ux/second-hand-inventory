@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { getMeeting, createMeeting, updateMeeting, deleteMeeting, Meeting } from '@/lib/meeting-actions';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,11 @@ import { toast } from 'sonner';
 import { ArrowLeft, Save, Trash2, Calendar, MapPin, Users, FileText } from 'lucide-react';
 import Link from 'next/link';
 
-export default function MeetingDetailPage({ params }: { params: { id: string } }) {
+export default function MeetingDetailPage() {
     const router = useRouter();
-    const isNew = params.id === 'new';
+    const params = useParams();
+    const id = params?.id as string;
+    const isNew = id === 'new';
 
     const [loading, setLoading] = useState(!isNew);
     const [formData, setFormData] = useState({
@@ -26,8 +28,14 @@ export default function MeetingDetailPage({ params }: { params: { id: string } }
     });
 
     useEffect(() => {
-        if (!isNew) {
-            getMeeting(params.id).then((data: any) => {
+        if (isNew) {
+            setLoading(false);
+            return;
+        }
+
+        if (id) {
+            setLoading(true);
+            getMeeting(id).then((data: any) => {
                 if (data) {
                     setFormData({
                         title: data.title,
@@ -43,7 +51,7 @@ export default function MeetingDetailPage({ params }: { params: { id: string } }
                 setLoading(false);
             });
         }
-    }, [params.id, isNew, router]);
+    }, [id, isNew, router]);
 
     const handleSave = async () => {
         if (!formData.title || !formData.date) {
@@ -61,7 +69,7 @@ export default function MeetingDetailPage({ params }: { params: { id: string } }
         if (isNew) {
             res = await createMeeting(payload);
         } else {
-            res = await updateMeeting(params.id, payload);
+            res = await updateMeeting(id, payload);
         }
 
         if (res.success) {
@@ -75,7 +83,7 @@ export default function MeetingDetailPage({ params }: { params: { id: string } }
 
     const handleDelete = async () => {
         if (!confirm('정말 삭제하시겠습니까?')) return;
-        const res = await deleteMeeting(params.id);
+        const res = await deleteMeeting(id);
         if (res.success) {
             toast.success('삭제되었습니다.');
             router.push('/business/collaboration/meetings');

@@ -44,6 +44,10 @@ interface Product {
 interface ProductManagementTabProps {
   products: Product[];
   onRefresh: () => void;
+  onSyncGrades?: () => void;
+  syncingGrades?: boolean;
+  onClassifyAI?: (products: { id: string; name: string; imageUrl: string }[]) => void;
+  classifyingAI?: boolean;
 }
 
 // 상품명에서 브랜드 추출: 한글 나오기 전까지 영문+특수문자 부분
@@ -55,7 +59,7 @@ function extractBrand(name: string): string {
   return match ? match[1].trim() : name.split(' ')[0];
 }
 
-export function ProductManagementTab({ products, onRefresh }: ProductManagementTabProps) {
+export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncingGrades = false, onClassifyAI, classifyingAI = false }: ProductManagementTabProps) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -67,88 +71,102 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [movingCategory, setMovingCategory] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
-  const [classifyingAI, setClassifyingAI] = useState(false);
-  const [aiProgress, setAiProgress] = useState<{ current: number; total: number; message: string; results: any[] } | null>(null);
-  const [syncingGrades, setSyncingGrades] = useState(false);
-  const [gradeProgress, setGradeProgress] = useState<{ current: number; total: number; message: string } | null>(null);
 
   // 카테고리 네비게이션
   const [stageFilter, setStageFilter] = useState<string>('ALL');
   const [subFilter, setSubFilter] = useState<string>('ALL');
   const [curatedDaysFilter, setCuratedDaysFilter] = useState<number>(0); // 0=전체, 30, 60, 90
+  const [newDaysFilter, setNewDaysFilter] = useState<boolean>(false); // true=30일 경과만
+  const [archiveDaysFilter, setArchiveDaysFilter] = useState<boolean>(false); // true=120일 경과만
 
-  const ARCHIVE_SUBS = ['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE'];
+  const ARCHIVE_SUBS = ['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE', 'UNISEX ARCHIVE'];
   const isArchiveCategory = (cat?: string) => cat === 'ARCHIVE' || ARCHIVE_SUBS.includes(cat || '');
   const isClearanceCategory = (cat?: string) => cat === 'CLEARANCE' || cat === 'CLEARANCE_KEEP' || cat === 'CLEARANCE_DISPOSE';
 
-  // 스테이지별 카운트
-  const stageCounts = useMemo(() => {
-    const counts = { ALL: products.length, NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0, UNASSIGNED: 0 };
-    products.forEach(p => {
+  // 모든 카운트를 1회 순회로 통합 계산
+  const { stageCounts, archiveSubCounts, curatedDaysCounts, clearanceSubCounts, newOver30Count, archiveOver120Count } = useMemo(() => {
+    const stage = { ALL: products.length, NEW: 0, CURATED: 0, ARCHIVE: 0, CLEARANCE: 0, UNASSIGNED: 0 };
+    const archive: Record<string, number> = { ALL: 0, UNASSIGNED: 0 };
+    ARCHIVE_SUBS.forEach(s => { archive[s] = 0; });
+    const curated = { ALL: 0, under30: 0, d30: 0, d60: 0, d90: 0 };
+    const clearance: Record<string, number> = { ALL: 0, CLEARANCE: 0, CLEARANCE_KEEP: 0, CLEARANCE_DISPOSE: 0 };
+    let newOver30 = 0;
+    let archiveOver120 = 0;
+
+    for (const p of products) {
       const cat = p.internalCategory || '';
-      if (cat === 'NEW') counts.NEW++;
-      else if (cat === 'CURATED') counts.CURATED++;
-      else if (isArchiveCategory(cat)) counts.ARCHIVE++;
-      else if (isClearanceCategory(cat)) counts.CLEARANCE++;
-      else counts.UNASSIGNED++;
-    });
-    return counts;
+      const days = p.lifecycle?.daysSince || 0;
+      if (cat === 'NEW') {
+        stage.NEW++;
+        if (days >= 30) newOver30++;
+      } else if (cat === 'CURATED') {
+        stage.CURATED++;
+        curated.ALL++;
+        if (days <= 30) curated.under30++;
+        if (days >= 30) curated.d30++;
+        if (days >= 60) curated.d60++;
+        if (days >= 90) curated.d90++;
+      } else if (isArchiveCategory(cat)) {
+        stage.ARCHIVE++;
+        archive.ALL++;
+        if (ARCHIVE_SUBS.includes(cat)) archive[cat]++;
+        else archive.UNASSIGNED++;
+        if (days >= 120) archiveOver120++;
+      } else if (isClearanceCategory(cat)) {
+        stage.CLEARANCE++;
+        clearance.ALL++;
+        if (cat === 'CLEARANCE_KEEP') clearance.CLEARANCE_KEEP++;
+        else if (cat === 'CLEARANCE_DISPOSE') clearance.CLEARANCE_DISPOSE++;
+        else clearance.CLEARANCE++;
+      } else {
+        stage.UNASSIGNED++;
+      }
+    }
+
+    return { stageCounts: stage, archiveSubCounts: archive, curatedDaysCounts: curated, clearanceSubCounts: clearance, newOver30Count: newOver30, archiveOver120Count: archiveOver120 };
   }, [products]);
 
-  // NEW 초과분 (300개 초과시 오래된 순으로)
-  const NEW_LIMIT = 300;
-  const newOverflowCount = Math.max(0, stageCounts.NEW - NEW_LIMIT);
+  // 각 카테고리 300개 제한 (초과시 오래된 순으로 다음 라이프사이클 이동)
+  const STAGE_LIMIT = 300;
+  const newOverflowCount = Math.max(0, stageCounts.NEW - STAGE_LIMIT);
+  const curatedOverflowCount = Math.max(0, stageCounts.CURATED - STAGE_LIMIT);
+
+  // 아카이브: 중분류별 300개 제한
+  const archiveSubOverflows = useMemo(() => {
+    const overflows: { sub: string; label: string; count: number; overflow: number; ids: string[] }[] = [];
+    const labelMap: Record<string, string> = {
+      'MILITARY ARCHIVE': '밀리터리', 'WORKWEAR ARCHIVE': '워크웨어', 'OUTDOOR ARCHIVE': '아웃도어',
+      'JAPANESE ARCHIVE': '일본감성', 'HERITAGE EUROPE': '유럽헤리티지', 'BRITISH ARCHIVE': '영국전통', 'UNISEX ARCHIVE': '유니섹스'
+    };
+    for (const sub of ARCHIVE_SUBS) {
+      const subCount = archiveSubCounts[sub] || 0;
+      if (subCount > STAGE_LIMIT) {
+        const overflow = subCount - STAGE_LIMIT;
+        const ids = products
+          .filter(p => p.internalCategory === sub)
+          .sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime())
+          .slice(0, overflow).map(p => p.originProductNo);
+        overflows.push({ sub, label: labelMap[sub] || sub, count: subCount, overflow, ids });
+      }
+    }
+    return overflows;
+  }, [products, archiveSubCounts]);
+
   const newOverflowIds = useMemo(() => {
     if (newOverflowCount <= 0) return [];
-    const newProducts = products
+    return products
       .filter(p => p.internalCategory === 'NEW')
-      .sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime());
-    return newProducts.slice(0, newOverflowCount).map(p => p.originProductNo);
+      .sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime())
+      .slice(0, newOverflowCount).map(p => p.originProductNo);
   }, [products, newOverflowCount]);
 
-  // 아카이브 세부 카운트
-  const archiveSubCounts = useMemo(() => {
-    const counts: Record<string, number> = { ALL: 0 };
-    ARCHIVE_SUBS.forEach(s => { counts[s] = 0; });
-    counts['UNASSIGNED'] = 0;
-    products.forEach(p => {
-      const cat = p.internalCategory || '';
-      if (!isArchiveCategory(cat)) return;
-      counts.ALL++;
-      if (ARCHIVE_SUBS.includes(cat)) counts[cat]++;
-      else counts['UNASSIGNED']++;
-    });
-    return counts;
-  }, [products]);
-
-  // CURATED 기간별 카운트
-  const curatedDaysCounts = useMemo(() => {
-    const counts = { ALL: 0, under30: 0, d30: 0, d60: 0, d90: 0 };
-    products.forEach(p => {
-      if (p.internalCategory !== 'CURATED') return;
-      counts.ALL++;
-      const days = p.lifecycle?.daysSince || 0;
-      if (days <= 30) counts.under30++;
-      if (days >= 30) counts.d30++;
-      if (days >= 60) counts.d60++;
-      if (days >= 90) counts.d90++;
-    });
-    return counts;
-  }, [products]);
-
-  // 클리어런스 세부 카운트
-  const clearanceSubCounts = useMemo(() => {
-    const counts: Record<string, number> = { ALL: 0, CLEARANCE: 0, CLEARANCE_KEEP: 0, CLEARANCE_DISPOSE: 0, UNASSIGNED: 0 };
-    products.forEach(p => {
-      const cat = p.internalCategory || '';
-      if (!isClearanceCategory(cat)) return;
-      counts.ALL++;
-      if (cat === 'CLEARANCE_KEEP') counts.CLEARANCE_KEEP++;
-      else if (cat === 'CLEARANCE_DISPOSE') counts.CLEARANCE_DISPOSE++;
-      else counts.CLEARANCE++;
-    });
-    return counts;
-  }, [products]);
+  const curatedOverflowIds = useMemo(() => {
+    if (curatedOverflowCount <= 0) return [];
+    return products
+      .filter(p => p.internalCategory === 'CURATED')
+      .sort((a, b) => new Date(a.regDate || 0).getTime() - new Date(b.regDate || 0).getTime())
+      .slice(0, curatedOverflowCount).map(p => p.originProductNo);
+  }, [products, curatedOverflowCount]);
 
   // 개별 Vision 분석
   const analyzeProduct = async (e: React.MouseEvent, product: Product) => {
@@ -212,7 +230,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
         });
 
         // 서버 캐시 무효화 (백그라운드, 다음 페이지 로드 시 DB에서 재빌드)
-        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
 
         setSelectedIds([]);
         setShowMoveMenu(false);
@@ -255,7 +273,87 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             }
           };
         });
-        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
+      } else {
+        toast.error(data.error || '이동 실패');
+      }
+    } catch (err: any) {
+      toast.error('이동 오류: ' + err.message);
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
+  // CURATED 초과분 → ARCHIVE 일괄 이동
+  const moveOverflowToArchive = async () => {
+    if (curatedOverflowIds.length === 0) return;
+    if (!confirm(`큐레이티드 중 가장 오래된 ${curatedOverflowIds.length}개를 아카이브로 이동하시겠습니까?`)) return;
+    setMovingCategory(true);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: curatedOverflowIds, category: 'ARCHIVE' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${curatedOverflowIds.length}개 상품 → 아카이브 이동 완료`);
+        queryClient.setQueryData(['all-products'], (old: any) => {
+          if (!old?.data?.contents) return old;
+          const moveSet = new Set(curatedOverflowIds);
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              contents: old.data.contents.map((p: any) =>
+                moveSet.has(p.originProductNo)
+                  ? { ...p, internalCategory: 'ARCHIVE', archiveTier: 'ARCHIVE' }
+                  : p
+              )
+            }
+          };
+        });
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
+      } else {
+        toast.error(data.error || '이동 실패');
+      }
+    } catch (err: any) {
+      toast.error('이동 오류: ' + err.message);
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
+  // ARCHIVE 중분류별 초과분 → CLEARANCE 일괄 이동
+  const moveArchiveSubOverflow = async (subLabel: string, ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!confirm(`${subLabel} 중 가장 오래된 ${ids.length}개를 클리어런스로 이동하시겠습니까?`)) return;
+    setMovingCategory(true);
+    try {
+      const res = await fetch('/api/smartstore/products/category/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: ids, category: 'CLEARANCE' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${ids.length}개 상품 → 클리어런스 이동 완료`);
+        queryClient.setQueryData(['all-products'], (old: any) => {
+          if (!old?.data?.contents) return old;
+          const moveSet = new Set(ids);
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              contents: old.data.contents.map((p: any) =>
+                moveSet.has(p.originProductNo)
+                  ? { ...p, internalCategory: 'CLEARANCE', archiveTier: 'CLEARANCE' }
+                  : p
+              )
+            }
+          };
+        });
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
       } else {
         toast.error(data.error || '이동 실패');
       }
@@ -298,7 +396,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
         });
 
         // 서버 캐시 무효화
-        fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
+        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
 
         setSelectedIds([]);
         setShowMoveMenu(false);
@@ -312,137 +410,15 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     }
   };
 
-  // AI 아카이브 자동 분류 (3-Phase: Brand Search → Vision → Fusion)
-  const classifyWithAI = async () => {
-    if (selectedIds.length === 0 || classifyingAI) return;
-
-    // 선택된 상품 데이터 수집
+  // AI 아카이브 자동 분류 (부모 컴포넌트 팝업으로 위임)
+  const handleClassifyAI = () => {
+    if (!onClassifyAI || selectedIds.length === 0 || classifyingAI) return;
     const selectedProducts = products
       .filter(p => selectedIds.includes(p.originProductNo))
-      .map(p => ({
-        id: p.originProductNo,
-        name: p.name,
-        imageUrl: p.thumbnailUrl || '',
-      }));
-
-    setClassifyingAI(true);
-    setAiProgress({ current: 0, total: selectedProducts.length, message: 'AI 분류 시작...', results: [] });
+      .map(p => ({ id: p.originProductNo, name: p.name, imageUrl: p.thumbnailUrl || '' }));
+    onClassifyAI(selectedProducts);
+    setSelectedIds([]);
     setShowMoveMenu(false);
-
-    try {
-      const res = await fetch('/api/smartstore/automation/archive-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: selectedProducts }),
-      });
-
-      if (!res.body) throw new Error('SSE 스트림 없음');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const allResults: any[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-
-            if (event.type === 'progress') {
-              setAiProgress(prev => prev ? { ...prev, current: event.current, message: event.message } : prev);
-            } else if (event.type === 'result') {
-              allResults.push(event);
-              setAiProgress(prev => prev ? { ...prev, current: event.current, message: `${event.product} → ${event.category}`, results: [...allResults] } : prev);
-              toast.success(`${event.product}... → ${event.category} (${event.confidence}%)`, { duration: 2000 });
-            } else if (event.type === 'error') {
-              allResults.push({ ...event, category: 'ARCHIVE' });
-              toast.error(`${event.product}... 분류 실패`, { duration: 2000 });
-            } else if (event.type === 'complete') {
-              // React Query 캐시 직접 업데이트 (네이버 동기화 없음)
-              queryClient.setQueryData(['all-products'], (old: any) => {
-                if (!old?.data?.contents) return old;
-                const categoryMap: Record<string, string> = {};
-                event.results.forEach((r: any) => { categoryMap[r.productId] = r.category; });
-                return {
-                  ...old,
-                  data: {
-                    ...old.data,
-                    contents: old.data.contents.map((p: any) =>
-                      categoryMap[p.originProductNo]
-                        ? { ...p, internalCategory: categoryMap[p.originProductNo], archiveTier: categoryMap[p.originProductNo] }
-                        : p
-                    ),
-                  },
-                };
-              });
-
-              toast.success(`AI 분류 완료: ${event.success}개 성공, ${event.failed}개 실패`);
-            }
-          } catch { /* JSON 파싱 실패 무시 */ }
-        }
-      }
-
-      setSelectedIds([]);
-    } catch (err: any) {
-      toast.error('AI 분류 오류: ' + err.message);
-    } finally {
-      setClassifyingAI(false);
-      setAiProgress(null);
-    }
-  };
-
-  // GRADE 일괄 동기화 (네이버 상세페이지에서 추출)
-  const syncGrades = async () => {
-    if (syncingGrades) return;
-    setSyncingGrades(true);
-    setGradeProgress({ current: 0, total: 0, message: 'GRADE 동기화 시작...' });
-
-    try {
-      const res = await fetch('/api/smartstore/products/sync-grades', { method: 'POST' });
-      if (!res.body) throw new Error('스트림 없음');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === 'start') {
-              setGradeProgress({ current: 0, total: event.total, message: `${event.total}개 상품 GRADE 동기화 시작` });
-            } else if (event.type === 'progress') {
-              setGradeProgress({ current: event.current, total: event.total, message: `${event.product}... ${event.message}` });
-            } else if (event.type === 'complete') {
-              toast.success(`GRADE 동기화 완료: ${event.success}개 성공`);
-              // 서버 캐시 무효화 후 새로고침
-              fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
-              onRefresh();
-            }
-          } catch { /* 무시 */ }
-        }
-      }
-    } catch (err: any) {
-      toast.error('GRADE 동기화 오류: ' + err.message);
-    } finally {
-      setSyncingGrades(false);
-      setGradeProgress(null);
-    }
   };
 
   const handleCopy = (e: React.MouseEvent, text: string) => {
@@ -451,50 +427,67 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     toast.success('상품코드가 복사되었습니다: ' + text);
   };
 
+  // 선택 상품 코드 대량 복사
+  const handleBulkCopy = () => {
+    const selected = products.filter(p => selectedIds.includes(p.originProductNo));
+    const codes = selected.map(p => p.sellerManagementCode || p.originProductNo).filter(Boolean);
+    if (codes.length === 0) {
+      toast.error('복사할 상품코드가 없습니다.');
+      return;
+    }
+    const text = codes.join('\n');
+    navigator.clipboard.writeText(text);
+    toast.success(`${codes.length}개 상품코드 복사 완료 (줄바꿈 구분)`);
+  };
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
-  // 카테고리 기반 필터링
-  const filtered = products.filter(p => {
-    const matchSearch = !searchTerm ||
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.originProductNo.includes(searchTerm) ||
-      (p.sellerManagementCode || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (!matchSearch) return false;
-
-    const cat = p.internalCategory || '';
-
-    // 스테이지 필터
-    if (stageFilter === 'ALL') return true;
-    if (stageFilter === 'NEW') return cat === 'NEW';
-    if (stageFilter === 'CURATED') {
-      if (cat !== 'CURATED') return false;
-      if (curatedDaysFilter === -30) {
-        return (p.lifecycle?.daysSince || 0) <= 30;
+  // 카테고리 기반 필터링 (메모이제이션)
+  const filtered = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    return products.filter(p => {
+      if (searchTerm) {
+        const matchSearch =
+          p.name.toLowerCase().includes(searchLower) ||
+          p.originProductNo.includes(searchTerm) ||
+          (p.sellerManagementCode || '').toLowerCase().includes(searchLower);
+        if (!matchSearch) return false;
       }
-      if (curatedDaysFilter > 0) {
-        return (p.lifecycle?.daysSince || 0) >= curatedDaysFilter;
+
+      const cat = p.internalCategory || '';
+
+      if (stageFilter === 'ALL') return true;
+      if (stageFilter === 'NEW') {
+        if (cat !== 'NEW') return false;
+        if (newDaysFilter) return (p.lifecycle?.daysSince || 0) >= 30;
+        return true;
+      }
+      if (stageFilter === 'CURATED') {
+        if (cat !== 'CURATED') return false;
+        if (curatedDaysFilter === -30) return (p.lifecycle?.daysSince || 0) <= 30;
+        if (curatedDaysFilter > 0) return (p.lifecycle?.daysSince || 0) >= curatedDaysFilter;
+        return true;
+      }
+      if (stageFilter === 'UNASSIGNED') return !cat || cat === 'UNCATEGORIZED';
+      if (stageFilter === 'ARCHIVE') {
+        if (!isArchiveCategory(cat)) return false;
+        if (archiveDaysFilter && (p.lifecycle?.daysSince || 0) < 120) return false;
+        if (subFilter === 'ALL') return true;
+        if (subFilter === 'UNASSIGNED') return cat === 'ARCHIVE';
+        return cat === subFilter;
+      }
+      if (stageFilter === 'CLEARANCE') {
+        if (!isClearanceCategory(cat)) return false;
+        if (subFilter === 'ALL') return true;
+        return cat === subFilter;
       }
       return true;
-    }
-    if (stageFilter === 'UNASSIGNED') return !cat || cat === 'UNCATEGORIZED';
-    if (stageFilter === 'ARCHIVE') {
-      if (!isArchiveCategory(cat)) return false;
-      if (subFilter === 'ALL') return true;
-      if (subFilter === 'UNASSIGNED') return cat === 'ARCHIVE';
-      return cat === subFilter;
-    }
-    if (stageFilter === 'CLEARANCE') {
-      if (!isClearanceCategory(cat)) return false;
-      if (subFilter === 'ALL') return true;
-      return cat === subFilter;
-    }
-    return true;
-  });
+    });
+  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter]);
 
   // 정렬
   const GRADE_ORDER: Record<string, number> = { 'V급': 0, 'S급': 1, 'A급': 2, 'B급': 3, 'C급': 4 };
@@ -504,9 +497,10 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     'JAPAN': 2, 'JAPANESE ARCHIVE': 2,
     'HERITAGE': 3, 'HERITAGE EUROPE': 3,
     'BRITISH': 4, 'BRITISH ARCHIVE': 4,
-    'OUTDOOR': 5, 'OUTDOOR ARCHIVE': 5,
-    'CLEARANCE_KEEP': 6, 'CLEARANCE_DISPOSE': 7,
-    'CLEARANCE': 8, 'NEW': 9, 'CURATED': 10, 'UNCATEGORIZED': 11,
+    'UNISEX': 5, 'UNISEX ARCHIVE': 5,
+    'OUTDOOR': 6, 'OUTDOOR ARCHIVE': 6,
+    'CLEARANCE_KEEP': 7, 'CLEARANCE_DISPOSE': 8,
+    'CLEARANCE': 9, 'NEW': 10, 'CURATED': 11, 'UNCATEGORIZED': 12,
   };
 
   const sorted = useMemo(() => {
@@ -563,6 +557,8 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
     setStageFilter(stage);
     setSubFilter('ALL');
     setCuratedDaysFilter(0);
+    setNewDaysFilter(false);
+    setArchiveDaysFilter(false);
     setCurrentPage(1);
   };
 
@@ -582,68 +578,106 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {/* 검색 */}
-      <input
-        type="text"
-        placeholder="상품명, 상품번호, 관리코드 검색..."
-        value={searchTerm}
-        onChange={e => handleSearchChange(e.target.value)}
-        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-      />
+      <div className="relative">
+        <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          placeholder="상품명, 상품번호, 관리코드 검색..."
+          value={searchTerm}
+          onChange={e => handleSearchChange(e.target.value)}
+          className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-400 shadow-sm"
+        />
+      </div>
 
       {/* 라이프사이클 스테이지 네비게이션 */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="grid grid-cols-6 divide-x divide-slate-100">
+        <div className="flex">
           {([
-            ['ALL', '전체', stageCounts.ALL, 'text-slate-600'],
-            ['NEW', 'NEW', stageCounts.NEW, 'text-emerald-600'],
-            ['CURATED', 'CURATED', stageCounts.CURATED, 'text-indigo-600'],
-            ['ARCHIVE', 'ARCHIVE', stageCounts.ARCHIVE, 'text-slate-800'],
-            ['CLEARANCE', 'CLEARANCE', stageCounts.CLEARANCE, 'text-amber-600'],
-            ['UNASSIGNED', '미지정', stageCounts.UNASSIGNED, 'text-red-500'],
-          ] as [string, string, number, string][]).map(([key, label, count, color]) => (
+            ['ALL', '전체', stageCounts.ALL],
+            ['NEW', '신규 0%', stageCounts.NEW],
+            ['CURATED', '큐레이티드 20%', stageCounts.CURATED],
+            ['ARCHIVE', '아카이브 40%', stageCounts.ARCHIVE],
+            ['CLEARANCE', '클리어런스 70%', stageCounts.CLEARANCE],
+            ['UNASSIGNED', '미지정', stageCounts.UNASSIGNED],
+          ] as [string, string, number][]).map(([key, label, count]) => (
             <button
               key={key}
               onClick={() => handleStageChange(key)}
-              className={`py-3 text-center transition-all active:scale-95 ${stageFilter === key
-                ? 'bg-slate-900 text-white'
-                : 'bg-white hover:bg-slate-50'
+              className={`flex-1 py-4 text-center transition-all border-b-2 ${stageFilter === key
+                ? 'border-slate-900 bg-slate-50/50'
+                : 'border-transparent hover:bg-slate-50/50'
                 }`}
             >
-              <div className={`text-[10px] font-black uppercase tracking-tight ${stageFilter === key ? 'text-white' : color}`}>
+              <div className={`text-[10px] font-bold uppercase tracking-wider ${stageFilter === key ? 'text-slate-900' : 'text-slate-400'}`}>
                 {label}
               </div>
-              <div className={`text-lg font-black leading-none mt-0.5 ${stageFilter === key ? 'text-white' : 'text-slate-900'}`}>
+              <div className={`text-lg font-black leading-none mt-1.5 ${stageFilter === key ? 'text-slate-900' : 'text-slate-600'}`}>
                 {count}
               </div>
             </button>
           ))}
         </div>
 
-        {/* NEW 초과 경고 + 일괄 이동 */}
+        {/* NEW 초과 경고 */}
         {newOverflowCount > 0 && (stageFilter === 'ALL' || stageFilter === 'NEW') && (
-          <div className="border-t border-amber-200 p-2.5 bg-amber-50 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-amber-600 text-sm font-bold shrink-0">!</span>
-              <span className="text-[11px] font-bold text-amber-800 truncate">
-                NEW {stageCounts.NEW}개 (제한 {NEW_LIMIT}) — <span className="text-red-600">{newOverflowCount}개 초과</span>
-              </span>
-            </div>
+          <div className="border-t border-amber-200 px-4 py-3 bg-amber-50 flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-amber-800 truncate">
+              신규 {stageCounts.NEW}개 (제한 {STAGE_LIMIT}) — <span className="text-red-600 font-bold">{newOverflowCount}개 초과</span>
+            </span>
             <button
               onClick={moveOverflowToCurated}
               disabled={movingCategory}
-              className="shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+              className="shrink-0 px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
             >
-              {movingCategory ? '이동 중...' : `오래된 ${newOverflowCount}개 → CURATED`}
+              {movingCategory ? '이동 중...' : `${newOverflowCount}개 → 큐레이티드`}
+            </button>
+          </div>
+        )}
+
+        {/* NEW 기간별 필터 */}
+        {stageFilter === 'NEW' && (
+          <div className="border-t border-slate-100 px-4 py-3">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => { setNewDaysFilter(false); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${!newDaysFilter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                전체 {stageCounts.NEW}
+              </button>
+              <button
+                onClick={() => { setNewDaysFilter(true); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${newDaysFilter ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+              >
+                30일 경과 {newOver30Count}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CURATED 초과 경고 */}
+        {curatedOverflowCount > 0 && (stageFilter === 'ALL' || stageFilter === 'CURATED') && (
+          <div className="border-t border-amber-200 px-4 py-3 bg-amber-50 flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-amber-800 truncate">
+              큐레이티드 {stageCounts.CURATED}개 (제한 {STAGE_LIMIT}) — <span className="text-red-600 font-bold">{curatedOverflowCount}개 초과</span>
+            </span>
+            <button
+              onClick={moveOverflowToArchive}
+              disabled={movingCategory}
+              className="shrink-0 px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {movingCategory ? '이동 중...' : `${curatedOverflowCount}개 → 아카이브`}
             </button>
           </div>
         )}
 
         {/* CURATED 기간별 필터 */}
         {stageFilter === 'CURATED' && (
-          <div className="border-t border-slate-100 p-2 bg-indigo-50/50">
-            <div className="flex gap-1 flex-wrap">
+          <div className="border-t border-slate-100 px-4 py-3">
+            <div className="flex gap-2 flex-wrap">
               {([
                 [0, '전체', curatedDaysCounts.ALL],
                 [-30, '30일이하', curatedDaysCounts.under30],
@@ -654,7 +688,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                 <button
                   key={days}
                   onClick={() => { setCuratedDaysFilter(days); setCurrentPage(1); }}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${curatedDaysFilter === days ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${curatedDaysFilter === days ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   {label} {count}
                 </button>
@@ -663,13 +697,33 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
           </div>
         )}
 
+        {/* ARCHIVE 중분류별 초과 경고 */}
+        {archiveSubOverflows.length > 0 && (stageFilter === 'ALL' || stageFilter === 'ARCHIVE') && (
+          <div className="border-t border-amber-200 bg-amber-50 divide-y divide-amber-200">
+            {archiveSubOverflows.map(o => (
+              <div key={o.sub} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-amber-800 truncate">
+                  {o.label} {o.count}개 (제한 {STAGE_LIMIT}) — <span className="text-red-600 font-bold">{o.overflow}개 초과</span>
+                </span>
+                <button
+                  onClick={() => moveArchiveSubOverflow(o.label, o.ids)}
+                  disabled={movingCategory}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {movingCategory ? '이동 중...' : `${o.overflow}개 → 클리어런스`}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ARCHIVE 세부 카테고리 */}
         {stageFilter === 'ARCHIVE' && (
-          <div className="border-t border-slate-100 p-2 bg-slate-50">
-            <div className="flex gap-1 flex-wrap">
+          <div className="border-t border-slate-100 px-4 py-3">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => handleSubChange('ALL')}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === 'ALL' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${subFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
               >
                 전체 {archiveSubCounts.ALL}
               </button>
@@ -677,16 +731,23 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                 <button
                   key={sub}
                   onClick={() => handleSubChange(sub)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === sub ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${subFilter === sub ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  {sub.replace(' ARCHIVE', '')} {archiveSubCounts[sub]}
+                  {sub === 'MILITARY ARCHIVE' ? '밀리터리' : sub === 'WORKWEAR ARCHIVE' ? '워크웨어' : sub === 'OUTDOOR ARCHIVE' ? '아웃도어' : sub === 'JAPANESE ARCHIVE' ? '일본감성' : sub === 'HERITAGE EUROPE' ? '유럽헤리티지' : sub === 'BRITISH ARCHIVE' ? '영국전통' : '유니섹스'} {archiveSubCounts[sub]}
                 </button>
               ))}
               <button
                 onClick={() => handleSubChange('UNASSIGNED')}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === 'UNASSIGNED' ? 'bg-red-600 text-white' : 'bg-white text-red-500 border border-red-200 hover:bg-red-50'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${subFilter === 'UNASSIGNED' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
               >
                 미지정 {archiveSubCounts['UNASSIGNED']}
+              </button>
+              <span className="w-px h-5 bg-slate-200 self-center" />
+              <button
+                onClick={() => { setArchiveDaysFilter(!archiveDaysFilter); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${archiveDaysFilter ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+              >
+                120일 경과 {archiveOver120Count}
               </button>
             </div>
           </div>
@@ -694,18 +755,18 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
         {/* CLEARANCE 세부 카테고리 */}
         {stageFilter === 'CLEARANCE' && (
-          <div className="border-t border-slate-100 p-2 bg-amber-50/50">
-            <div className="flex gap-1 flex-wrap">
+          <div className="border-t border-slate-100 px-4 py-3">
+            <div className="flex gap-2 flex-wrap">
               {([
                 ['ALL', '전체', clearanceSubCounts.ALL],
-                ['CLEARANCE', '미분류', clearanceSubCounts.CLEARANCE],
-                ['CLEARANCE_KEEP', '판매유지', clearanceSubCounts.CLEARANCE_KEEP],
-                ['CLEARANCE_DISPOSE', '폐기결정', clearanceSubCounts.CLEARANCE_DISPOSE],
+                ['CLEARANCE', '폐기검토', clearanceSubCounts.CLEARANCE],
+                ['CLEARANCE_KEEP', '유지', clearanceSubCounts.CLEARANCE_KEEP],
+                ['CLEARANCE_DISPOSE', '폐기', clearanceSubCounts.CLEARANCE_DISPOSE],
               ] as [string, string, number][]).map(([key, label, count]) => (
                 <button
                   key={key}
                   onClick={() => handleSubChange(key)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${subFilter === key ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${subFilter === key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   {label} {count}
                 </button>
@@ -717,117 +778,110 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
       {/* 선택 액션 바 */}
       {selectedIds.length > 0 && (
-        <div className="bg-slate-900 text-white rounded-xl p-3 shadow-lg ring-1 ring-white/10 space-y-2">
+        <div className="bg-slate-900 text-white rounded-xl p-4 shadow-lg ring-1 ring-white/10 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setSelectedIds([]); setShowMoveMenu(false); }} className="p-1 text-slate-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setSelectedIds([]); setShowMoveMenu(false); }} className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/10">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
-              <span className="text-sm">선택됨: <span className="text-blue-400 font-bold">{selectedIds.length}</span></span>
+              <span className="text-sm font-medium">선택됨 <span className="text-white font-black">{selectedIds.length}</span></span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-2 flex-wrap justify-end">
               <button
-                onClick={classifyWithAI}
-                disabled={classifyingAI || movingCategory}
-                className={`px-3 py-2 text-xs rounded-lg font-bold transition-colors ${classifyingAI ? 'bg-violet-600 text-white animate-pulse' : 'bg-violet-500/80 text-white hover:bg-violet-500'}`}
+                onClick={handleBulkCopy}
+                className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-white/10 text-white/80 hover:bg-white/20"
               >
-                {classifyingAI
-                  ? `AI 분류 중 ${aiProgress ? `${aiProgress.current}/${aiProgress.total}` : '...'}`
-                  : 'AI 아카이브 분류'}
+                상품코드 복사
+              </button>
+              {stageFilter === 'ARCHIVE' && (
+                <button
+                  onClick={() => moveToCategory('CLEARANCE')}
+                  disabled={movingCategory}
+                  className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-amber-500 text-white hover:bg-amber-600"
+                >
+                  {movingCategory ? '이동 중...' : '클리어런스 이동'}
+                </button>
+              )}
+              {stageFilter === 'CLEARANCE' && (
+                <>
+                  <button
+                    onClick={() => moveToCategory('CLEARANCE_KEEP')}
+                    disabled={movingCategory}
+                    className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-emerald-500 text-white hover:bg-emerald-600"
+                  >
+                    {movingCategory ? '이동 중...' : '유지'}
+                  </button>
+                  <button
+                    onClick={() => moveToCategory('CLEARANCE_DISPOSE')}
+                    disabled={movingCategory}
+                    className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-red-500 text-white hover:bg-red-600"
+                  >
+                    {movingCategory ? '이동 중...' : '폐기'}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={handleClassifyAI}
+                disabled={classifyingAI || movingCategory || !onClassifyAI}
+                className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${classifyingAI ? 'bg-violet-500 text-white animate-pulse' : 'bg-violet-500 text-white hover:bg-violet-600'}`}
+              >
+                {classifyingAI ? 'AI 분류 중...' : 'AI 분류'}
               </button>
               <button
                 onClick={() => setShowMoveMenu(!showMoveMenu)}
                 disabled={movingCategory || classifyingAI}
-                className={`px-3 py-2 text-xs rounded-lg font-bold transition-colors ${showMoveMenu ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${showMoveMenu ? 'bg-white text-slate-900' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
               >
                 {movingCategory ? '이동 중...' : '카테고리 이동'}
               </button>
             </div>
           </div>
 
-          {/* AI 분류 진행 상태 */}
-          {classifyingAI && aiProgress && (
-            <div className="border-t border-white/10 pt-2">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-violet-500 to-purple-400 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round((aiProgress.current / aiProgress.total) * 100)}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-bold text-violet-300">{aiProgress.current}/{aiProgress.total}</span>
-              </div>
-              <p className="text-[10px] text-slate-400 truncate">{aiProgress.message}</p>
-              {aiProgress.results.length > 0 && (
-                <div className="mt-1.5 max-h-20 overflow-y-auto space-y-0.5">
-                  {aiProgress.results.slice(-3).map((r: any, i: number) => (
-                    <div key={i} className="flex items-center gap-1.5 text-[9px]">
-                      <span className={`px-1 py-px rounded font-bold ${r.category === 'ARCHIVE' ? 'bg-red-500/20 text-red-300' : 'bg-violet-500/20 text-violet-300'}`}>
-                        {r.category?.replace(' ARCHIVE', '') || '?'}
-                      </span>
-                      <span className="text-slate-400 truncate">{r.product}</span>
-                      {r.confidence > 0 && <span className="text-slate-500 ml-auto">{r.confidence}%</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* 카테고리 선택 메뉴 */}
           {showMoveMenu && !classifyingAI && (
-            <div className="border-t border-white/10 pt-2 space-y-1.5">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">아카이브 (날짜 무시, 강제 배정)</p>
-              <div className="grid grid-cols-3 gap-1">
-                {['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => moveToCategory(cat)}
-                    disabled={movingCategory}
-                    className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-slate-300 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors text-center leading-tight"
-                  >
-                    {cat}
-                  </button>
-                ))}
+            <div className="border-t border-white/10 pt-3 space-y-3">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold tracking-wider mb-2">아카이브</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE', 'UNISEX ARCHIVE'].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => moveToCategory(cat)}
+                      disabled={movingCategory}
+                      className="px-2 py-2.5 text-[10px] font-semibold bg-white/5 text-white/70 rounded-lg hover:bg-white/15 hover:text-white transition-colors text-center leading-tight"
+                    >
+                      {cat === 'MILITARY ARCHIVE' ? '밀리터리' : cat === 'WORKWEAR ARCHIVE' ? '워크웨어' : cat === 'OUTDOOR ARCHIVE' ? '아웃도어' : cat === 'JAPANESE ARCHIVE' ? '일본감성' : cat === 'HERITAGE EUROPE' ? '유럽헤리티지' : cat === 'BRITISH ARCHIVE' ? '영국전통' : '유니섹스'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1 pt-1">클리어런스 (날짜 무시, 강제 배정)</p>
-              <div className="grid grid-cols-3 gap-1">
-                {['CLEARANCE', 'CLEARANCE_KEEP', 'CLEARANCE_DISPOSE'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => moveToCategory(cat)}
-                    disabled={movingCategory}
-                    className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-amber-400 rounded-lg hover:bg-amber-600 hover:text-white transition-colors"
-                  >
-                    {cat === 'CLEARANCE' ? '클리어런스' : cat === 'CLEARANCE_KEEP' ? '판매유지' : '폐기결정'}
-                  </button>
-                ))}
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold tracking-wider mb-2">클리어런스</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['CLEARANCE', 'CLEARANCE_KEEP', 'CLEARANCE_DISPOSE'].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => moveToCategory(cat)}
+                      disabled={movingCategory}
+                      className="px-2 py-2.5 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-lg hover:bg-amber-500/20 transition-colors"
+                    >
+                      {cat === 'CLEARANCE' ? '폐기검토' : cat === 'CLEARANCE_KEEP' ? '유지' : '폐기'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1 pt-1">기타</p>
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  onClick={() => moveToCategory('NEW')}
-                  disabled={movingCategory}
-                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-emerald-400 rounded-lg hover:bg-emerald-600 hover:text-white transition-colors"
-                >
-                  NEW
-                </button>
-                <button
-                  onClick={() => moveToCategory('CURATED')}
-                  disabled={movingCategory}
-                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-indigo-400 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors"
-                >
-                  CURATED
-                </button>
-                <button
-                  onClick={() => resetToAuto()}
-                  disabled={movingCategory}
-                  className="px-2 py-2 text-[10px] font-bold bg-slate-800 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
-                >
-                  자동복원
-                </button>
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold tracking-wider mb-2">기타</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button onClick={() => moveToCategory('NEW')} disabled={movingCategory}
+                    className="px-2 py-2.5 text-[10px] font-semibold bg-white/5 text-emerald-400 rounded-lg hover:bg-white/15 transition-colors">신규</button>
+                  <button onClick={() => moveToCategory('CURATED')} disabled={movingCategory}
+                    className="px-2 py-2.5 text-[10px] font-semibold bg-white/5 text-indigo-400 rounded-lg hover:bg-white/15 transition-colors">큐레이티드</button>
+                  <button onClick={() => resetToAuto()} disabled={movingCategory}
+                    className="px-2 py-2.5 text-[10px] font-semibold bg-white/5 text-red-400 rounded-lg hover:bg-white/15 transition-colors">자동복원</button>
+                </div>
               </div>
             </div>
           )}
@@ -835,13 +889,13 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       )}
 
       {/* 정렬 + 뷰모드 + 결과 수 */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-500">{sorted.length.toLocaleString()}개</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-slate-500">{sorted.length.toLocaleString()}개</span>
           <select
             value={sortBy}
             onChange={e => { setSortBy(e.target.value); setCurrentPage(1); }}
-            className="text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+            className="text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-slate-900/20 outline-none shadow-sm"
           >
             <option value="date_desc">최신순</option>
             <option value="date_asc">오래된순</option>
@@ -851,30 +905,36 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
             <option value="price_asc">가격 낮은순</option>
             <option value="confidence">신뢰도순</option>
           </select>
-          <button
-            onClick={syncGrades}
-            disabled={syncingGrades}
-            className={`text-[10px] font-bold px-2 py-1.5 rounded-lg transition-colors ${syncingGrades ? 'bg-emerald-100 text-emerald-600 animate-pulse' : 'bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 border border-slate-200'}`}
-          >
-            {syncingGrades ? `GRADE ${gradeProgress ? `${gradeProgress.current}/${gradeProgress.total}` : '...'}` : 'GRADE 동기화'}
-          </button>
+          {onSyncGrades && (
+            <button
+              onClick={onSyncGrades}
+              disabled={syncingGrades}
+              className={`text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95 ${syncingGrades ? 'bg-emerald-600 text-white animate-pulse' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {syncingGrades ? '등급 동기화 중...' : '등급 동기화'}
+              </div>
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* 뷰 모드 토글 */}
+        <div className="flex items-center gap-3">
           <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
             <button
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`p-2 rounded-md transition-all ${viewMode === 'table' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
               title="목록 보기"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
             <button
               onClick={() => setViewMode('card')}
-              className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`p-2 rounded-md transition-all ${viewMode === 'card' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
               title="카드 보기"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
             </button>
           </div>
           <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
@@ -882,8 +942,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
               <button
                 key={size}
                 onClick={() => handlePageSizeChange(size)}
-                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${pageSize === size ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'
-                  }`}
+                className={`px-2.5 py-1.5 text-[10px] font-bold rounded-md transition-all ${pageSize === size ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 {size}
               </button>
@@ -892,89 +951,92 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
         </div>
       </div>
 
-      {/* 컴팩트 테이블 뷰 */}
+      {/* 테이블 뷰 */}
       {viewMode === 'table' && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="px-2 py-2 w-8 text-center">
+              <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="px-3 py-3.5 w-10 text-center">
                   <input
                     type="checkbox"
                     checked={isAllPageSelected}
                     onChange={toggleSelectAll}
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20 cursor-pointer"
                   />
                 </th>
-                <th className="px-2 py-2 text-left">상품코드</th>
-                <th className="px-1 py-2 w-9"></th>
-                <th className="px-2 py-2 text-left">상품명</th>
-                <th className="px-2 py-2 text-left">브랜드</th>
-                <th className="px-2 py-2 text-right">소비자가</th>
-                <th className="px-2 py-2 text-right">판매가</th>
-                <th className="px-2 py-2 text-center">GRADE</th>
-                <th className="px-2 py-2 text-center">등록일</th>
-                <th className="px-2 py-2 text-center">경과일</th>
+                <th className="px-3 py-3.5 text-left">상품코드</th>
+                <th className="px-1 py-3.5 w-10"></th>
+                <th className="px-3 py-3.5 text-left">상품명</th>
+                <th className="px-3 py-3.5 text-left">브랜드</th>
+                <th className="px-3 py-3.5 text-right">소비자가</th>
+                <th className="px-3 py-3.5 text-right">판매가</th>
+                <th className="px-3 py-3.5 text-center">등급</th>
+                <th className="px-3 py-3.5 text-center">등록일</th>
+                <th className="px-3 py-3.5 text-center">경과일</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100/60">
               {paginatedItems.map(p => {
                 const isSelected = selectedIds.includes(p.originProductNo);
                 const discountRate = p.lifecycle?.discountRate || 0;
                 const hasDiscount = discountRate > 0 && p.lifecycle?.stage !== 'NEW';
                 const discountedPrice = hasDiscount ? Math.round(p.salePrice * (1 - discountRate / 100)) : p.salePrice;
 
-                // CURATED 그라데이션: 0일=흰색 → 90일=파란색
-                const isCurated = stageFilter === 'CURATED' && p.internalCategory === 'CURATED';
-                const curatedDays = p.lifecycle?.daysSince || 0;
-                const gradientIntensity = isCurated ? Math.min(curatedDays / 90, 1) : 0;
-                const rowBgStyle = isCurated && !isSelected
-                  ? { backgroundColor: `rgba(59, 130, 246, ${gradientIntensity * 0.15})` }
+                // 경과일 기반 배경색: 빨간색 경고
+                const days = p.lifecycle?.daysSince || 0;
+                const cat = p.internalCategory || '';
+                const isOverdue =
+                  (cat === 'NEW' && days >= 30) ||
+                  (cat === 'CURATED' && days >= 60) ||
+                  (isArchiveCategory(cat) && days >= 120);
+                const rowBgStyle = isOverdue && !isSelected
+                  ? { backgroundColor: `rgba(239, 68, 68, ${Math.min((days - (cat === 'NEW' ? 30 : cat === 'CURATED' ? 60 : 120)) / 60, 1) * 0.12 + 0.06})` }
                   : undefined;
 
                 return (
                   <tr
                     key={p.originProductNo}
-                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
+                    className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-slate-100/60' : ''}`}
                     style={rowBgStyle}
                     onClick={() => toggleSelect(p.originProductNo)}
                   >
-                    <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                    <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(p.originProductNo)}
-                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20 cursor-pointer"
                       />
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-3 py-2.5">
                       <span className="text-[9px] font-mono font-bold text-violet-600 whitespace-nowrap">
                         {p.sellerManagementCode || '-'}
                       </span>
                     </td>
-                    <td className="px-1 py-1">
-                      <div className="w-8 h-8 rounded overflow-hidden bg-slate-100 shrink-0">
+                    <td className="px-1 py-2">
+                      <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-50 shrink-0">
                         {p.thumbnailUrl ? (
                           <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">IMG</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">이미지</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 py-1.5 max-w-[200px]">
+                    <td className="px-3 py-2.5 max-w-[220px]">
                       <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
                     </td>
-                    <td className="px-2 py-1.5">
-                      <span className="text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                    <td className="px-3 py-2.5">
+                      <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
                         {p.classification?.brand || extractBrand(p.name)}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-right">
+                    <td className="px-3 py-2.5 text-right">
                       <span className={`text-[10px] font-bold whitespace-nowrap ${hasDiscount ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
                         {p.salePrice?.toLocaleString()}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-right">
+                    <td className="px-3 py-2.5 text-right">
                       {hasDiscount ? (
                         <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">
                           {discountedPrice.toLocaleString()}
@@ -986,38 +1048,35 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 text-center">
+                    <td className="px-3 py-2.5 text-center">
                       {(() => {
-                        // 우선순위: visionGrade > descriptionGrade
                         const vg = p.classification?.visionGrade;
                         const dg = p.descriptionGrade;
                         const grade = vg || (dg ? `${dg}급` : null);
                         if (!grade) return <span className="text-[9px] text-slate-300">-</span>;
                         return (
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${
-                            grade.startsWith('S') ? 'bg-yellow-100 text-yellow-700' :
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${grade.startsWith('S') ? 'bg-yellow-100 text-yellow-700' :
                             grade.startsWith('A') ? 'bg-blue-100 text-blue-700' :
-                            grade.startsWith('B') ? 'bg-slate-100 text-slate-600' :
-                            grade.startsWith('V') ? 'bg-purple-100 text-purple-700' :
-                            'bg-red-100 text-red-600'
-                          }`}>
+                              grade.startsWith('B') ? 'bg-slate-100 text-slate-600' :
+                                grade.startsWith('V') ? 'bg-purple-100 text-purple-700' :
+                                  'bg-red-100 text-red-600'
+                            }`}>
                             {grade}
                           </span>
                         );
                       })()}
                     </td>
-                    <td className="px-2 py-1.5 text-center">
+                    <td className="px-3 py-2.5 text-center">
                       <span className="text-[9px] text-slate-500 whitespace-nowrap">
                         {p.regDate ? new Date(p.regDate).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <span className={`text-[10px] font-bold ${
-                        (p.lifecycle?.daysSince || 0) > 120 ? 'text-red-500' :
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`text-[10px] font-bold ${(p.lifecycle?.daysSince || 0) > 120 ? 'text-red-500' :
                         (p.lifecycle?.daysSince || 0) > 60 ? 'text-amber-500' :
-                        (p.lifecycle?.daysSince || 0) > 30 ? 'text-blue-500' :
-                        'text-slate-400'
-                      }`}>
+                          (p.lifecycle?.daysSince || 0) > 30 ? 'text-blue-500' :
+                            'text-slate-400'
+                        }`}>
                         D+{p.lifecycle?.daysSince || 0}
                       </span>
                     </td>
@@ -1031,214 +1090,214 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
 
       {/* 상품 카드 리스트 */}
       {viewMode === 'card' && (
-      <div className="space-y-2.5">
-        {paginatedItems.map(p => (
-          <div
-            key={p.originProductNo}
-            className={`group bg-white rounded-xl border p-3 hover:shadow-md transition-all cursor-pointer ${selectedIds.includes(p.originProductNo) ? 'border-blue-400 ring-1 ring-blue-400 bg-blue-50/20' : 'border-slate-100'
-              }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSelect(p.originProductNo);
-            }}
-          >
-            <div className="flex gap-4">
-              {/* 이미지 */}
-              <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-100 shadow-inner">
-                {p.thumbnailUrl ? (
-                  <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-300 text-[10px] font-bold">IMAGE</div>
-                )}
-              </div>
-
-              {/* 상품 정보 */}
-              <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div
-                      className="flex items-center gap-1 group/copy cursor-copy"
-                      onClick={(e) => handleCopy(e, p.originProductNo)}
-                      title="클릭하여 복사"
-                    >
-                      <span className="text-[10px] font-mono font-bold text-slate-400 group-hover/copy:text-blue-500 transition-colors">
-                        #{p.originProductNo}
-                      </span>
-                      <svg className="w-2.5 h-2.5 text-slate-300 group-hover/copy:text-blue-500 opacity-0 group-hover/copy:opacity-100 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                      </svg>
-                    </div>
-                    <span className={`text-[10px] font-bold px-1.5 py-px rounded uppercase ${p.internalCategory === 'UNCATEGORIZED' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                      }`}>
-                      {p.internalCategory}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                    {p.sellerManagementCode ? (
-                      <span className="text-[10px] font-mono font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100">
-                        {p.sellerManagementCode}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-300 font-mono">-</span>
-                    )}
-                    <span className="w-px h-2.5 bg-slate-200"></span>
-                    {p.regDate && (
-                      <span className="text-[10px] text-slate-500 font-medium tracking-tight">
-                        {new Date(p.regDate).toLocaleDateString('ko-KR')}
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-1.5">{p.name}</p>
+        <div className="space-y-3">
+          {paginatedItems.map((p, idx) => (
+            <div
+              key={p.originProductNo}
+              className={`group bg-white rounded-2xl border p-4 hover:shadow-lg transition-all cursor-pointer ag-card ${idx % 5 === 0 ? 'ag-float-1' : idx % 5 === 1 ? 'ag-float-2' : idx % 5 === 2 ? 'ag-float-3' : idx % 5 === 3 ? 'ag-float-4' : 'ag-float-5'
+                } ${selectedIds.includes(p.originProductNo) ? 'border-slate-400 ring-1 ring-slate-400 bg-slate-50/40' : 'border-slate-100'
+                }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSelect(p.originProductNo);
+              }}
+            >
+              <div className="flex gap-4">
+                {/* 이미지 */}
+                <div className="w-18 h-18 rounded-xl overflow-hidden bg-slate-50 shrink-0 border border-slate-100">
+                  {p.thumbnailUrl ? (
+                    <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-300 text-[10px] font-bold">이미지</div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {p.lifecycle && p.lifecycle.discountRate > 0 && p.lifecycle.stage !== 'NEW' ? (
-                    <>
-                      <span className="text-[11px] font-bold text-slate-400 line-through">{p.salePrice?.toLocaleString()}</span>
-                      <span className="text-[13px] font-extrabold text-red-600">
-                        {Math.round(p.salePrice * (1 - p.lifecycle.discountRate / 100)).toLocaleString()}원
+                {/* 상품 정보 */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div
+                        className="flex items-center gap-1.5 group/copy cursor-copy"
+                        onClick={(e) => handleCopy(e, p.originProductNo)}
+                        title="클릭하여 복사"
+                      >
+                        <span className="text-[10px] font-mono font-bold text-slate-400 group-hover/copy:text-slate-700 transition-colors">
+                          #{p.originProductNo}
+                        </span>
+                        <svg className="w-2.5 h-2.5 text-slate-300 group-hover/copy:text-slate-700 opacity-0 group-hover/copy:opacity-100 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                        </svg>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${p.internalCategory === 'UNCATEGORIZED' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-500'
+                        }`}>
+                        {p.internalCategory === 'NEW' ? '신규' : p.internalCategory === 'CURATED' ? '큐레이티드' : p.internalCategory === 'ARCHIVE' ? '아카이브' : p.internalCategory === 'CLEARANCE' ? '폐기검토' : p.internalCategory === 'CLEARANCE_KEEP' ? '유지' : p.internalCategory === 'CLEARANCE_DISPOSE' ? '폐기' : p.internalCategory === 'MILITARY ARCHIVE' ? '밀리터리' : p.internalCategory === 'WORKWEAR ARCHIVE' ? '워크웨어' : p.internalCategory === 'OUTDOOR ARCHIVE' ? '아웃도어' : p.internalCategory === 'JAPANESE ARCHIVE' ? '일본감성' : p.internalCategory === 'HERITAGE EUROPE' ? '유럽헤리티지' : p.internalCategory === 'BRITISH ARCHIVE' ? '영국전통' : p.internalCategory === 'UNISEX ARCHIVE' ? '유니섹스' : p.internalCategory === 'UNCATEGORIZED' ? '미분류' : p.internalCategory || '미지정'}
                       </span>
-                      <span className="text-[10px] font-black text-red-500 bg-red-50 px-1 py-px rounded">-{p.lifecycle.discountRate}%</span>
-                    </>
-                  ) : (
-                    <span className="text-[13px] font-extrabold text-blue-600">{p.salePrice?.toLocaleString()}원</span>
-                  )}
-                  <div className="h-1 w-1 rounded-full bg-slate-300" />
-                  <span className={`text-[11px] font-bold ${p.stockQuantity === 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                    재고 {p.stockQuantity}
-                  </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {p.sellerManagementCode ? (
+                        <span className="text-[10px] font-mono font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-md border border-violet-100">
+                          {p.sellerManagementCode}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-300 font-mono">-</span>
+                      )}
+                      <span className="w-px h-2.5 bg-slate-200"></span>
+                      {p.regDate && (
+                        <span className="text-[10px] text-slate-500 font-medium tracking-tight">
+                          {new Date(p.regDate).toLocaleDateString('ko-KR')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-2">{p.name}</p>
+                  </div>
 
-                  {p.lifecycle && (
-                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black tracking-tighter ${p.lifecycle.stage === 'NEW' ? 'bg-emerald-500 text-white' :
-                      p.lifecycle.stage === 'CURATED' ? 'bg-indigo-500 text-white' :
-                        p.lifecycle.stage === 'ARCHIVE' ? 'bg-slate-800 text-white' :
-                          'bg-amber-500 text-white'
-                      }`}>
-                      {p.lifecycle.stage}
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {p.lifecycle && p.lifecycle.discountRate > 0 && p.lifecycle.stage !== 'NEW' ? (
+                      <>
+                        <span className="text-[11px] font-bold text-slate-400 line-through">{p.salePrice?.toLocaleString()}</span>
+                        <span className="text-[13px] font-extrabold text-red-600">
+                          {Math.round(p.salePrice * (1 - p.lifecycle.discountRate / 100)).toLocaleString()}원
+                        </span>
+                        <span className="text-[10px] font-black text-red-500 bg-red-50 px-1 py-px rounded">-{p.lifecycle.discountRate}%</span>
+                      </>
+                    ) : (
+                      <span className="text-[13px] font-extrabold text-slate-800">{p.salePrice?.toLocaleString()}원</span>
+                    )}
+                    <div className="h-1 w-1 rounded-full bg-slate-300" />
+                    <span className={`text-[11px] font-bold ${p.stockQuantity === 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                      재고 {p.stockQuantity}
                     </span>
-                  )}
 
-                  {/* Vision 상태 배지 */}
-                  {p.classification?.visionStatus === 'completed' ? (
+                    {p.lifecycle && (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black tracking-tighter ${p.lifecycle.stage === 'NEW' ? 'bg-emerald-500 text-white' :
+                        p.lifecycle.stage === 'CURATED' ? 'bg-indigo-500 text-white' :
+                          p.lifecycle.stage === 'ARCHIVE' ? 'bg-slate-800 text-white' :
+                            'bg-amber-500 text-white'
+                        }`}>
+                        {p.lifecycle.stage === 'NEW' ? '신규' : p.lifecycle.stage === 'CURATED' ? '큐레이티드' : p.lifecycle.stage === 'ARCHIVE' ? '아카이브' : '클리어런스'}
+                      </span>
+                    )}
+
+                    {/* Vision 상태 배지 */}
+                    {p.classification?.visionStatus === 'completed' ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors cursor-pointer"
+                      >
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        {p.classification.visionGrade || 'A급'}
+                      </button>
+                    ) : p.classification?.visionStatus === 'processing' || analyzingIds.has(p.originProductNo) ? (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-600 animate-pulse">
+                        분석중
+                      </span>
+                    ) : p.thumbnailUrl ? (
+                      <button
+                        onClick={(e) => analyzeProduct(e, p)}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-600 transition-colors"
+                      >
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        분석
+                      </button>
+                    ) : null}
+                    {/* 상세 보기 버튼 */}
                     <button
                       onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
-                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                     >
-                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      {p.classification.visionGrade || 'A급'}
+                      상세
                     </button>
-                  ) : p.classification?.visionStatus === 'processing' || analyzingIds.has(p.originProductNo) ? (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-600 animate-pulse">
-                      분석중
-                    </span>
-                  ) : p.thumbnailUrl ? (
-                    <button
-                      onClick={(e) => analyzeProduct(e, p)}
-                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-600 transition-colors"
-                    >
-                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                      분석
-                    </button>
-                  ) : null}
-                  {/* 상세 보기 버튼 */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDetailProduct(p); }}
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                  >
-                    상세
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* AI 다차원 분류 결과 */}
-            {p.classification && (
-              <div className="mt-3 pt-3 border-t border-dashed border-slate-100">
-                <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-lg p-2.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">AI 다차원 분류</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${p.classification.confidence >= 70 ? 'bg-emerald-500' : p.classification.confidence >= 40 ? 'bg-amber-500' : 'bg-red-400'}`}
-                          style={{ width: `${p.classification.confidence}%` }}
-                        />
+              {/* AI 다차원 분류 결과 */}
+              {p.classification && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="bg-gradient-to-r from-slate-50 to-slate-50/50 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">AI 다차원 분류</span>
                       </div>
-                      <span className={`text-[9px] font-black ${p.classification.confidence >= 70 ? 'text-emerald-600' : p.classification.confidence >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
-                        {p.classification.confidence}%
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${p.classification.confidence >= 70 ? 'bg-emerald-500' : p.classification.confidence >= 40 ? 'bg-amber-500' : 'bg-red-400'}`}
+                            style={{ width: `${p.classification.confidence}%` }}
+                          />
+                        </div>
+                        <span className={`text-[9px] font-black ${p.classification.confidence >= 70 ? 'text-emerald-600' : p.classification.confidence >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
+                          {p.classification.confidence}%
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex gap-2 flex-wrap">
-                    {/* 브랜드 + 티어 */}
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.brandTier === 'LUXURY' ? 'bg-purple-100 text-purple-800' :
+                    <div className="flex gap-2 flex-wrap">
+                      {/* 브랜드 + 티어 */}
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.brandTier === 'LUXURY' ? 'bg-purple-100 text-purple-800' :
                         p.classification.brandTier === 'PREMIUM' ? 'bg-indigo-100 text-indigo-700' :
                           p.classification.brandTier === 'DESIGNER' ? 'bg-blue-100 text-blue-700' :
                             p.classification.brandTier === 'CONTEMPORARY' ? 'bg-cyan-100 text-cyan-700' :
                               p.classification.brandTier === 'SPORTSWEAR' ? 'bg-orange-100 text-orange-700' :
                                 'bg-slate-100 text-slate-600'
-                      }`}>
-                      {p.classification.brand || extractBrand(p.name)}
-                      <span className="opacity-60 text-[8px]">{p.classification.brandTier}</span>
-                    </span>
-
-                    {/* 의류 타입 */}
-                    {p.classification.clothingType !== 'UNKNOWN' && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
-                        {p.classification.clothingType === 'OUTERWEAR' ? '아우터' :
-                          p.classification.clothingType === 'TOPS' ? '상의' :
-                            p.classification.clothingType === 'BOTTOMS' ? '하의' :
-                              p.classification.clothingType === 'DRESS' ? '원피스' : '기타'}
-                        {p.classification.clothingSubType !== 'UNKNOWN' && (
-                          <span className="text-[8px] opacity-70">{p.classification.clothingSubType}</span>
-                        )}
+                        }`}>
+                        {p.classification.brand || extractBrand(p.name)}
+                        <span className="opacity-60 text-[8px]">{p.classification.brandTier}</span>
                       </span>
-                    )}
 
-                    {/* 성별 */}
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.gender === 'MAN' ? 'bg-blue-100 text-blue-700' :
+                      {/* 의류 타입 */}
+                      {p.classification.clothingType !== 'UNKNOWN' && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
+                          {p.classification.clothingType === 'OUTERWEAR' ? '아우터' :
+                            p.classification.clothingType === 'TOPS' ? '상의' :
+                              p.classification.clothingType === 'BOTTOMS' ? '하의' :
+                                p.classification.clothingType === 'DRESS' ? '원피스' : '기타'}
+                          {p.classification.clothingSubType !== 'UNKNOWN' && (
+                            <span className="text-[8px] opacity-70">{p.classification.clothingSubType}</span>
+                          )}
+                        </span>
+                      )}
+
+                      {/* 성별 */}
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.classification.gender === 'MAN' ? 'bg-blue-100 text-blue-700' :
                         p.classification.gender === 'WOMAN' ? 'bg-pink-100 text-pink-700' :
                           p.classification.gender === 'KIDS' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-slate-100 text-slate-500'
-                      }`}>
-                      {p.classification.gender === 'MAN' ? 'M' : p.classification.gender === 'WOMAN' ? 'W' : p.classification.gender === 'KIDS' ? 'K' : '-'}
-                      {p.classification.size && p.classification.size !== 'FREE' && (
-                        <span className="ml-0.5 opacity-70">/{p.classification.size}</span>
-                      )}
-                    </span>
-                  </div>
+                        }`}>
+                        {p.classification.gender === 'MAN' ? 'M' : p.classification.gender === 'WOMAN' ? 'W' : p.classification.gender === 'KIDS' ? 'K' : '-'}
+                        {p.classification.size && p.classification.size !== 'FREE' && (
+                          <span className="ml-0.5 opacity-70">/{p.classification.size}</span>
+                        )}
+                      </span>
+                    </div>
 
-                  {/* 네이버 카테고리 제안 */}
-                  {p.classification.suggestedNaverCategory && (
-                    <p className="text-[9px] text-slate-400 truncate">
-                      <span className="font-bold text-blue-500">네이버</span> {p.classification.suggestedNaverCategory}
-                    </p>
-                  )}
+                    {/* 네이버 카테고리 제안 */}
+                    {p.classification.suggestedNaverCategory && (
+                      <p className="text-[9px] text-slate-400 truncate">
+                        <span className="font-bold text-blue-500">네이버</span> {p.classification.suggestedNaverCategory}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* 페이지네이션 하단 */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 py-8">
+        <div className="flex items-center justify-center gap-3 py-10">
           <button
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             disabled={currentPage === 1}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-all active:scale-95"
+            className="p-2 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:border-slate-300 disabled:opacity-30 disabled:hover:text-slate-400 transition-all active:scale-95"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
 
-          <div className="flex items-center gap-1">
-            {/* Simple range of pages around current page */}
+          <div className="flex items-center gap-1.5">
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pageNum;
               if (totalPages <= 5) pageNum = i + 1;
@@ -1250,9 +1309,9 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`min-w-[32px] h-8 rounded-lg text-xs font-bold transition-all ${currentPage === pageNum
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
+                  className={`min-w-[36px] h-9 rounded-xl text-xs font-bold transition-all ${currentPage === pageNum
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
                     }`}
                 >
                   {pageNum}
@@ -1264,7 +1323,7 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-all active:scale-95"
+            className="p-2 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:border-slate-300 disabled:opacity-30 disabled:hover:text-slate-400 transition-all active:scale-95"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </button>
@@ -1272,15 +1331,19 @@ export function ProductManagementTab({ products, onRefresh }: ProductManagementT
       )}
 
       {filtered.length === 0 && (
-        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-50 mb-3">
-            <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-slate-200 ag-float-1 ag-card">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-50 mb-4">
+            <svg className="w-7 h-7 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
-          <p className="text-sm font-bold text-slate-400">
+          <p className="text-sm font-semibold text-slate-400">
             {searchTerm ? '검색 결과가 없습니다.' :
-             stageFilter === 'UNASSIGNED' ? '미지정 상품이 없습니다.' :
-             stageFilter !== 'ALL' ? `${stageFilter} 카테고리에 상품이 없습니다.` :
-             '표시할 상품이 없습니다.'}
+              stageFilter === 'UNASSIGNED' ? '미지정 상품이 없습니다.' :
+                stageFilter === 'NEW' ? '신규 상품이 없습니다.' :
+                  stageFilter === 'CURATED' ? '큐레이티드 상품이 없습니다.' :
+                    stageFilter === 'ARCHIVE' ? '아카이브 상품이 없습니다.' :
+                      stageFilter === 'CLEARANCE' ? '클리어런스 상품이 없습니다.' :
+                        stageFilter !== 'ALL' ? `${stageFilter} 카테고리에 상품이 없습니다.` :
+                          '표시할 상품이 없습니다.'}
           </p>
         </div>
       )}

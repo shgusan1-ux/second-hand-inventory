@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { updateUserPermissions, getMemberAttendanceStats } from '@/lib/member-actions';
+import { updateUserPermissions, getMemberAttendanceStats, toggleAdminPermission } from '@/lib/member-actions';
 import { deleteUser as deleteUserAction } from '@/lib/actions';
 import { UserCog, CalendarClock, Shield, Trash2, LayoutList, Network } from 'lucide-react';
 import { MemberMindMap } from './mind-map';
@@ -34,7 +34,9 @@ const CATEGORIES = [
 ];
 
 export function MemberManagement({ users, currentUser }: { users: User[], currentUser: any }) {
-    const isAdmin = currentUser && ['대표자', '경영지원'].includes(currentUser.job_title);
+    // Current User Admin Check (includes '점장' now as requested)
+    // Also checks if they have ALL permission (which includes manually granted ADMINs)
+    const isAdmin = currentUser && (['대표자', '경영지원', '점장'].includes(currentUser.job_title) || currentUser.permissions?.includes('ALL'));
 
     const [viewMode, setViewMode] = useState<'list' | 'mindmap'>('list');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -130,7 +132,7 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
 
     const handleUpdateJobTitle = async () => {
         if (!jobTitleModalUser || !newJobTitle) return;
-        const { updateUserJobTitle } = await import('@/lib/member-actions'); // Dynamic import to avoid server action issue check if needed, mostly fine
+        const { updateUserJobTitle } = await import('@/lib/member-actions');
         const res = await updateUserJobTitle(jobTitleModalUser.id, newJobTitle);
         if (res.success) {
             alert('직책이 변경되었습니다.');
@@ -172,7 +174,8 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                     <div>
                                         <CardTitle className="text-lg flex items-center gap-2">
                                             {user.name}
-                                            {['대표자', '경영지원'].includes(user.job_title) && (
+                                            {/* Show Admin Badge if they have ALL permission (includes Store Managers and Manual Admins) */}
+                                            {(['대표자', '경영지원', '점장'].includes(user.job_title) || user.permissions?.includes('ALL')) && (
                                                 <Badge variant="secondary" className="text-xs">관리자</Badge>
                                             )}
                                         </CardTitle>
@@ -188,13 +191,16 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                     <div>
                                         <div className="text-xs font-medium text-slate-500 mb-2">접근 권한</div>
                                         <div className="flex flex-wrap gap-1">
-                                            {['대표자', '경영지원'].includes(user.job_title) ? (
-                                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">관리자 (전체 권한)</Badge>
+                                            {['대표자', '경영지원', '점장'].includes(user.job_title) ? (
+                                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">관리자 (직책)</Badge>
+                                            ) : user.permissions?.includes('ADMIN') ? (
+                                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">관리자 (권한)</Badge>
                                             ) : user.permissions?.includes('ALL') ? (
                                                 <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200">전체 권한</Badge>
                                             ) : (user.permissions?.length || 0) > 0 ? (
                                                 user.permissions?.map(p => {
                                                     const label = CATEGORIES.find(c => c.id === p)?.label || p;
+                                                    if (p === 'ALL' || p === 'ADMIN') return null;
                                                     return <Badge key={p} variant="outline" className="text-xs">{label}</Badge>;
                                                 })
                                             ) : (
@@ -202,10 +208,41 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                             )}
                                         </div>
 
-                                        <div className="pt-2 border-t border-slate-50">
+                                        <div className="pt-2 mt-2 border-t border-slate-50 space-y-2">
+                                            {/* Admin Permission Toggle - Visible to Admins */}
+                                            {/* Only show for users who are NOT already auto-admins by job title */}
+                                            {isAdmin && !['대표자', '경영지원', '점장'].includes(user.job_title) && (
+                                                <div className="flex justify-between items-center bg-purple-50 p-2 rounded-lg">
+                                                    <span className="text-xs font-bold text-purple-700">관리자 권한 부여</span>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="sr-only peer"
+                                                            checked={user.permissions?.includes('ADMIN') || false}
+                                                            onChange={async (e) => {
+                                                                if (!confirm(`${user.name}님에게 관리자 권한을 ${e.target.checked ? '부여' : '해제'}하시겠습니까?`)) return;
+
+                                                                try {
+                                                                    const res = await toggleAdminPermission(user.id, e.target.checked);
+                                                                    if (res.success) {
+                                                                        window.location.reload();
+                                                                    } else {
+                                                                        alert('실패: ' + res.error);
+                                                                    }
+                                                                } catch (err: any) {
+                                                                    alert('오류: ' + err.message);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                                                    </label>
+                                                </div>
+                                            )}
+
                                             <div className="flex justify-between items-center mb-1">
                                                 <span className="text-xs font-medium text-slate-500">매출/매입 열람</span>
-                                                {['대표자'].includes(user.job_title) ? (
+                                                {/* Auto-approved for Admins and Store Managers */}
+                                                {['대표자', '점장'].includes(user.job_title) || user.permissions?.includes('ADMIN') || user.permissions?.includes('ALL') ? (
                                                     <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100">자동 승인</Badge>
                                                 ) : (
                                                     <label className="relative inline-flex items-center cursor-pointer">
@@ -214,6 +251,10 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                                                             className="sr-only peer"
                                                             checked={!!user.can_view_accounting}
                                                             onChange={async (e) => {
+                                                                if (!isAdmin) {
+                                                                    alert('관리자만 변경할 수 있습니다.');
+                                                                    return;
+                                                                }
                                                                 if (!confirm(`${user.name}님의 매출 열람 권한을 ${e.target.checked ? '부여' : '해제'}하시겠습니까?`)) return;
                                                                 const { toggleAccountingPermission } = await import('@/lib/accounting-actions');
                                                                 const res = await toggleAccountingPermission(user.id, e.target.checked);
@@ -264,9 +305,17 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                         <DialogTitle>{selectedUser?.name} 권한 설정</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                        {['대표자', '경영지원'].includes(selectedUser?.job_title || '') ? (
-                            <div className="p-4 bg-yellow-50 text-yellow-800 rounded text-sm">
-                                관리자 계정은 모든 권한을 자동으로 보유합니다.
+                        {/* If they are auto-admin or manual admin, show notice */}
+                        {(['대표자', '경영지원', '점장'].includes(selectedUser?.job_title || '') || selectedUser?.permissions?.includes('ADMIN')) ? (
+                            <div className="space-y-2">
+                                <div className="p-4 bg-yellow-50 text-yellow-800 rounded text-sm font-medium">
+                                    이 계정은 관리자 권한(전체 권한)을 보유하고 있습니다.
+                                </div>
+                                {selectedUser?.permissions?.includes('ADMIN') && !['대표자', '경영지원', '점장'].includes(selectedUser?.job_title || '') && (
+                                    <p className="text-xs text-slate-500">
+                                        * 관리자 권한 부여 체크박스를 해제하면 일반 권한 설정이 가능합니다.
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-4">
@@ -285,7 +334,8 @@ export function MemberManagement({ users, currentUser }: { users: User[], curren
                         )}
                     </div>
                     <DialogFooter>
-                        {!['대표자', '경영지원'].includes(selectedUser?.job_title || '') && (
+                        {/* Hide save if auto-admin (unless we want to allow editing underlying perms, but they are ignored anyway) */}
+                        {!(['대표자', '경영지원', '점장'].includes(selectedUser?.job_title || '') || selectedUser?.permissions?.includes('ADMIN')) && (
                             <Button onClick={handleSavePermissions}>저장하기</Button>
                         )}
                     </DialogFooter>
