@@ -28,22 +28,30 @@ interface ImageManagementTabProps {
 
 export function ImageManagementTab({ products: initialProducts, onRefresh }: ImageManagementTabProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
-
-  // Update local state when prop changes
-  useEffect(() => {
-    setProducts(initialProducts);
-  }, [initialProducts]);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [logs, setLogs] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
+
+  const addLog = (msg: string) => {
+    const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    setLogs(prev => [...prev, `[${time}] ${msg}`]);
+  };
 
   // Verify component version
-  useState(() => {
-    console.log('[ImageManagementTab] Loaded v2.1: Client-side Generation Active');
-  });
+  useEffect(() => {
+    setIsMounted(true);
+    console.log('[ImageManagementTab] Loaded v2.3: Fix hydration & initialization');
+    addLog('[System] Component v2.3 Loaded. Ready.');
+  }, []);
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setProducts(initialProducts);
+  }, [initialProducts]);
 
   const filtered = useMemo(() => {
     if (!searchTerm) return products;
@@ -75,81 +83,124 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
 
   const handleGenerateThumbnails = async () => {
     if (selectedIds.length === 0) return;
+
+    setLogs([]); // Clear logs on new run
+    addLog(`----------------------------------------`);
+    addLog(`[Start] Processing ${selectedIds.length} items`);
     setGenerating(true);
     let successCount = 0;
     let failCount = 0;
 
-    try {
-      for (const id of selectedIds) {
-        const product = products.find(p => p.originProductNo === id);
-        if (!product || !product.thumbnailUrl) {
+    for (const id of selectedIds) {
+      addLog(`[Item: ${id}] Checking product data...`);
+      const product = products.find(p => p.originProductNo === id);
+
+      if (!product) {
+        addLog(`[Item: ${id}] Error: Product not found in local state`);
+        continue;
+      }
+
+      if (!product.thumbnailUrl) {
+        addLog(`[Item: ${id}] Error: No Thumbnail URL found`);
+        failCount++;
+        continue;
+      }
+
+      // Default fallback grade logic if descriptionGrade is missing
+      const grade = (product as any).descriptionGrade || product.classification?.visionGrade || 'B';
+      const loadingToast = toast.loading(`${id} 이미지 처리 중...`);
+
+      try {
+        addLog(`[Item: ${id}] Processing Image (Grade: ${grade})...`);
+        addLog(`[Item: ${id}] URL: ${product.thumbnailUrl}`);
+
+        // 1. Client-Side Processing
+        const blob = await processImageWithBadge({
+          imageUrl: product.thumbnailUrl,
+          grade: grade
+        });
+
+        addLog(`[Item: ${id}] Generated Blob: ${blob.size} bytes (${blob.type})`);
+
+        // 2. Upload Result
+        const formData = new FormData();
+        formData.append('file', blob, `${id}.jpg`);
+        formData.append('productNo', String(id));
+
+        // Debug Log
+        addLog(`[Item: ${id}] Checking FormData... file=${(formData.get('file') as Blob)?.size}, productNo=${formData.get('productNo')}`);
+
+        addLog(`[Item: ${id}] Uploading to server...`);
+        const uploadResp = await fetch('/api/smartstore/images/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const statusText = `${uploadResp.status} ${uploadResp.statusText}`;
+        addLog(`[Item: ${id}] Upload Response: ${statusText}`);
+
+        toast.dismiss(loadingToast);
+
+        if (uploadResp.ok) {
+          successCount++;
+          addLog(`[Item: ${id}] SUCCESS!`);
+          toast.success(`${id} 처리 완료`);
+
+          const data = await uploadResp.json();
+          const newUrl = data.url ? `${data.url}?t=${Date.now()}` : `/thumbnails/generated/${id}.jpg?t=${Date.now()}`;
+
+          setProducts(prev => prev.map(p =>
+            p.originProductNo === id ? { ...p, thumbnailUrl: newUrl } : p
+          ));
+        } else {
+          const errorText = await uploadResp.text();
+          addLog(`[Item: ${id}] Upload FAILED: ${errorText}`);
+          console.error(`[ImageTab] Upload Failed for ${id}:`, errorText);
           failCount++;
-          continue;
+          toast.error(`${id} 업로드 실패: ${errorText}`);
         }
 
-        const grade = product.classification?.visionGrade || 'A급'; // Default
-
-        const loadingToast = toast.loading(`${id} 이미지 처리 중...`);
-
-        try {
-          // 1. Client-Side Processing (Background + Badge)
-          const processedBlob = await processImageWithBadge({
-            imageUrl: product.thumbnailUrl,
-            grade
-          });
-
-          // 2. Upload Result
-          const formData = new FormData();
-          formData.append('file', processedBlob, 'thumbnail.jpg');
-          formData.append('productNo', id);
-
-          const uploadResp = await fetch('/api/smartstore/images/upload', {
-            method: 'POST',
-            body: formData
-          });
-
-          toast.dismiss(loadingToast);
-
-          if (uploadResp.ok) {
-            successCount++;
-            toast.success(`${id} 처리 완료`);
-
-            // Update local state to show new thumbnail immediately
-            const newUrl = `/thumbnails/generated/${id}.jpg?t=${Date.now()}`; // Cache bust
-            setProducts(prev => prev.map(p =>
-              p.originProductNo === id ? { ...p, thumbnailUrl: newUrl } : p
-            ));
-          } else {
-            failCount++;
-            toast.error(`${id} 업로드 실패`);
-          }
-
-        } catch (e: any) {
-          toast.dismiss(loadingToast);
-          console.error(`Error processing ${id}:`, e);
-          toast.error(`${id} 실패: ${e.message}`);
-          failCount++;
-        }
+      } catch (e: any) {
+        toast.dismiss(loadingToast);
+        addLog(`[Item: ${id}] EXCEPTION: ${e.message}`);
+        console.error(`[ImageTab] Error processing ${id}:`, e);
+        toast.error(`${id} 처리 오류 (로그 확인)`);
+        failCount++;
       }
+    }
 
-      if (successCount > 0) {
-        toast.success(`총 ${successCount}개 썸네일 생성 완료!`);
-        onRefresh();
-        setSelectedIds([]);
-      }
-      if (failCount > 0) {
-        toast.warning(`${failCount}개 생성 실패`);
-      }
+    addLog(`[Finish] Success: ${successCount}, Fail: ${failCount}`);
+    setGenerating(false);
 
-    } catch (err: any) {
-      toast.error('전체 프로세스 오류: ' + err.message);
-    } finally {
-      setGenerating(false);
+    if (successCount > 0) {
+      toast.success(`총 ${successCount}개 썸네일 생성 완료!`);
+      setSelectedIds([]);
     }
   };
 
+
+  // Override console.log/error locally for this component scope? 
+  // Better to just call addLog inside handleGenerateThumbnails.
+  // We need to pass addLog to processImageWithBadge or capture logs there.
+  // For now, let's just log main steps in handleGenerateThumbnails.
+
   return (
     <div className="space-y-4">
+      {/* ... (Previous UI code) ... */}
+
+      {/* Logs Panel */}
+      <div className="bg-slate-900 text-green-400 p-4 rounded-xl font-mono text-xs max-h-60 overflow-y-auto mb-4">
+        <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
+          <span className="font-bold">Process Logs</span>
+          <button onClick={() => setLogs([])} className="text-slate-400 hover:text-white">Clear</button>
+        </div>
+        {logs.length === 0 ? (
+          <div className="text-slate-600 italic">Ready to process...</div>
+        ) : (
+          logs.map((log, i) => <div key={i}>{log}</div>)
+        )}
+      </div>
+
       {/* 통계 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border p-4">
@@ -250,7 +301,7 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
                   <p className="text-xs font-medium text-slate-700 truncate">{p.name}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400">{p.salePrice?.toLocaleString()}원</span>
-                    {p.regDate && <span className="text-[8px] text-slate-300">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>}
+                    {isMounted && p.regDate && <span className="text-[8px] text-slate-300">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>}
                   </div>
                 </div>
               </div>
@@ -296,7 +347,7 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
                     <p className="font-medium text-slate-800 truncate">{p.name}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-400 font-mono">{p.originProductNo}</span>
-                      {p.regDate && <span className="text-[10px] text-slate-300">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>}
+                      {isMounted && p.regDate && <span className="text-[10px] text-slate-300">{new Date(p.regDate).toLocaleDateString('ko-KR')}</span>}
                     </div>
                   </td>
                   <td className="p-3 text-center font-bold text-slate-700">{getImageCount(p)}</td>

@@ -363,7 +363,7 @@ async function loadProductsFromDB(): Promise<any[] | null> {
         const contents = rows.map((row: any) => {
             const cp = JSON.parse(row.raw_json);
             return {
-                originProductNo: parseInt(row.origin_product_no),
+                originProductNo: String(row.origin_product_no),
                 channelProducts: [cp],
                 descriptionGrade: row.description_grade || null,
             };

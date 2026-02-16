@@ -96,7 +96,7 @@ export function ProductAnalysisDetail({ open, onClose, product, onSaved }: Props
           setGradeReason(v?.gradeReason || '');
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [open, product.originProductNo, product.name]);
 
@@ -224,8 +224,8 @@ export function ProductAnalysisDetail({ open, onClose, product, onSaved }: Props
                           {data.vision.grade && (
                             <Badge className={
                               data.vision.grade === 'S급' ? 'bg-yellow-400 text-yellow-900' :
-                              data.vision.grade === 'A급' ? 'bg-emerald-100 text-emerald-700' :
-                              'bg-orange-100 text-orange-700'
+                                data.vision.grade === 'A급' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-orange-100 text-orange-700'
                             }>{data.vision.grade}</Badge>
                           )}
                         </div>
@@ -293,8 +293,8 @@ export function ProductAnalysisDetail({ open, onClose, product, onSaved }: Props
                     <Badge className="bg-blue-100 text-blue-700">{data.merged.clothingType}</Badge>
                     <Badge className={
                       data.merged.gender === 'MAN' ? 'bg-blue-100 text-blue-600' :
-                      data.merged.gender === 'WOMAN' ? 'bg-pink-100 text-pink-600' :
-                      'bg-slate-100 text-slate-500'
+                        data.merged.gender === 'WOMAN' ? 'bg-pink-100 text-pink-600' :
+                          'bg-slate-100 text-slate-500'
                     }>{data.merged.gender}</Badge>
                     {data.merged.visionGrade && (
                       <Badge className="bg-yellow-100 text-yellow-800">{data.merged.visionGrade}</Badge>
@@ -437,6 +437,7 @@ export function ProductAnalysisDetail({ open, onClose, product, onSaved }: Props
               취소
             </button>
             <button
+              type="button"
               onClick={handleSave}
               disabled={saving}
               className="px-6 py-2 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 transition-colors"

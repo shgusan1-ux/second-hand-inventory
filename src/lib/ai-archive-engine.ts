@@ -78,15 +78,17 @@ const COMBINED_PROMPT = (productName: string, hasImage: boolean) => `당신은 �
 2. WORKWEAR ARCHIVE — 워크웨어/작업복 (Carhartt, Dickies, Red Kap, 초어코트, 커버올, 더블니, 히코리)
 3. OUTDOOR ARCHIVE — 아웃도어 (Patagonia, TNF, Arc'teryx, Gore-Tex, 플리스, 눕시, 아노락)
 4. JAPANESE ARCHIVE — 일본/아메카지 (Visvim, Kapital, Beams, Needles, 셀비지, 인디고, 보로)
-5. HERITAGE EUROPE — 유럽 헤리티지 (Ralph Lauren, Gucci, Prada, Dior, Lacoste, 프레피, 럭셔리)
+5. HERITAGE EUROPE — 유럽 럭셔리/하이엔드만 (Gucci, Prada, Dior, Saint Laurent, Balenciaga, Valentino, Versace 등 유럽 명품)
 6. BRITISH ARCHIVE — 영국 전통 (Barbour, Burberry, Fred Perry, Mackintosh, 왁스코튼, 타탄, 트위드)
-7. UNISEX ARCHIVE — 유니섹스 (남녀공용, 프리사이즈, 오버사이즈, 노브랜드, 젠더리스)
+7. UNISEX ARCHIVE — 미국 캐주얼/대중 브랜드 + 유니섹스 (Polo Ralph Lauren, Tommy Hilfiger, Gap, Nike, Adidas, Champion, Lacoste, Levi's, 남녀공용, 프리사이즈)
 
 분류 규칙:
 - 브랜드 식별이 최우선. 브랜드 원산지와 DNA를 고려
 - 동일 브랜드라도 아이템 특성에 따라 다를 수 있음 (Nike 카고 → MILITARY)
 - 일본 브랜드 → JAPANESE, 영국 브랜드 → BRITISH 우선
-- 이탈리아/프랑스/독일/미국 클래식 → HERITAGE EUROPE
+- HERITAGE EUROPE는 오직 유럽 럭셔리/하이엔드 브랜드만 (Gucci, Prada, Dior 등)
+- 미국 대중 캐주얼 (Polo, Tommy, Gap, Nike, Adidas, Champion, Levi's 등) → UNISEX ARCHIVE
+- Lacoste 등 프렌치 캐주얼도 대중적이면 → UNISEX ARCHIVE
 - 브랜드 불명 + 성별 무관 기본 아이템 → UNISEX ARCHIVE
 - 확신 없으면 confidence 30 이하
 ${hasImage ? '\n- 이미지에서 소재, 패턴, 디테일, 구조를 관찰하여 판단에 활용' : ''}

@@ -13,6 +13,9 @@ const publicPaths = [
   '/favicon.ico',
   '/logo.png',
   '/brown_street.svg',
+  '/models-proxy', // @imgly/background-removal 모델 파일 프록시 (인증 불필요)
+  '/api/smartstore/automation/reclassify-archive', // 재분류 API (curl 호출용)
+  '/api/smartstore/automation/md-strategy', // MD 전략 API (curl 호출용)
 ];
 
 export function middleware(request: NextRequest) {

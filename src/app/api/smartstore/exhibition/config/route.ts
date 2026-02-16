@@ -4,6 +4,7 @@ export async function GET() {
     return NextResponse.json({
         success: true,
         ids: {
+            NEW: process.env.SMARTSTORE_NEW_ID,
             CURATED: process.env.SMARTSTORE_CURATED_ID,
             ARCHIVE: process.env.SMARTSTORE_ARCHIVE_ROOT_ID,
             CLEARANCE: process.env.SMARTSTORE_CLEARANCE_ID,
@@ -11,7 +12,9 @@ export async function GET() {
             WORKWEAR: process.env.SMARTSTORE_ARCHIVE_WORKWEAR_ID,
             JAPAN: process.env.SMARTSTORE_ARCHIVE_JAPAN_ID,
             EUROPE: process.env.SMARTSTORE_ARCHIVE_EUROPE_ID,
-            BRITISH: process.env.SMARTSTORE_ARCHIVE_BRITISH_ID
+            BRITISH: process.env.SMARTSTORE_ARCHIVE_BRITISH_ID,
+            UNISEX: process.env.SMARTSTORE_ARCHIVE_UNISEX_ID,
+            OUTDOOR: process.env.SMARTSTORE_ARCHIVE_OUTDOOR_ID
         }
     });
 }

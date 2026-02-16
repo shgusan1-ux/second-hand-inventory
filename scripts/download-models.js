@@ -11,7 +11,7 @@ const FILES = [
     'imgly_background_removal-simd.wasm' // SIMD Wasm runtime
 ];
 
-const BASE_URL = 'https://static.img.ly/background-removal-data/1.7.0/dist/';
+const BASE_URL = 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
 const DEST_DIR = path.join(process.cwd(), 'public', 'models');
 
 if (!fs.existsSync(DEST_DIR)) {

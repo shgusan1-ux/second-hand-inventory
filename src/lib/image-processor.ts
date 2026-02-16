@@ -1,4 +1,5 @@
-import { removeBackground } from "@imgly/background-removal";
+// @imgly/background-removal은 WASM/ONNX 기반 — SSR에서 초기화 에러 방지를 위해 동적 import
+// import { removeBackground } from "@imgly/background-removal";
 
 interface ProcessOptions {
     imageUrl: string;
@@ -14,61 +15,77 @@ export async function processImageWithBadge({ imageUrl, grade }: ProcessOptions)
     console.log('Starting background removal for:', proxiedUrl);
 
     // Note: @imgly/background-removal fetches the image internally.
-    const blob = await removeBackground(proxiedUrl, {
-        publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.7.0/dist/',
-        debug: true,
-        progress: (key, current, total) => {
-            console.log(`[Background Removal] ${key}: ${current}/${total}`);
-        }
-    });
-
-    // 2. Load cleaned image
-    const imgBitmap = await createImageBitmap(blob);
-
-    // 3. Setup Canvas (1024x1024 standart)
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 1024;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas context failed');
-
-    // Fill Background (Clean Gray/White)
-    ctx.fillStyle = '#F0F0F0';
-    ctx.fillRect(0, 0, 1024, 1024);
-
-    // 4. Draw Product (Center & Fit)
-    // Calculate aspect ratio to fit within 85% of canvas (approx 870px)
-    const targetSize = 1024 * 0.85;
-    const scale = Math.min(targetSize / imgBitmap.width, targetSize / imgBitmap.height);
-    const w = imgBitmap.width * scale;
-    const h = imgBitmap.height * scale;
-    const x = (1024 - w) / 2;
-    const y = (1024 - h) / 2;
-
-    ctx.drawImage(imgBitmap, x, y, w, h);
-
-    // 5. Draw Badge
-    // We need to load badge images. Assuming they are in /images/grades/
-    const badgeUrl = `/images/grades/${grade.toLowerCase()}grade.png`;
     try {
-        const badgeImg = await loadImage(badgeUrl);
-        const badgeWidth = 1024 * 0.18; // 18% size
-        const badgeHeight = badgeWidth * (badgeImg.height / badgeImg.width);
+        console.log(`[Processor] Requesting background removal...`);
+        console.log(`[Processor] Model Path: ${origin}/models-proxy/ (isnet_quint8)`);
 
-        // Draw badge at top-right with padding
-        // Opacity 1.0 (or set ctx.globalAlpha = 0.8 etc)
-        ctx.drawImage(badgeImg, 1024 - badgeWidth - 50, 50, badgeWidth, badgeHeight);
-    } catch (e) {
-        console.error('Failed to load badge:', badgeUrl);
+        // 동적 import — 실제 사용 시에만 WASM/ONNX 모듈 로드
+        const { removeBackground } = await import("@imgly/background-removal");
+
+        const blob = await removeBackground(proxiedUrl, {
+            // Next.js rewrite가 /models-proxy/ → staticimgly.com으로 프록시 (CORS 우회)
+            publicPath: `${origin}/models-proxy/`,
+            model: 'isnet_quint8', // 44MB (fp16: 88MB, full: 176MB) - 충분한 품질, 빠른 다운로드
+            debug: true,
+            progress: (key, current, total) => {
+                console.log(`[Processor] Progress (${key}): ${Math.round(current / total * 100)}%`);
+            }
+        });
+        console.log(`[Processor] Background removed! Blob size: ${blob.size} bytes`);
+
+        // 2. Load cleaned image
+        const imgBitmap = await createImageBitmap(blob);
+        console.log(`[Processor] Image bitmap created: ${imgBitmap.width}x${imgBitmap.height}`);
+
+        // 3. Setup Canvas (1024x1024 standsart)
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas context failed');
+
+        // Fill Background (Clean Gray/White)
+        ctx.fillStyle = '#F0F0F0';
+        ctx.fillRect(0, 0, 1024, 1024);
+
+        // 4. Draw Product (Center & Fit)
+        const targetSize = 1024 * 0.85;
+        const scale = Math.min(targetSize / imgBitmap.width, targetSize / imgBitmap.height);
+        const w = imgBitmap.width * scale;
+        const h = imgBitmap.height * scale;
+        const x = (1024 - w) / 2;
+        const y = (1024 - h) / 2;
+
+        ctx.drawImage(imgBitmap, x, y, w, h);
+
+        // 5. Draw Badge
+        const badgeUrl = `/images/grades/${grade.toLowerCase()}grade.png`;
+        console.log(`[Processor] Loading badge: ${badgeUrl}`);
+        try {
+            const badgeImg = await loadImage(badgeUrl);
+            const badgeWidth = 1024 * 0.18; // 18% size
+            const badgeHeight = badgeWidth * (badgeImg.height / badgeImg.width);
+            ctx.drawImage(badgeImg, 1024 - badgeWidth - 50, 50, badgeWidth, badgeHeight);
+            console.log(`[Processor] Badge composite success`);
+        } catch (e) {
+            console.error('[Processor] Failed to load badge (skipping):', badgeUrl);
+        }
+
+        // 6. Export to Blob
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (blob) {
+                    console.log(`[Processor] Final thumbnail generated: ${blob.size} bytes`);
+                    resolve(blob);
+                }
+                else reject(new Error('Canvas to Blob failed'));
+            }, 'image/jpeg', 0.95);
+        });
+
+    } catch (e: any) {
+        console.error('[Processor] Critical Error:', e);
+        throw e;
     }
-
-    // 6. Export to Blob
-    return new Promise((resolve, reject) => {
-        canvas.toBlob(blob => {
-            if (blob) resolve(blob);
-            else reject(new Error('Canvas to Blob failed'));
-        }, 'image/jpeg', 0.95);
-    });
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

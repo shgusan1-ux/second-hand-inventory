@@ -15,33 +15,28 @@ export function WeatherLogo({ className }: { className?: string }) {
     useEffect(() => {
         setMounted(true);
         // 기본값: 서울 좌표 (37.5665, 126.9780)
+        const lat = 37.5665;
+        const lon = 126.9780;
+
         const fetchWeather = async (lat: number, lon: number) => {
             try {
                 const res = await fetch(
                     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
                 );
+                if (!res.ok) throw new Error("Weather API failed");
                 const data = await res.json();
                 setWeather({
                     temperature: data.current_weather.temperature,
                     weatherCode: data.current_weather.weathercode,
                 });
             } catch (e) {
-                console.error("Weather fetch failed", e);
+                console.warn("Weather fetch failed (using default):", e);
+                // Fallback weather if API fails
+                setWeather({ temperature: 10, weatherCode: 0 });
             }
         };
 
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    fetchWeather(position.coords.latitude, position.coords.longitude);
-                },
-                () => {
-                    fetchWeather(37.5665, 126.9780); // 권한 거부시 서울
-                }
-            );
-        } else {
-            fetchWeather(37.5665, 126.9780);
-        }
+        fetchWeather(lat, lon);
     }, []);
 
     if (!mounted) return <img src="/logo.png" alt="Brownstreet" className={className} />;

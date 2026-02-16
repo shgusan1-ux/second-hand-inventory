@@ -71,6 +71,8 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [movingCategory, setMovingCategory] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
+  const [syncingDisplay, setSyncingDisplay] = useState(false);
+  const [displaySyncProgress, setDisplaySyncProgress] = useState<{ current: number; total: number; message: string } | null>(null);
 
   // 카테고리 네비게이션
   const [stageFilter, setStageFilter] = useState<string>('ALL');
@@ -135,8 +137,8 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const archiveSubOverflows = useMemo(() => {
     const overflows: { sub: string; label: string; count: number; overflow: number; ids: string[] }[] = [];
     const labelMap: Record<string, string> = {
-      'MILITARY ARCHIVE': '밀리터리', 'WORKWEAR ARCHIVE': '워크웨어', 'OUTDOOR ARCHIVE': '아웃도어',
-      'JAPANESE ARCHIVE': '일본감성', 'HERITAGE EUROPE': '유럽헤리티지', 'BRITISH ARCHIVE': '영국전통', 'UNISEX ARCHIVE': '유니섹스'
+      'MILITARY ARCHIVE': 'Military', 'WORKWEAR ARCHIVE': 'Workwear', 'OUTDOOR ARCHIVE': 'Outdoor',
+      'JAPANESE ARCHIVE': 'Japan', 'HERITAGE EUROPE': 'Euro Vintage', 'BRITISH ARCHIVE': 'British', 'UNISEX ARCHIVE': 'Unisex'
     };
     for (const sub of ARCHIVE_SUBS) {
       const subCount = archiveSubCounts[sub] || 0;
@@ -221,7 +223,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
             data: {
               ...old.data,
               contents: old.data.contents.map((p: any) =>
-                selectedIds.includes(p.originProductNo)
+                selectedIds.includes(String(p.originProductNo))
                   ? { ...p, internalCategory: category, archiveTier: category }
                   : p
               )
@@ -247,7 +249,6 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   // NEW 초과분 → CURATED 일괄 이동
   const moveOverflowToCurated = async () => {
     if (newOverflowIds.length === 0) return;
-    if (!confirm(`NEW 상품 중 가장 오래된 ${newOverflowIds.length}개를 CURATED로 이동하시겠습니까?`)) return;
     setMovingCategory(true);
     try {
       const res = await fetch('/api/smartstore/products/category/bulk', {
@@ -260,13 +261,13 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
         toast.success(`${newOverflowIds.length}개 상품 → CURATED 이동 완료`);
         queryClient.setQueryData(['all-products'], (old: any) => {
           if (!old?.data?.contents) return old;
-          const moveSet = new Set(newOverflowIds);
+          const moveSet = new Set(newOverflowIds.map(String));
           return {
             ...old,
             data: {
               ...old.data,
               contents: old.data.contents.map((p: any) =>
-                moveSet.has(p.originProductNo)
+                moveSet.has(String(p.originProductNo))
                   ? { ...p, internalCategory: 'CURATED', archiveTier: 'CURATED' }
                   : p
               )
@@ -287,26 +288,25 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   // CURATED 초과분 → ARCHIVE 일괄 이동
   const moveOverflowToArchive = async () => {
     if (curatedOverflowIds.length === 0) return;
-    if (!confirm(`큐레이티드 중 가장 오래된 ${curatedOverflowIds.length}개를 아카이브로 이동하시겠습니까?`)) return;
     setMovingCategory(true);
     try {
       const res = await fetch('/api/smartstore/products/category/bulk', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productNos: curatedOverflowIds, category: 'ARCHIVE' })
+        body: JSON.stringify({ productNos: curatedOverflowIds.map(String), category: 'ARCHIVE' })
       });
       const data = await res.json();
       if (data.success) {
         toast.success(`${curatedOverflowIds.length}개 상품 → 아카이브 이동 완료`);
         queryClient.setQueryData(['all-products'], (old: any) => {
           if (!old?.data?.contents) return old;
-          const moveSet = new Set(curatedOverflowIds);
+          const moveSet = new Set(curatedOverflowIds.map(String));
           return {
             ...old,
             data: {
               ...old.data,
               contents: old.data.contents.map((p: any) =>
-                moveSet.has(p.originProductNo)
+                moveSet.has(String(p.originProductNo))
                   ? { ...p, internalCategory: 'ARCHIVE', archiveTier: 'ARCHIVE' }
                   : p
               )
@@ -327,7 +327,6 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   // ARCHIVE 중분류별 초과분 → CLEARANCE 일괄 이동
   const moveArchiveSubOverflow = async (subLabel: string, ids: string[]) => {
     if (ids.length === 0) return;
-    if (!confirm(`${subLabel} 중 가장 오래된 ${ids.length}개를 클리어런스로 이동하시겠습니까?`)) return;
     setMovingCategory(true);
     try {
       const res = await fetch('/api/smartstore/products/category/bulk', {
@@ -346,7 +345,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
             data: {
               ...old.data,
               contents: old.data.contents.map((p: any) =>
-                moveSet.has(p.originProductNo)
+                moveSet.has(String(p.originProductNo))
                   ? { ...p, internalCategory: 'CLEARANCE', archiveTier: 'CLEARANCE' }
                   : p
               )
@@ -386,7 +385,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
             data: {
               ...old.data,
               contents: old.data.contents.map((p: any) => {
-                if (!selectedIds.includes(p.originProductNo)) return p;
+                if (!selectedIds.includes(String(p.originProductNo))) return p;
                 // 라이프사이클 스테이지로 자동 복원
                 const stage = p.lifecycle?.stage || 'NEW';
                 return { ...p, internalCategory: stage, archiveTier: null };
@@ -407,6 +406,89 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
       toast.error('복원 오류: ' + err.message);
     } finally {
       setMovingCategory(false);
+    }
+  };
+
+  // 범용 네이버 전시카테고리 동기화 (모든 스테이지에서 사용)
+  const syncExhibition = async (targetCategory?: string) => {
+    // 대상 카테고리 결정: 인자로 받거나, 현재 필터 기반
+    const category = targetCategory || (stageFilter === 'CLEARANCE' ? 'CLEARANCE' : stageFilter === 'ARCHIVE' ? subFilter : stageFilter);
+
+    // 대상 상품: 선택된 상품 또는 현재 필터의 전체 상품
+    let targetIds: string[];
+    if (selectedIds.length > 0) {
+      targetIds = selectedIds;
+    } else if (category === 'NEW') {
+      targetIds = products.filter(p => p.internalCategory === 'NEW').map(p => p.originProductNo);
+    } else if (category === 'CURATED') {
+      targetIds = products.filter(p => p.internalCategory === 'CURATED').map(p => p.originProductNo);
+    } else if (category === 'CLEARANCE' || isClearanceCategory(category)) {
+      targetIds = products.filter(p => isClearanceCategory(p.internalCategory)).map(p => p.originProductNo);
+    } else if (ARCHIVE_SUBS.includes(category)) {
+      targetIds = products.filter(p => p.internalCategory === category).map(p => p.originProductNo);
+    } else {
+      toast.error('동기화할 상품을 선택하거나 카테고리를 지정하세요');
+      return;
+    }
+
+    if (targetIds.length === 0) {
+      toast.error('동기화할 상품이 없습니다');
+      return;
+    }
+
+    setSyncingDisplay(true);
+    setDisplaySyncProgress({ current: 0, total: targetIds.length, message: '동기화 시작...' });
+
+    try {
+      const res = await fetch('/api/smartstore/exhibition/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos: targetIds, internalCategory: category }),
+      });
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('스트림 없음');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'progress' || data.type === 'result') {
+              setDisplaySyncProgress({
+                current: data.current || 0,
+                total: data.total || targetIds.length,
+                message: data.message || '',
+              });
+            }
+            if (data.type === 'result' && data.success) {
+              toast.success(data.message, { duration: 2000 });
+            }
+            if (data.type === 'result' && !data.success) {
+              toast.error(data.message, { duration: 3000 });
+            }
+            if (data.type === 'complete') {
+              toast.success(data.message);
+            }
+          } catch { /* parse error */ }
+        }
+      }
+    } catch (err: any) {
+      toast.error('동기화 오류: ' + err.message);
+    } finally {
+      setSyncingDisplay(false);
+      setDisplaySyncProgress(null);
+      setSelectedIds([]);
     }
   };
 
@@ -654,7 +736,31 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
               >
                 30일 경과 {newOver30Count}
               </button>
+              <span className="w-px h-5 bg-slate-200 self-center" />
+              <button
+                onClick={() => syncExhibition('NEW')}
+                disabled={syncingDisplay}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'}`}
+              >
+                {syncingDisplay
+                  ? `동기화 중... ${displaySyncProgress ? `${displaySyncProgress.current}/${displaySyncProgress.total}` : ''}`
+                  : `스마트스토어 상품 전송 ${stageCounts.NEW}`
+                }
+              </button>
             </div>
+            {displaySyncProgress && stageFilter === 'NEW' && (
+              <div className="space-y-1 mt-2">
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div
+                    className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${displaySyncProgress.total > 0 ? (displaySyncProgress.current / displaySyncProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">
+                  {displaySyncProgress.message} · <span className="text-orange-600 font-bold underline">전송기록 탭에서 결과 확인 가능</span>
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -693,7 +799,29 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   {label} {count}
                 </button>
               ))}
+              <span className="w-px h-5 bg-slate-200 self-center" />
+              <button
+                onClick={() => syncExhibition('CURATED')}
+                disabled={syncingDisplay}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'}`}
+              >
+                {syncingDisplay
+                  ? `동기화 중... ${displaySyncProgress ? `${displaySyncProgress.current}/${displaySyncProgress.total}` : ''}`
+                  : `스마트스토어 상품 전송 ${stageCounts.CURATED}`
+                }
+              </button>
             </div>
+            {displaySyncProgress && stageFilter === 'CURATED' && (
+              <div className="space-y-1 mt-2">
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div
+                    className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${displaySyncProgress.total > 0 ? (displaySyncProgress.current / displaySyncProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">{displaySyncProgress.message}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -733,7 +861,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   onClick={() => handleSubChange(sub)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${subFilter === sub ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  {sub === 'MILITARY ARCHIVE' ? '밀리터리' : sub === 'WORKWEAR ARCHIVE' ? '워크웨어' : sub === 'OUTDOOR ARCHIVE' ? '아웃도어' : sub === 'JAPANESE ARCHIVE' ? '일본감성' : sub === 'HERITAGE EUROPE' ? '유럽헤리티지' : sub === 'BRITISH ARCHIVE' ? '영국전통' : '유니섹스'} {archiveSubCounts[sub]}
+                  {sub === 'MILITARY ARCHIVE' ? 'Military' : sub === 'WORKWEAR ARCHIVE' ? 'Workwear' : sub === 'OUTDOOR ARCHIVE' ? 'Outdoor' : sub === 'JAPANESE ARCHIVE' ? 'Japan' : sub === 'HERITAGE EUROPE' ? 'Euro Vintage' : sub === 'BRITISH ARCHIVE' ? 'British' : 'Unisex'} {archiveSubCounts[sub]}
                 </button>
               ))}
               <button
@@ -749,14 +877,57 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
               >
                 120일 경과 {archiveOver120Count}
               </button>
+              {archiveSubCounts['UNASSIGNED'] > 0 && (
+                <>
+                  <span className="w-px h-5 bg-slate-200 self-center" />
+                  <button
+                    onClick={() => {
+                      const unclassifiedIds = products
+                        .filter(p => p.internalCategory === 'ARCHIVE')
+                        .map(p => p.originProductNo);
+                      setSelectedIds(unclassifiedIds);
+                      toast.success(`미분류 ${unclassifiedIds.length}개 선택됨 → AI 분류 버튼을 눌러주세요`);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200"
+                  >
+                    미분류 {archiveSubCounts['UNASSIGNED']}개 선택
+                  </button>
+                </>
+              )}
+              {subFilter !== 'ALL' && subFilter !== 'UNASSIGNED' && (
+                <>
+                  <span className="w-px h-5 bg-slate-200 self-center" />
+                  <button
+                    onClick={() => syncExhibition(subFilter)}
+                    disabled={syncingDisplay}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'}`}
+                  >
+                    {syncingDisplay
+                      ? `동기화 중... ${displaySyncProgress ? `${displaySyncProgress.current}/${displaySyncProgress.total}` : ''}`
+                      : `스마트스토어 상품 전송 ${archiveSubCounts[subFilter] || 0}`
+                    }
+                  </button>
+                </>
+              )}
             </div>
+            {displaySyncProgress && stageFilter === 'ARCHIVE' && (
+              <div className="space-y-1 px-4 pb-2">
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div
+                    className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${displaySyncProgress.total > 0 ? (displaySyncProgress.current / displaySyncProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">{displaySyncProgress.message}</p>
+              </div>
+            )}
           </div>
         )}
 
         {/* CLEARANCE 세부 카테고리 */}
         {stageFilter === 'CLEARANCE' && (
-          <div className="border-t border-slate-100 px-4 py-3">
-            <div className="flex gap-2 flex-wrap">
+          <div className="border-t border-slate-100 px-4 py-3 space-y-3">
+            <div className="flex gap-2 flex-wrap items-center">
               {([
                 ['ALL', '전체', clearanceSubCounts.ALL],
                 ['CLEARANCE', '폐기검토', clearanceSubCounts.CLEARANCE],
@@ -771,7 +942,29 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   {label} {count}
                 </button>
               ))}
+              <span className="w-px h-5 bg-slate-200 self-center" />
+              <button
+                onClick={() => syncExhibition()}
+                disabled={syncingDisplay}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'}`}
+              >
+                {syncingDisplay
+                  ? `동기화 중... ${displaySyncProgress ? `${displaySyncProgress.current}/${displaySyncProgress.total}` : ''}`
+                  : `스마트스토어 상품 전송 ${clearanceSubCounts.ALL}`
+                }
+              </button>
             </div>
+            {displaySyncProgress && (
+              <div className="space-y-1">
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div
+                    className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${displaySyncProgress.total > 0 ? (displaySyncProgress.current / displaySyncProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">{displaySyncProgress.message}</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -794,17 +987,28 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                 상품코드 복사
               </button>
               {stageFilter === 'ARCHIVE' && (
-                <button
-                  onClick={() => moveToCategory('CLEARANCE')}
-                  disabled={movingCategory}
-                  className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-amber-500 text-white hover:bg-amber-600"
-                >
-                  {movingCategory ? '이동 중...' : '클리어런스 이동'}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => moveToCategory('CLEARANCE')}
+                    disabled={movingCategory}
+                    className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-amber-500 text-white hover:bg-amber-600"
+                  >
+                    {movingCategory ? '이동 중...' : '클리어런스 이동'}
+                  </button>
+                  <button
+                    onClick={() => syncExhibition()}
+                    disabled={syncingDisplay}
+                    className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-500 text-white hover:bg-orange-600'}`}
+                  >
+                    {syncingDisplay ? '동기화 중...' : '네이버 전시카테고리'}
+                  </button>
+                </>
               )}
               {stageFilter === 'CLEARANCE' && (
                 <>
                   <button
+                    type="button"
                     onClick={() => moveToCategory('CLEARANCE_KEEP')}
                     disabled={movingCategory}
                     className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-emerald-500 text-white hover:bg-emerald-600"
@@ -812,11 +1016,19 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                     {movingCategory ? '이동 중...' : '유지'}
                   </button>
                   <button
+                    type="button"
                     onClick={() => moveToCategory('CLEARANCE_DISPOSE')}
                     disabled={movingCategory}
                     className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-red-500 text-white hover:bg-red-600"
                   >
                     {movingCategory ? '이동 중...' : '폐기'}
+                  </button>
+                  <button
+                    onClick={() => syncExhibition()}
+                    disabled={syncingDisplay}
+                    className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${syncingDisplay ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-500 text-white hover:bg-orange-600'}`}
+                  >
+                    {syncingDisplay ? '동기화 중...' : '네이버 전시카테고리'}
                   </button>
                 </>
               )}
@@ -826,6 +1038,13 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                 className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${classifyingAI ? 'bg-violet-500 text-white animate-pulse' : 'bg-violet-500 text-white hover:bg-violet-600'}`}
               >
                 {classifyingAI ? 'AI 분류 중...' : 'AI 분류'}
+              </button>
+              <button
+                onClick={() => resetToAuto()}
+                disabled={movingCategory || classifyingAI}
+                className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              >
+                {movingCategory ? '처리 중...' : '분류 취소'}
               </button>
               <button
                 onClick={() => setShowMoveMenu(!showMoveMenu)}
@@ -850,7 +1069,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                       disabled={movingCategory}
                       className="px-2 py-2.5 text-[10px] font-semibold bg-white/5 text-white/70 rounded-lg hover:bg-white/15 hover:text-white transition-colors text-center leading-tight"
                     >
-                      {cat === 'MILITARY ARCHIVE' ? '밀리터리' : cat === 'WORKWEAR ARCHIVE' ? '워크웨어' : cat === 'OUTDOOR ARCHIVE' ? '아웃도어' : cat === 'JAPANESE ARCHIVE' ? '일본감성' : cat === 'HERITAGE EUROPE' ? '유럽헤리티지' : cat === 'BRITISH ARCHIVE' ? '영국전통' : '유니섹스'}
+                      {cat === 'MILITARY ARCHIVE' ? 'Military' : cat === 'WORKWEAR ARCHIVE' ? 'Workwear' : cat === 'OUTDOOR ARCHIVE' ? 'Outdoor' : cat === 'JAPANESE ARCHIVE' ? 'Japan' : cat === 'HERITAGE EUROPE' ? 'Euro Vintage' : cat === 'BRITISH ARCHIVE' ? 'British' : 'Unisex'}
                     </button>
                   ))}
                 </div>
@@ -1130,7 +1349,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${p.internalCategory === 'UNCATEGORIZED' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-500'
                         }`}>
-                        {p.internalCategory === 'NEW' ? '신규' : p.internalCategory === 'CURATED' ? '큐레이티드' : p.internalCategory === 'ARCHIVE' ? '아카이브' : p.internalCategory === 'CLEARANCE' ? '폐기검토' : p.internalCategory === 'CLEARANCE_KEEP' ? '유지' : p.internalCategory === 'CLEARANCE_DISPOSE' ? '폐기' : p.internalCategory === 'MILITARY ARCHIVE' ? '밀리터리' : p.internalCategory === 'WORKWEAR ARCHIVE' ? '워크웨어' : p.internalCategory === 'OUTDOOR ARCHIVE' ? '아웃도어' : p.internalCategory === 'JAPANESE ARCHIVE' ? '일본감성' : p.internalCategory === 'HERITAGE EUROPE' ? '유럽헤리티지' : p.internalCategory === 'BRITISH ARCHIVE' ? '영국전통' : p.internalCategory === 'UNISEX ARCHIVE' ? '유니섹스' : p.internalCategory === 'UNCATEGORIZED' ? '미분류' : p.internalCategory || '미지정'}
+                        {p.internalCategory === 'NEW' ? '신규' : p.internalCategory === 'CURATED' ? '큐레이티드' : p.internalCategory === 'ARCHIVE' ? '아카이브' : p.internalCategory === 'CLEARANCE' ? '폐기검토' : p.internalCategory === 'CLEARANCE_KEEP' ? '유지' : p.internalCategory === 'CLEARANCE_DISPOSE' ? '폐기' : p.internalCategory === 'MILITARY ARCHIVE' ? 'Military' : p.internalCategory === 'WORKWEAR ARCHIVE' ? 'Workwear' : p.internalCategory === 'OUTDOOR ARCHIVE' ? 'Outdoor' : p.internalCategory === 'JAPANESE ARCHIVE' ? 'Japan' : p.internalCategory === 'HERITAGE EUROPE' ? 'Euro Vintage' : p.internalCategory === 'BRITISH ARCHIVE' ? 'British' : p.internalCategory === 'UNISEX ARCHIVE' ? 'Unisex' : p.internalCategory === 'UNCATEGORIZED' ? '미분류' : p.internalCategory || '미지정'}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mb-2">

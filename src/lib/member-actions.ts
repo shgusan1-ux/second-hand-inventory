@@ -4,42 +4,11 @@ import { db } from './db';
 import { getSession, logAction } from './auth';
 import { revalidatePath } from 'next/cache';
 
-async function ensureTables() {
-    try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS user_permissions (
-                user_id TEXT,
-                category TEXT,
-                PRIMARY KEY (user_id, category)
-            )
-        `);
-        // SQLite uses TEXT for dates usually
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS attendance_logs (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                work_date TEXT,
-                check_in TEXT,
-                check_out TEXT,
-                correction_status TEXT, -- Pending, Approved, Rejected
-                correction_data TEXT, -- JSON
-                note TEXT
-            )
-        `);
-
-        // Add columns if they don't exist (for existing tables)
-        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN correction_status TEXT'); } catch (e) { }
-        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN correction_data TEXT'); } catch (e) { }
-        try { await db.query('ALTER TABLE attendance_logs ADD COLUMN note TEXT'); } catch (e) { }
-    } catch (e) {
-        console.error("Member tables init error:", e);
-    }
-}
+// Member actions no longer need local ensureTables as db.ts handles central initialization
 
 // --- Permissions ---
 
 export async function getUserPermissions(userId: string) {
-    await ensureTables();
     try {
         // 1. Check explicit permissions
         const res = await db.query('SELECT category FROM user_permissions WHERE user_id = $1', [userId]);
@@ -73,8 +42,6 @@ export async function updateUserPermissions(targetUserId: string, categories: st
     // Check Auth
     if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
 
-    await ensureTables();
-
     try {
         // Preserve ADMIN permission if it exists, as UI usually sends only standard categories
         const existingAdmin = await db.query('SELECT 1 FROM user_permissions WHERE user_id = $1 AND category = $2', [targetUserId, 'ADMIN']);
@@ -106,8 +73,6 @@ export async function updateUserPermissions(targetUserId: string, categories: st
 export async function toggleAdminPermission(targetUserId: string, isAdmin: boolean) {
     // Check Auth
     if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
-
-    await ensureTables();
 
     try {
         if (isAdmin) {
@@ -147,7 +112,6 @@ function getKSTISO() {
 }
 
 export async function getTodayAttendance(userId: string) {
-    await ensureTables();
     const dateStr = getKSTDate();
     try {
         const res = await db.query('SELECT * FROM attendance_logs WHERE user_id = $1 AND work_date = $2', [userId, dateStr]);
@@ -161,7 +125,6 @@ export async function checkIn() {
     const session = await getSession();
     if (!session) return { success: false, error: 'Login required' };
 
-    await ensureTables();
     const dateStr = getKSTDate();
     const now = getKSTISO();
 
@@ -228,8 +191,6 @@ export async function requestCorrection(date: string, checkIn: string, checkOut:
     const session = await getSession();
     if (!session) return { success: false, error: 'Login required' };
 
-    await ensureTables();
-
     // Check if log exists for that date
     const existing = await db.query('SELECT id FROM attendance_logs WHERE user_id = $1 AND work_date = $2', [session.id, date]);
     let logId = existing.rows[0]?.id;
@@ -263,8 +224,6 @@ export async function requestCorrection(date: string, checkIn: string, checkOut:
 export async function approveCorrection(id: string) {
     if (!(await isAuthorized())) return { success: false, error: 'Unauthorized' };
     const session = await getSession(); // needed for name
-
-    await ensureTables();
 
     try {
         const res = await db.query('SELECT correction_data FROM attendance_logs WHERE id = $1', [id]);
@@ -304,8 +263,6 @@ export async function rejectCorrection(id: string) {
 
 export async function getPendingCorrections() {
     if (!(await isAuthorized())) return [];
-
-    await ensureTables();
     try {
         const res = await db.query(`
             SELECT l.*, u.name as user_name, u.job_title
@@ -376,4 +333,27 @@ export async function getUsersWithPermissions() {
             permissions
         };
     });
+}
+
+export async function getAllTodayAttendance() {
+    const dateStr = getKSTDate();
+    try {
+        const res = await db.query(`
+            SELECT 
+                u.id, 
+                u.name, 
+                u.job_title,
+                l.work_date,
+                l.check_in,
+                l.check_out,
+                l.correction_status
+            FROM users u
+            LEFT JOIN attendance_logs l ON u.id = l.user_id AND l.work_date = $1
+            ORDER BY u.name ASC
+        `, [dateStr]);
+        return res.rows;
+    } catch (e) {
+        console.error("Failed to fetch all today attendance:", e);
+        return [];
+    }
 }

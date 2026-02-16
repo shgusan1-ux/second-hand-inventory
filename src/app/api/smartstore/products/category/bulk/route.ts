@@ -6,17 +6,20 @@ import { handleApiError, handleSuccess } from '@/lib/api-utils';
 export async function PUT(request: Request) {
     try {
         const body = await request.json();
-        const { productNos, category, reset } = body;
+        const { productNos: rawProductNos, category, reset } = body;
 
-        if (!Array.isArray(productNos) || productNos.length === 0) {
+        if (!Array.isArray(rawProductNos) || rawProductNos.length === 0) {
             return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
         }
+
+        // ID를 반드시 문자열로 변환 (number/string 혼용 방지)
+        const productNos: string[] = rawProductNos.map((id: any) => String(id));
 
         if (!category && !reset) {
             return NextResponse.json({ success: false, error: 'category or reset required' }, { status: 400 });
         }
 
-        const now = new Date();
+        const now = new Date().toISOString();
 
         if (reset) {
             // 자동 분류로 복원: internal_category를 NULL로

@@ -21,7 +21,7 @@ interface Product {
   stockQuantity: number;
   statusType: string;
   thumbnailUrl?: string | null;
-  lifecycle?: { stage: string; daysSince: number; discount: number };
+  lifecycle?: { stage: string; daysSince: number; discountRate: number };
   internalCategory?: string;
   archiveTier?: string; // 수동 확정된 아카이브 tier (lifecycle 무관)
   classification?: Classification & { visionStatus?: string; visionGrade?: string };
@@ -98,6 +98,8 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     byLifecycle: Record<string, number>;
     matchedCount: number;
     unmatchedCount: number;
+    byGrade: Record<string, number>;
+    visionCompleted: number;
   }>(() => {
     const classified = products.filter(p => p.classification);
     const total = products.length;

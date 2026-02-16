@@ -13,7 +13,9 @@ import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
 import { MemoWidget } from '@/components/dashboard/memo-widget';
 import { AttendanceClockWidget } from '@/components/layout/attendance-clock-widget';
 import { OrgChart } from '@/components/dashboard/org-chart';
+import { AttendanceSummaryWidget } from '@/components/dashboard/attendance-summary-widget';
 import { getMeetings } from '@/lib/meeting-actions';
+import { getAllTodayAttendance } from '@/lib/member-actions';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +34,7 @@ export default async function DashboardPage() {
   const tasks = await getDashboardTasks();
   const memos = await getMemos();
   const orgUsers = await getUsersForOrgChart();
+  const attendanceRecords = await getAllTodayAttendance();
 
   // Fetch meetings directly
   const meetings: any[] = await getMeetings(3) as any[];
@@ -57,7 +60,7 @@ export default async function DashboardPage() {
       {/* 2. KPI Metrics Cards (Anti-Gravity) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Inventory */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 anti-gravity-1 anti-gravity-card">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 ag-float-1 ag-card">
           <div className="flex justify-between items-start">
             <span className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
               <Package className="w-6 h-6" />
@@ -70,7 +73,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Today In/Out */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 anti-gravity-2 anti-gravity-card">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 ag-float-2 ag-card">
           <div className="flex justify-between items-start">
             <span className="p-2 rounded-lg bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
               <ArrowLeftRight className="w-6 h-6" />
@@ -83,7 +86,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Weekly Status */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 anti-gravity-5 anti-gravity-card">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 ag-float-5 ag-card">
           <div className="flex justify-between items-start">
             <span className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
               <Calendar className="w-6 h-6" />
@@ -96,7 +99,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Monthly Status */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 anti-gravity-4 anti-gravity-card">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 ag-float-4 ag-card">
           <div className="flex justify-between items-start">
             <span className="p-2 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400">
               <BarChart3 className="w-6 h-6" />
@@ -115,7 +118,7 @@ export default async function DashboardPage() {
         <div className="xl:col-span-2 space-y-6">
 
           {/* Weather-based AI Strategy */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden anti-gravity-5 anti-gravity-card">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden ag-float-5 ag-card">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-900 dark:bg-white rounded-lg text-white dark:text-slate-900">
@@ -184,7 +187,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Organization Chart */}
-          <div className="anti-gravity-1 anti-gravity-card">
+          <div className="ag-float-1 ag-card">
             <OrgChart users={orgUsers} />
           </div>
         </div>
@@ -192,7 +195,7 @@ export default async function DashboardPage() {
         {/* Right Column (Attendance, Updates, Memos) */}
         <div className="space-y-6">
           {/* Attendance & Meetings */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden anti-gravity-5 anti-gravity-card">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden ag-float-5 ag-card">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-white">출퇴근</h3>
@@ -243,8 +246,13 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* Today's Attendance Status (Whole Staff) */}
+          <div className="ag-float-4 ag-card">
+            <AttendanceSummaryWidget records={attendanceRecords} />
+          </div>
+
           {/* Recent Updates */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm anti-gravity-2 anti-gravity-card overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ag-float-2 ag-card overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700">
               <h3 className="font-bold text-slate-900 dark:text-white">최근 업데이트</h3>
             </div>
@@ -254,7 +262,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Shared Memo Pad */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm anti-gravity-1 anti-gravity-card overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ag-float-1 ag-card overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-white">공유 메모</h3>
             </div>

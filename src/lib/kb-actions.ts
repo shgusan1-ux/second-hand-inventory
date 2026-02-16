@@ -6,30 +6,7 @@ import { revalidatePath } from 'next/cache';
 
 // --- Database Schema ---
 
-async function ensureKBTables() {
-    await db.query(`
-        CREATE TABLE IF NOT EXISTS kb_categories (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT,
-            order_index INTEGER DEFAULT 0
-        )
-    `);
-
-    await db.query(`
-        CREATE TABLE IF NOT EXISTS kb_articles (
-            id TEXT PRIMARY KEY,
-            category_id TEXT,
-            title TEXT NOT NULL,
-            content TEXT, -- HTML or Markdown
-            author_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            views INTEGER DEFAULT 0,
-            FOREIGN KEY (category_id) REFERENCES kb_categories(id)
-        )
-    `);
-}
+// KB Table initialization is now handled centrally in db.ts
 
 // --- Types ---
 export interface KBCategory {
@@ -55,7 +32,6 @@ export interface KBArticle {
 // --- Actions ---
 
 export async function getCategories() {
-    await ensureKBTables();
     try {
         const res = await db.query('SELECT * FROM kb_categories ORDER BY order_index ASC');
         return res.rows;
@@ -68,7 +44,6 @@ export async function createCategory(name: string, description: string) {
     const session = await getSession();
     if (!session || !['대표자', '경영지원', '개발팀'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
 
-    await ensureKBTables();
     const id = Math.random().toString(36).substring(2, 10);
     try {
         await db.query('INSERT INTO kb_categories (id, name, description) VALUES ($1, $2, $3)', [id, name, description]);
@@ -80,7 +55,6 @@ export async function createCategory(name: string, description: string) {
 }
 
 export async function getArticles(categoryId?: string, search?: string) {
-    await ensureKBTables();
     try {
         let query = `
             SELECT a.*, u.name as author_name, c.name as category_name
@@ -111,7 +85,6 @@ export async function getArticles(categoryId?: string, search?: string) {
 }
 
 export async function getArticle(id: string) {
-    await ensureKBTables();
     try {
         // Increment views
         await db.query('UPDATE kb_articles SET views = views + 1 WHERE id = $1', [id]);
@@ -133,7 +106,6 @@ export async function createArticle(data: { categoryId: string, title: string, c
     const session = await getSession();
     if (!session) return { success: false, error: 'Login required' };
 
-    await ensureKBTables();
     const id = Math.random().toString(36).substring(2, 12);
 
     try {
