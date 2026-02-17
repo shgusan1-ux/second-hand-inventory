@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ProductManagementTab } from '@/components/smartstore/product-management-tab';
+import { ProductManagementTab, type AIClassifySettings } from '@/components/smartstore/product-management-tab';
 import { CategoryManagementTab } from '@/components/smartstore/category-management-tab';
 import { InventoryManagementTab } from '@/components/smartstore/inventory-management-tab';
 import { PriceManagementTab } from '@/components/smartstore/price-management-tab';
@@ -11,6 +11,7 @@ import { ImageManagementTab } from '@/components/smartstore/image-management-tab
 import { AutomationWorkflowTab } from '@/components/smartstore/automation-workflow-tab';
 import { SettingsTab } from '@/components/smartstore/settings-tab';
 import { SyncLogsTab } from '@/components/smartstore/sync-logs-tab';
+import { NaverStatusTab } from '@/components/smartstore/naver-status-tab';
 
 interface Product {
   originProductNo: string;
@@ -56,13 +57,12 @@ interface SyncFailure {
   message: string;
 }
 
-type TabId = 'products' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'logs' | 'settings';
+type TabId = 'products' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'naver-status' | 'logs' | 'settings';
 
 const TABS: { id: TabId; label: string; shortLabel: string }[] = [
   { id: 'products', label: '상품관리', shortLabel: '상품' },
-  { id: 'pricing', label: '가격', shortLabel: '가격' },
   { id: 'images', label: '이미지', shortLabel: '이미지' },
-  { id: 'automation', label: '자동화', shortLabel: '자동화' },
+  { id: 'naver-status', label: '네이버 현황', shortLabel: '현황' },
   { id: 'logs', label: '전송기록', shortLabel: '기록' },
   { id: 'settings', label: '설정', shortLabel: '설정' },
 ];
@@ -261,35 +261,68 @@ export default function SmartstorePage() {
 
   // AI 아카이브 분류 (팝업식)
   // 1개 상품의 React Query 캐시를 즉시 업데이트하는 헬퍼
-  const updateProductCache = useCallback((productId: string, category: string) => {
+  const updateProductCache = useCallback((productId: string, category: string, brandAnalysis?: any, visualAnalysis?: any, confidence?: number) => {
     queryClient.setQueryData(['all-products'], (old: any) => {
       if (!old?.data?.contents) return old;
       return {
         ...old,
         data: {
           ...old.data,
-          contents: old.data.contents.map((p: any) =>
-            p.originProductNo === productId
-              ? { ...p, internalCategory: category, archiveTier: category }
-              : p
-          ),
+          contents: old.data.contents.map((p: any) => {
+            if (p.originProductNo === productId) {
+              // classification 객체 업데이트 (통계 반영용)
+              const newClassification = {
+                brand: brandAnalysis?.brand || p.classification?.brand || '',
+                brandTier: category || p.classification?.brandTier || 'OTHER',
+                gender: visualAnalysis?.category === 'UNISEX ARCHIVE' ? 'Unisex' : (brandAnalysis?.gender || 'UNKNOWN'),
+                size: visualAnalysis?.size || '',
+                clothingType: visualAnalysis?.clothingType || 'UNKNOWN',
+                clothingSubType: visualAnalysis?.clothingSubType || '',
+                confidence: confidence || p.classification?.confidence || 0,
+                suggestedNaverCategory: p.classification?.suggestedNaverCategory
+              };
+
+              return {
+                ...p,
+                internalCategory: category,
+                archiveTier: category,
+                classification: newClassification
+              };
+            }
+            return p;
+          }),
         },
       };
     });
   }, [queryClient]);
 
-  const classifyWithAI = useCallback(async (selectedProducts: { id: string; name: string; imageUrl: string }[]) => {
+  const classifyWithAI = useCallback(async (selectedProducts: { id: string; name: string; imageUrl: string }[], settings?: AIClassifySettings) => {
     if (classifyingAI || selectedProducts.length === 0) return;
     setClassifyingAI(true);
     setAiProgress({ current: 0, total: selectedProducts.length, message: 'AI 분류 시작...', results: [] });
 
-    let savedCount = 0; // 중간 끊김 대비 저장 카운트
+    let savedCount = 0;
+    let hadError = false;
 
     try {
       const res = await fetch('/api/smartstore/automation/archive-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: selectedProducts }),
+        body: JSON.stringify({
+          products: selectedProducts,
+          model: settings?.model || 'flash',
+          skipClassified: settings?.skipClassified ?? true,
+          threshold: settings?.threshold ?? 25,
+          // UI 5개 가중치 → 엔진 6개 가중치 변환 (brand를 brand+brandDb로 분리)
+          weights: settings?.weights ? {
+            ai: settings.weights.ai,
+            brand: Math.round(settings.weights.brand * 0.4),
+            brandDb: Math.round(settings.weights.brand * 0.6),
+            visual: settings.weights.image,
+            keyword: settings.weights.keyword,
+            context: settings.weights.context,
+          } : undefined,
+        }),
       });
 
       if (!res.body) throw new Error('SSE 스트림 없음');
@@ -315,13 +348,17 @@ export default function SmartstorePage() {
             if (event.type === 'progress') {
               setAiProgress(prev => prev ? { ...prev, current: event.current, message: event.message } : prev);
             } else if (event.type === 'result') {
-              // 즉시 캐시 업데이트 (1개씩)
-              updateProductCache(event.productId, event.category);
+              updateProductCache(
+                event.productId,
+                event.category,
+                event.brandAnalysis,
+                event.visualAnalysis,
+                event.confidence
+              );
               savedCount++;
               allResults.push(event);
               setAiProgress(prev => prev ? { ...prev, current: event.completed || event.current, message: `${event.product} → ${event.category}`, results: [...allResults] } : prev);
             } else if (event.type === 'skipped') {
-              // 이미 분류된 상품도 캐시에 반영
               updateProductCache(event.productId, event.category);
               allResults.push(event);
               setAiProgress(prev => prev ? { ...prev, message: event.message, results: [...allResults] } : prev);
@@ -335,26 +372,45 @@ export default function SmartstorePage() {
                 : event.message;
               setAiProgress(prev => prev ? { ...prev, total: event.toProcess || event.total, message: msg } : prev);
             } else if (event.type === 'complete') {
-              // 캐시는 이미 실시간 반영됨 → 완료 메시지만
               setAiProgress(prev => prev ? { ...prev, current: event.toProcess || event.total, message: event.message } : prev);
-              // 서버 캐시 무효화
-              fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
-              setTimeout(() => { setAiProgress(null); setClassifyingAI(false); }, 3000);
-              return;
+              return; // finally 블록에서 캐시 무효화 + cleanup 처리
             }
           } catch { /* JSON 파싱 실패 무시 */ }
         }
       }
+
+      // while 루프가 done=true로 끝난 경우: 버퍼에 남은 이벤트 처리
+      if (buffer.trim().startsWith('data: ')) {
+        try {
+          const event = JSON.parse(buffer.trim().slice(6));
+          if (event.type === 'result') {
+            updateProductCache(event.productId, event.category, event.brandAnalysis, event.visualAnalysis, event.confidence);
+            savedCount++;
+          } else if (event.type === 'complete') {
+            setAiProgress(prev => prev ? { ...prev, current: event.toProcess || event.total, message: event.message } : prev);
+          }
+        } catch { /* 파싱 실패 무시 */ }
+      }
     } catch (err: any) {
-      // 끊겨도 이미 저장된 결과는 캐시에 반영됨
+      hadError = true;
       const msg = savedCount > 0
         ? `연결 끊김: ${savedCount}개 저장됨 (DB 반영 완료). 나머지는 다시 실행하세요.`
         : `오류: ${err.message}`;
       setAiProgress({ current: savedCount, total: selectedProducts.length, message: msg, results: [] });
-      if (savedCount > 0) {
-        fetch('/api/smartstore/products?invalidateCache=true').catch(() => { });
-      }
-      setTimeout(() => { setAiProgress(null); setClassifyingAI(false); }, 5000);
+    } finally {
+      // 1. 서버 캐시 무효화
+      try { await fetch('/api/smartstore/products?invalidateCache=true'); } catch { }
+
+      // 2. DB에서 최신 데이터로 React Query 강제 리프레시
+      //    이전에는 updateProductCache만 하고 DB 재조회를 안 해서
+      //    분류 결과가 UI에 반영 안 되는 문제가 있었음
+      queryClient.invalidateQueries({ queryKey: ['all-products'] });
+
+      // 3. 지연 cleanup
+      setTimeout(() => {
+        setAiProgress(null);
+        setClassifyingAI(false);
+      }, hadError ? 5000 : 3000);
     }
   }, [classifyingAI, queryClient, updateProductCache]);
 
@@ -608,14 +664,11 @@ export default function SmartstorePage() {
         {activeTab === 'products' && (
           <ProductManagementTab products={displayedProducts} onRefresh={handleRefresh} onSyncGrades={syncGrades} syncingGrades={syncingGrades} onClassifyAI={classifyWithAI} classifyingAI={classifyingAI} />
         )}
-        {activeTab === 'pricing' && (
-          <PriceManagementTab products={displayedProducts} onRefresh={handleRefresh} />
-        )}
         {activeTab === 'images' && (
           <ImageManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
-        {activeTab === 'automation' && (
-          <AutomationWorkflowTab products={displayedProducts} onRefresh={handleRefresh} />
+        {activeTab === 'naver-status' && (
+          <NaverStatusTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'logs' && (
           <SyncLogsTab />
