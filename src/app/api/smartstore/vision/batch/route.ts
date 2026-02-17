@@ -43,20 +43,29 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = await processBatch(toProcess, {
-          concurrency: concurrency || 3,
-          delayMs: 1000,
+          concurrency: concurrency || 10,
+          delayMs: 200, // Turbo speed
           onProgress: (progress) => {
-            send({
-              type: 'progress',
-              ...progress,
-              percent: Math.round(((progress.completed + progress.failed) / progress.total) * 100)
-            });
+            try {
+              send({
+                type: 'progress',
+                ...progress,
+                percent: Math.round(((progress.completed + progress.failed) / progress.total) * 100)
+              });
+            } catch (e) {
+              // Client disconnected, but we continue processing in background
+              console.log('Stream closed, continuing batch in background...');
+            }
           }
         });
 
-        send({ type: 'complete', ...result, failures: result.failures || [] });
+        try {
+          send({ type: 'complete', ...result, failures: result.failures || [] });
+        } catch (e) { /* ignore */ }
       } catch (error: any) {
-        send({ type: 'error', message: error.message });
+        try {
+          send({ type: 'error', message: error.message });
+        } catch (e) { /* ignore */ }
       }
 
       controller.close();

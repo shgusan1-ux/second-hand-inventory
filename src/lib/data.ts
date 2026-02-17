@@ -121,6 +121,7 @@ export async function getSmartStoreGroups() {
       curatedItems: [],
       militaryArchive: [],
       workwearArchive: [],
+      outdoorArchive: [],
       japanArchive: [],
       heritageEurope: [],
       britishArchive: [],
@@ -137,6 +138,8 @@ export async function getSmartStoreGroups() {
         case 'CURATED': groups.curatedItems.push(p); break;
         case 'MILITARY': groups.militaryArchive.push(p); break;
         case 'WORKWEAR': groups.workwearArchive.push(p); break;
+        case 'OUTDOOR':
+        case 'OUTDOOR ARCHIVE': groups.outdoorArchive.push(p); break;
         case 'JAPAN': groups.japanArchive.push(p); break;
         case 'EUROPE': groups.heritageEurope.push(p); break;
         case 'BRITISH': groups.britishArchive.push(p); break;
@@ -155,9 +158,11 @@ export async function getSmartStoreGroups() {
       curatedItems: [],
       militaryArchive: [],
       workwearArchive: [],
+      outdoorArchive: [],
       japanArchive: [],
       heritageEurope: [],
       britishArchive: [],
+      unisexArchive: [],
       clearanceItems: [],
       etcItems: []
     };

@@ -16,13 +16,23 @@ const publicPaths = [
   '/models-proxy', // @imgly/background-removal 모델 파일 프록시 (인증 불필요)
   '/api/smartstore/automation/reclassify-archive', // 재분류 API (curl 호출용)
   '/api/smartstore/automation/md-strategy', // MD 전략 API (curl 호출용)
+  '/api/cron', // Vercel Cron 자동 실행
 ];
+
+// 캐시 무효화 전용 내부 호출 허용 (서버→서버 호출시 세션 쿠키 없음)
+const INTERNAL_CACHE_KEY = 'bs-internal-2024';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public 경로는 통과
   if (publicPaths.some(path => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
+
+  // 내부 서버→서버 호출 허용 (세션 쿠키 없는 경우: 캐시 무효화, cron 등)
+  const internalKey = request.nextUrl.searchParams.get('_internal');
+  if (internalKey === INTERNAL_CACHE_KEY) {
     return NextResponse.next();
   }
 

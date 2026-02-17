@@ -1,0 +1,8 @@
+Fetching token...
+Checking Origin Product Detail for 13000256670...
+Error: 접근 권한이 없습니다.
+{
+  "code": "FORBIDDEN",
+  "message": "접근 권한이 없습니다.",
+  "timestamp": "2026-02-17T02:18:32.650+09:00"
+}

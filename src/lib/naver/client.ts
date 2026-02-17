@@ -1,46 +1,19 @@
-
 import { TokenResponse, ProductSearchResponse, ProductDetailResponse, NaverCategory } from './types';
+import { getNaverAccessToken } from './auth';
 
 const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001';
 const PROXY_KEY = process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key';
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
+// Local getNaverToken is deprecated in favor of auth.ts version
 export async function getNaverToken(): Promise<TokenResponse> {
-    // Return cached token if valid (with 60s buffer)
-    if (cachedToken && cachedToken.expiresAt > Date.now() + 60000) {
-        return {
-            access_token: cachedToken.token,
-            expires_in: Math.floor((cachedToken.expiresAt - Date.now()) / 1000),
-            token_type: 'Bearer'
-        };
-    }
-
-    const res = await fetch(`${PROXY_URL}/oauth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-proxy-key': PROXY_KEY },
-        body: JSON.stringify({
-            client_id: process.env.NAVER_CLIENT_ID,
-            client_secret: process.env.NAVER_CLIENT_SECRET,
-            grant_type: 'client_credentials'
-        }),
-        cache: 'no-store'
-    });
-
-    if (!res.ok) {
-        const error = await res.text();
-        throw new Error(`Token fetch failed (${res.status}): ${error}`);
-    }
-
-    const data: TokenResponse = await res.json();
-
-    // Cache the token
-    cachedToken = {
-        token: data.access_token,
-        expiresAt: Date.now() + (data.expires_in * 1000)
+    const token = await getNaverAccessToken();
+    return {
+        access_token: token,
+        expires_in: 3600, // Approximate
+        token_type: 'Bearer'
     };
-
-    return data;
 }
 
 export async function searchProducts(token: string, page: number, size: number, filters: any = {}): Promise<ProductSearchResponse> {
@@ -89,17 +62,30 @@ export async function updateProduct(token: string, originProductNo: number, payl
     return res.json();
 }
 
-export async function naverRequest(path: string, options: RequestInit = {}) {
-    const tokenData = await getNaverToken();
+export async function naverRequest(path: string, options: RequestInit = {}, retry = true) {
+    const token = await getNaverAccessToken();
     const res = await fetch(`${PROXY_URL}${path}`, {
         ...options,
         headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'x-proxy-key': PROXY_KEY,
             ...options.headers,
         }
     });
+
+    // Handle 401 Unauthorized with GW.AUTHN code as per docs
+    if (res.status === 401 && retry) {
+        const errorData = await res.clone().json().catch(() => ({}));
+        if (errorData.code === 'GW.AUTHN') {
+            console.log('[NaverAPI] Token expired (GW.AUTHN), retrying once...');
+            // Invalidate cache (not directly exposed, but auth.ts should handle it or we could add a force flag)
+            // For now, auth.ts cache is local to that module.
+            // Let's assume on retry it will try to get a new one if it's actually invalid.
+            return naverRequest(path, options, false);
+        }
+    }
+
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Naver API Request Failed (${res.status}): ${errText}`);

@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { ProductManagementTab, type AIClassifySettings } from '@/components/smartstore/product-management-tab';
 import { CategoryManagementTab } from '@/components/smartstore/category-management-tab';
 import { InventoryManagementTab } from '@/components/smartstore/inventory-management-tab';
@@ -12,6 +13,7 @@ import { AutomationWorkflowTab } from '@/components/smartstore/automation-workfl
 import { SettingsTab } from '@/components/smartstore/settings-tab';
 import { SyncLogsTab } from '@/components/smartstore/sync-logs-tab';
 import { NaverStatusTab } from '@/components/smartstore/naver-status-tab';
+import { MainDisplayTab } from '@/components/smartstore/main-display-tab';
 
 interface Product {
   originProductNo: string;
@@ -57,14 +59,21 @@ interface SyncFailure {
   message: string;
 }
 
-type TabId = 'products' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'naver-status' | 'logs' | 'settings';
+type TabId = 'products' | 'main-new' | 'main-curated' | 'main-archive' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'naver-status' | 'logs' | 'settings';
 
-const TABS: { id: TabId; label: string; shortLabel: string }[] = [
+const TOP_TABS = [
   { id: 'products', label: '상품관리', shortLabel: '상품' },
+  { id: 'main-display', label: '메인진열관리', shortLabel: '메인진열' },
   { id: 'images', label: '이미지', shortLabel: '이미지' },
   { id: 'naver-status', label: '네이버 현황', shortLabel: '현황' },
   { id: 'logs', label: '전송기록', shortLabel: '기록' },
   { id: 'settings', label: '설정', shortLabel: '설정' },
+];
+
+const MAIN_DISPLAY_SUB_TABS: { id: TabId; label: string }[] = [
+  { id: 'main-new', label: 'NEW' },
+  { id: 'main-curated', label: 'CURATED' },
+  { id: 'main-archive', label: 'ARCHIVE' },
 ];
 
 async function fetchProductsWithProgress(
@@ -132,6 +141,68 @@ export default function SmartstorePage() {
   // AI 분류 (팝업식, 탭 전환해도 유지)
   const [classifyingAI, setClassifyingAI] = useState(false);
   const [aiProgress, setAiProgress] = useState<{ current: number; total: number; message: string; results: any[] } | null>(null);
+
+  // 전시 카테고리 동기화 (Shared)
+  const [syncingDisplay, setSyncingDisplay] = useState(false);
+  const [displaySyncProgress, setDisplaySyncProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+
+  const syncExhibition = async (category: string, productNos: string[]) => {
+    if (!productNos.length) {
+      toast.error('동기화할 상품이 없습니다');
+      return;
+    }
+
+    setSyncingDisplay(true);
+    setDisplaySyncProgress({ current: 0, total: productNos.length, message: '동기화 시작...' });
+
+    try {
+      const res = await fetch('/api/smartstore/exhibition/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNos, internalCategory: category }),
+      });
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('스트림 없음');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'progress' || data.type === 'result') {
+              setDisplaySyncProgress({
+                current: data.current || 0,
+                total: data.total || productNos.length,
+                message: data.message || '',
+              });
+            }
+            if (data.type === 'result' && data.success) {
+              // toast.success(data.message, { duration: 1000 });
+            }
+            if (data.type === 'complete') {
+              toast.success(data.message);
+            }
+          } catch { }
+        }
+      }
+    } catch (err: any) {
+      toast.error('동기화 오류: ' + err.message);
+    } finally {
+      setSyncingDisplay(false);
+      setDisplaySyncProgress(null);
+    }
+  };
 
   const handleProgress = useCallback((p: ProgressState) => {
     setProgress(p);
@@ -398,13 +469,15 @@ export default function SmartstorePage() {
         : `오류: ${err.message}`;
       setAiProgress({ current: savedCount, total: selectedProducts.length, message: msg, results: [] });
     } finally {
-      // 1. 서버 캐시 무효화
-      try { await fetch('/api/smartstore/products?invalidateCache=true'); } catch { }
+      // 1. 서버 캐시 무효화 (다른 사용자 / 다음 페이지 로드용)
+      try { await fetch('/api/smartstore/products?invalidateCache=true&_t=' + Date.now()); } catch { }
 
-      // 2. DB에서 최신 데이터로 React Query 강제 리프레시
-      //    이전에는 updateProductCache만 하고 DB 재조회를 안 해서
-      //    분류 결과가 UI에 반영 안 되는 문제가 있었음
-      queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      // 2. updateProductCache가 SSE 중 이미 정확한 데이터를 반영했으므로
+      //    즉시 invalidateQueries하면 다른 Vercel 인스턴스의 오래된 캐시로
+      //    정확한 인메모리 데이터를 덮어쓰는 문제 발생 → 10초 뒤 백그라운드 동기화
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      }, 10000);
 
       // 3. 지연 cleanup
       setTimeout(() => {
@@ -641,28 +714,70 @@ export default function SmartstorePage() {
       )}
 
       {/* 탭 네비게이션 */}
-      <div className="border-b border-slate-200">
-        <div className="flex gap-1">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === tab.id
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-                }`}
-            >
-              <span className="md:hidden">{tab.shortLabel}</span>
-              <span className="hidden md:inline">{tab.label}</span>
-            </button>
-          ))}
+      <div className="space-y-4">
+        {/* 대분류 */}
+        <div className="border-b border-slate-200 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1 min-w-max">
+            {TOP_TABS.map(tab => {
+              const isActive = tab.id === 'main-display'
+                ? activeTab.startsWith('main-')
+                : activeTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (tab.id === 'main-display') {
+                      setActiveTab('main-new');
+                    } else {
+                      setActiveTab(tab.id as TabId);
+                    }
+                  }}
+                  className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors flex-shrink-0 ${isActive
+                    ? 'border-slate-900 text-slate-900'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    }`}
+                >
+                  <span className="md:hidden">{tab.shortLabel}</span>
+                  <span className="hidden md:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {/* 메인진열 중분류 (메인진열 탭 활성화 시에만 노출) */}
+        {activeTab.startsWith('main-') && (
+          <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+            {MAIN_DISPLAY_SUB_TABS.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setActiveTab(sub.id)}
+                className={`px-6 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === sub.id
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 탭 콘텐츠 */}
       <div className="w-full overflow-x-hidden">
         {activeTab === 'products' && (
-          <ProductManagementTab products={displayedProducts} onRefresh={handleRefresh} onSyncGrades={syncGrades} syncingGrades={syncingGrades} onClassifyAI={classifyWithAI} classifyingAI={classifyingAI} />
+          <ProductManagementTab products={displayedProducts} onRefresh={handleRefresh} onSyncGrades={syncGrades} syncingGrades={syncingGrades} onClassifyAI={classifyWithAI} classifyingAI={classifyingAI} onSyncExhibition={syncExhibition} syncingDisplay={syncingDisplay} />
+        )}
+        {activeTab === 'main-new' && (
+          <MainDisplayTab products={displayedProducts} forcedCategory="NEW" onSyncExhibition={syncExhibition} syncingDisplay={syncingDisplay} />
+        )}
+        {activeTab === 'main-curated' && (
+          <MainDisplayTab products={displayedProducts} forcedCategory="CURATED" onSyncExhibition={syncExhibition} syncingDisplay={syncingDisplay} />
+        )}
+        {activeTab === 'main-archive' && (
+          <MainDisplayTab products={displayedProducts} forcedCategory="ARCHIVE" onSyncExhibition={syncExhibition} syncingDisplay={syncingDisplay} />
         )}
         {activeTab === 'images' && (
           <ImageManagementTab products={displayedProducts} onRefresh={handleRefresh} />
@@ -741,6 +856,30 @@ export default function SmartstorePage() {
               </div>
             )}
             <p className="text-[10px] text-violet-400/70 truncate">{aiProgress.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 전시 카테고리 동기화 진행 팝업 */}
+      {displaySyncProgress && (
+        <div className="fixed bottom-6 right-6 w-full max-w-sm z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl p-5 ag-card">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-bold text-slate-900">네이버 전시 동기화 중</span>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">
+                {Math.round((displaySyncProgress.current / displaySyncProgress.total) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${(displaySyncProgress.current / displaySyncProgress.total) * 100}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 font-medium truncate">{displaySyncProgress.message}</p>
           </div>
         </div>
       )}

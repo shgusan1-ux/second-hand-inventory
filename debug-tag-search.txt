@@ -1,0 +1,17 @@
+Using Proxy: http://15.164.216.212:3001
+Fetching token...
+
+--- Test A: Search for 'CLEARANCE' in PRODUCT_NAME ---
+Error: Request failed with status code 400
+{
+  "code": "BAD_REQUEST",
+  "message": "입력한 데이터가 유효하지 않습니다.",
+  "invalidInputs": [
+    {
+      "name": "searchKeywordType",
+      "type": "NotValidEnum",
+      "message": "Enum값을 입력하지 않았거나 허용되지 않은 Enum 값입니다."
+    }
+  ],
+  "timestamp": "2026-02-17T02:27:06.473+09:00"
+}

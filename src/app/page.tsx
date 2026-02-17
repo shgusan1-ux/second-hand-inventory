@@ -16,6 +16,7 @@ import { OrgChart } from '@/components/dashboard/org-chart';
 import { AttendanceSummaryWidget } from '@/components/dashboard/attendance-summary-widget';
 import { getMeetings } from '@/lib/meeting-actions';
 import { getAllTodayAttendance } from '@/lib/member-actions';
+import { RoadmapMindmap } from '@/components/dashboard/roadmap-mindmap';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -272,6 +273,9 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* 사업 로드맵 마인드맵 */}
+      <RoadmapMindmap isAdmin={session.role === 'admin'} />
 
       {/* Footer */}
       <footer className="mt-auto py-6 border-t border-slate-200 dark:border-slate-700">

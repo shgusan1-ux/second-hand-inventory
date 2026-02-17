@@ -107,19 +107,21 @@ const CLASSIFICATION_RULES = {
             'CLASSIC', '클래식', 'TRADITIONAL', '트래디셔널',
             'IVY', '아이비', 'PREPPY', '프레피',
             'OXFORD', '옥스포드', 'TWEED', '트위드',
-            'RALPH LAUREN', '랄프로렌', 'POLO', '폴로',
             'BROOKS BROTHERS', '브룩스브라더스',
             'J.PRESS', 'J PRESS', 'GANT', '간트',
-            'LACOSTE', '라코스테',
-            'TOMMY HILFIGER', '타미힐피거',
             'GUCCI', '구찌', 'PRADA', '프라다',
             'DIOR', '디올', 'CHANEL', '샤넬',
             'LOUIS VUITTON', '루이비통',
+            'VALENTINO', '발렌티노', 'FENDI', '펜디',
+            'BOTTEGA VENETA', '보테가베네타',
+            'VERSACE', '베르사체', 'ARMANI', '아르마니',
+            'HERMES', '에르메스', 'ELEGANT', 'LUXURY', '하이엔드', '럭셔리', '명품',
         ],
         brands: [
-            'RALPH LAUREN', 'POLO', 'BROOKS BROTHERS', 'J.PRESS',
-            'GANT', 'LACOSTE', 'TOMMY HILFIGER',
+            'BROOKS BROTHERS', 'J.PRESS', 'GANT',
             'GUCCI', 'PRADA', 'LOUIS VUITTON', 'DIOR', 'CHANEL',
+            'HERMES', 'VALENTINO', 'FENDI', 'BOTTEGA VENETA',
+            'VERSACE', 'ARMANI',
         ],
     },
     BRITISH: {
@@ -145,6 +147,11 @@ const CLASSIFICATION_RULES = {
     },
     UNISEX: {
         keywords: [
+            'RALPH LAUREN', 'POLO', '폴로', '랄프로렌',
+            'TOMMY HILFIGER', '타미힐피거', '타미',
+            'NIKE', '나이키', 'ADIDAS', '아디다스',
+            'CHAMPION', '챔피온', 'LEVIS', '리바이스',
+            'GAP', '갭', 'LACOSTE', '라코스테',
             '남녀공용', '유니섹스', 'UNISEX', '남녀', '공용',
             '프리사이즈', 'FREE SIZE', 'FREESIZE', 'ONE SIZE',
             '오버사이즈', 'OVERSIZE', '오버핏', 'OVERSIZED',
@@ -152,7 +159,11 @@ const CLASSIFICATION_RULES = {
             '무지', 'BASIC', 'PLAIN',
             '노브랜드', 'NO BRAND',
         ],
-        brands: [] as string[],
+        brands: [
+            'RALPH LAUREN', 'POLO', 'BROOKS BROTHERS', 'J.PRESS',
+            'GANT', 'LACOSTE', 'TOMMY HILFIGER', 'NIKE', 'ADIDAS',
+            'LEVIS', 'CHAMPION', 'GAP', 'STUSSY', 'SUPREME',
+        ],
     },
 };
 

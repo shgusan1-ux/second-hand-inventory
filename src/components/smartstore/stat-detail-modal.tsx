@@ -29,6 +29,7 @@ const tierLabel: Record<string, string> = {
     JAPAN: 'JAPANESE ARCHIVE',
     HERITAGE: 'HERITAGE EUROPE',
     BRITISH: 'BRITISH ARCHIVE',
+    UNISEX: 'UNISEX ARCHIVE',
     UNCATEGORIZED: 'UNCATEGORIZED'
 };
 
@@ -82,6 +83,8 @@ export function StatDetailModal({ type, products, onClose, onRefresh }: StatDeta
                 const next = { ...editingState };
                 delete next[id];
                 setEditingState(next);
+                // 서버 캐시 무효화 후 부모 데이터 새로고침
+                await fetch('/api/smartstore/products?invalidateCache=true').catch(() => {});
                 onRefresh(); // Refresh parent data
             } else {
                 toast.error('저장 실패');
@@ -101,6 +104,7 @@ export function StatDetailModal({ type, products, onClose, onRefresh }: StatDeta
         { value: 'JAPANESE ARCHIVE', label: 'JAPANESE ARCHIVE' },
         { value: 'HERITAGE EUROPE', label: 'HERITAGE EUROPE' },
         { value: 'BRITISH ARCHIVE', label: 'BRITISH ARCHIVE' },
+        { value: 'UNISEX ARCHIVE', label: 'UNISEX ARCHIVE' },
         { value: 'CLEARANCE_KEEP', label: '판매유지 (CLEARANCE)' },
         { value: 'CLEARANCE_DISPOSE', label: '폐기결정 (CLEARANCE)' },
     ];

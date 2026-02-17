@@ -141,8 +141,7 @@ export function SyncLogsTab() {
                                             <td className="p-2 text-center border-r font-mono text-slate-400">{String(1000000 + idx).slice(1)}</td>
                                             <td className="p-2 text-left border-r px-4">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-slate-800">네이버 스마트스토어</span>
-                                                    <span className="text-slate-400">[{s.target_category}]</span>
+                                                    <span className="text-slate-800 font-bold">[{s.target_category}]</span>
                                                 </div>
                                             </td>
                                             <td className="p-2 text-center border-r font-medium">{s.synced_by || '시스템'}</td>

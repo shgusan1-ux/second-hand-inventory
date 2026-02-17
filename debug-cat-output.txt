@@ -1,0 +1,64 @@
+Using Proxy: http://15.164.216.212:3001
+Fetching token...
+Token obtained.
+
+--- Test 1: GET /v1/display-categories/09f56197c74b4969ac44a18a7b5f8fb1/products ---
+Failed: 404 Not Found
+{
+  "code": "GW.NOT_FOUND",
+  "message": "요청하신 리소스를 찾을 수 없습니다.",
+  "timestamp": "2026-02-17T02:19:46.873+09:00",
+  "traceId": "AUqO_Z3iRUGpnS8_deMRsw^1770185314919^81759757"
+}
+
+--- Test 2: GET /v1/display-categories/09f56197c74b4969ac44a18a7b5f8fb1 ---
+Failed: 404 Not Found
+{
+  "code": "GW.NOT_FOUND",
+  "message": "요청하신 리소스를 찾을 수 없습니다.",
+  "timestamp": "2026-02-17T02:19:46.919+09:00",
+  "traceId": "AUqO_Z3iRUGpnS8_deMRsw^1770185314919^81759759"
+}
+
+--- Test 3: POST /v1/products/search with displayCategoryId ---
+Result Total: 1138
+Contents count: 5
+{
+  "originProductNo": 13067834905,
+  "channelProducts": [
+    {
+      "originProductNo": 13067834905,
+      "channelProductNo": 13125967024,
+      "channelServiceType": "STOREFARM",
+      "categoryId": "50000837",
+      "name": "YVES SAINT LAURENT 입생로랑 투버튼 싱글 자켓 MAN-S",
+      "sellerManagementCode": "AAAGJU2012",
+      "statusType": "SALE",
+      "channelProductDisplayStatusType": "ON",
+      "salePrice": 125000,
+      "discountedPrice": 125000,
+      "mobileDiscountedPrice": 125000,
+      "stockQuantity": 1,
+      "knowledgeShoppingProductRegistration": true,
+      "deliveryAttributeType": "NORMAL",
+      "deliveryFee": 3500,
+      "returnFee": 3500,
+      "exchangeFee": 7000,
+      "sellerPurchasePoint": 5,
+      "sellerPurchasePointUnitType": "PERCENT",
+      "managerPurchasePoint": 1,
+      "freeInterest": 3,
+      "wholeCategoryName": "패션의류>남성의류>점퍼",
+      "wholeCategoryId": "50000000>50000169>50000837",
+      "representativeImage": {
+        "url": "https://shop-phinf.pstatic.net/20260217_63/1771260342728aAoqG_JPEG/105393167782074071_1049116072.jpeg"
+      },
+      "modelName": "AAAGJU2012",
+      "brandName": "자체브랜드",
+      "manufacturerName": "자체제작",
+      "sellerTags": [],
+      "regDate": "2026-02-17T01:45:46.551+09:00",
+      "modifiedDate": "2026-02-17T01:45:46.551+09:00"
+    }
+  ]
+}

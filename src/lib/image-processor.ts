@@ -58,16 +58,19 @@ export async function processImageWithBadge({ imageUrl, grade }: ProcessOptions)
 
         ctx.drawImage(imgBitmap, x, y, w, h);
 
-        // 5. Draw Badge
+        // 5. Draw Badge (Python 기준: BADGE_OPACITY = 0.4)
         const badgeUrl = `/images/grades/${grade.toLowerCase()}grade.png`;
         console.log(`[Processor] Loading badge: ${badgeUrl}`);
         try {
             const badgeImg = await loadImage(badgeUrl);
             const badgeWidth = 1024 * 0.18; // 18% size
             const badgeHeight = badgeWidth * (badgeImg.height / badgeImg.width);
+            ctx.globalAlpha = 0.4; // 배지 불투명도 40%
             ctx.drawImage(badgeImg, 1024 - badgeWidth - 50, 50, badgeWidth, badgeHeight);
-            console.log(`[Processor] Badge composite success`);
+            ctx.globalAlpha = 1.0; // 복원
+            console.log(`[Processor] Badge composite success (opacity: 0.4)`);
         } catch (e) {
+            ctx.globalAlpha = 1.0; // 에러 시에도 복원
             console.error('[Processor] Failed to load badge (skipping):', badgeUrl);
         }
 

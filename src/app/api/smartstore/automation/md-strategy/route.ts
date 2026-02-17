@@ -256,7 +256,7 @@ export async function POST(request: Request) {
         // 캐시 무효화
         try {
             const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-            await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true`);
+            await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true&_internal=bs-internal-2024`);
         } catch { /* 무시 */ }
 
         return Response.json({

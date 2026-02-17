@@ -43,13 +43,31 @@ export default function VisionAnalyzerPage() {
   const autoModeRef = useRef(false);
   const analyzedIdsRef = useRef<Set<string>>(new Set());
 
-  // 타이머
+  // 타이머 & Wake Lock
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log('Wake Lock active');
+        }
+      } catch (err) {
+        console.warn('Wake Lock failed:', err);
+      }
+    };
+
     if (state === 'running') {
       interval = setInterval(() => setElapsedSeconds(prev => prev + 1), 1000);
+      requestWakeLock();
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      if (wakeLock) wakeLock.release().then(() => console.log('Wake Lock released'));
+    };
   }, [state]);
 
   // 페이지 로드 시 상품 가져오기
@@ -141,75 +159,44 @@ export default function VisionAnalyzerPage() {
     return { completed, failed, failures };
   }, []);
 
-  // 자동 분석 시작
+  // 자동 분석 시작 (서버 사이드 배치로 변경)
   const startAutoAnalysis = useCallback(async () => {
-    autoModeRef.current = true;
-    analyzedIdsRef.current = new Set();
     setState('running');
     setElapsedSeconds(0);
-    setAutoStats({ totalAnalyzed: 0, totalFailed: 0, batchCount: 0 });
+    // 초기화
+    setAutoStats({ totalAnalyzed: 0, totalFailed: 0, batchCount: 1 });
     setAllFailures([]);
     setCompletedItems([]);
+    setBatchProgress(null);
 
-    const BATCH_SIZE = 10;
-    const DELAY_BETWEEN = 3000;
-
-    let totalAnalyzed = 0;
-    let totalFailed = 0;
-    let batchCount = 0;
+    // 미분석 전체를 한 번에 서버로 전송 (최대 1000개)
+    const remaining = eligible.slice(0, 1000);
+    if (remaining.length === 0) {
+      setState('done');
+      return;
+    }
 
     try {
-      while (autoModeRef.current) {
-        const remaining = eligible.filter(p => !analyzedIdsRef.current.has(p.originProductNo));
-
-        if (remaining.length === 0) {
-          break;
-        }
-
-        const batch = remaining.slice(0, BATCH_SIZE);
-        batchCount++;
-        batch.forEach(p => analyzedIdsRef.current.add(p.originProductNo));
-
-        try {
-          const result = await runSingleBatch(batch);
-          totalAnalyzed += result.completed;
-          totalFailed += result.failed;
-          if (result.failures.length > 0) {
-            setAllFailures(prev => [...prev, ...result.failures]);
-          }
-          setAutoStats({ totalAnalyzed, totalFailed, batchCount });
-        } catch (err: any) {
-          totalFailed += batch.length;
-          setAllFailures(prev => [...prev, ...batch.map(p => ({
-            productNo: p.originProductNo,
-            productName: p.name,
-            error: err?.message || '배치 실행 실패',
-            timestamp: new Date().toISOString()
-          }))]);
-          setAutoStats({ totalAnalyzed, totalFailed, batchCount });
-        }
-
-        if (autoModeRef.current) {
-          await new Promise(r => setTimeout(r, DELAY_BETWEEN));
-        }
-      }
+      // 단일 배치 실행 (서버가 끊겨도 계속 처리하도록 설계됨)
+      await runSingleBatch(remaining);
+    } catch (err: any) {
+      console.error('Batch failed:', err);
     } finally {
-      autoModeRef.current = false;
       setState('done');
+      loadProducts(); // 완료 후 최신 상태 갱신
     }
   }, [eligible, runSingleBatch]);
 
-  // 중지
+  // 중지 (클라이언트 리스닝만 중만, 서버는 계속 돌 수 있음)
   const stopAutoAnalysis = () => {
-    autoModeRef.current = false;
     setState('done');
+    // 실제 서버 중단 API는 없으므로, UI상으로만 중단 처리 (새로고침 권장)
+    loadProducts();
   };
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-  const analyzedPercent = eligible.length > 0
-    ? Math.round((analyzedIdsRef.current.size / eligible.length) * 100)
-    : 0;
+  const analyzedPercent = batchProgress?.percent || 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">

@@ -1,0 +1,11 @@
+Using Proxy: http://15.164.216.212:3001
+Fetching token...
+Token obtained.
+
+--- Test A: Search with displayCategoryId (CLEARANCE ID) ---
+Count A: 1138
+
+--- Test B: Search WITHOUT displayCategoryId (All Products) ---
+Count B: 1138
+
+CONCLUSION: The 'displayCategoryId' parameter was IGNORED. API returned all products.

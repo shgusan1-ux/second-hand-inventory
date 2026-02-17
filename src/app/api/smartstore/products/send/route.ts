@@ -127,7 +127,10 @@ export async function POST(request: NextRequest) {
             // 3. 네이버에 PUT 송신
             send({ type: 'progress', completed, failed, total: items.length, current: item.originProductNo, step: 'sending' });
 
-            await updateProduct(token, Number(item.originProductNo), { originProduct: payload });
+            await updateProduct(token, Number(item.originProductNo), {
+              originProduct: payload,
+              smartstoreChannelProduct: detail.smartstoreChannelProduct
+            });
             result.success = true;
             completed++;
           }

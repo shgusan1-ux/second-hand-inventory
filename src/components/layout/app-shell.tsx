@@ -14,12 +14,12 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
     }
 
     return (
-        <div className="flex h-screen bg-slate-50 flex-col md:flex-row">
+        <div className="flex min-h-screen bg-slate-50 flex-col md:flex-row">
             <MobileHeader user={user} />
-            <aside className="hidden md:flex flex-shrink-0 h-full">
+            <aside className="hidden md:flex md:h-screen md:sticky md:top-0 flex-shrink-0">
                 <Sidebar user={user} />
             </aside>
-            <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-8">
+            <main className="flex-1 overflow-x-hidden p-3 pt-16 md:p-8 md:pt-8 w-full">
                 {children}
             </main>
         </div>

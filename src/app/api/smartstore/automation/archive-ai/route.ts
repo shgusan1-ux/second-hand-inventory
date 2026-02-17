@@ -14,8 +14,8 @@ import { db } from '@/lib/db';
 
 export const maxDuration = 300; // 5분
 
-const CONCURRENCY = 3;
-const BATCH_DELAY = 1000;
+const CONCURRENCY = 10;
+const BATCH_DELAY = 200;
 
 // 유효한 아카이브 서브카테고리 (이미 분류 완료로 판단)
 const ARCHIVE_SUBS = new Set([
@@ -24,7 +24,8 @@ const ARCHIVE_SUBS = new Set([
 ]);
 
 export async function POST(request: Request) {
-    const { products, skipClassified = true } = await request.json();
+    const { products, skipClassified = true, model = 'flash', threshold, weights } = await request.json();
+    const engineSettings = { threshold, weights };
 
     if (!Array.isArray(products) || products.length === 0) {
         return new Response(JSON.stringify({ error: 'products 배열이 필요합니다' }), {
@@ -77,9 +78,10 @@ export async function POST(request: Request) {
                 toProcess: processTotal,
                 skipped: skippedCount,
                 concurrency: CONCURRENCY,
+                model: model, // Info about model being used
                 message: skippedCount > 0
-                    ? `${total}개 중 ${skippedCount}개 이미 분류됨 → ${processTotal}개만 AI 분류 시작`
-                    : `${total}개 상품 AI 분류 시작 (${CONCURRENCY}개씩 병렬 처리)`,
+                    ? `${total}개 중 ${skippedCount}개 이미 분류됨 → ${processTotal}개만 AI(${model}) 분류 시작`
+                    : `${total}개 상품 AI(${model}) 분류 시작 (${CONCURRENCY}개씩 병렬 처리)`,
             });
 
             // 이미 분류된 상품 스킵 이벤트 전송
@@ -152,7 +154,7 @@ export async function POST(request: Request) {
                                 id: product.id,
                                 name: product.name,
                                 imageUrl: product.imageUrl,
-                            });
+                            }, model as 'flash' | 'pro', engineSettings);
 
                             // DB 저장 (1개씩 즉시)
                             const now = new Date();
@@ -238,12 +240,12 @@ export async function POST(request: Request) {
                 }
             }
 
-            // 서버 캐시 무효화
+            // 서버 캐시 무효화 (내부 키로 auth middleware 우회)
             try {
                 const baseUrl = process.env.VERCEL_URL
                     ? `https://${process.env.VERCEL_URL}`
                     : 'http://localhost:3000';
-                await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true`);
+                await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true&_internal=bs-internal-2024`);
             } catch { /* 무시 */ }
 
             const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);

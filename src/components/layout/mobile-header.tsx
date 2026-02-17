@@ -6,15 +6,26 @@ import { Sidebar } from './sidebar';
 import { Menu, X, Search, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeatherLogo } from '@/components/ui/weather-logo';
+import { cn } from '@/lib/utils';
 
 export function MobileHeader({ user }: { user?: any }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [scrolled, setScrolled] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const searchParams = useSearchParams();
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Detect scroll to adjust tab bar transparency
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     // Initialize search query from URL
     useEffect(() => {
@@ -70,7 +81,12 @@ export function MobileHeader({ user }: { user?: any }) {
     return (
         <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50 overflow-visible">
             {/* Header Bar */}
-            <div className="h-14 border-b border-slate-700/50 bg-black/80 backdrop-blur-md flex items-center px-3 relative transition-all overflow-visible">
+            <div className={cn(
+                "h-14 border-b transition-all duration-300 flex items-center px-3 relative overflow-visible",
+                scrolled
+                    ? "bg-black/20 backdrop-blur-sm border-white/5"
+                    : "bg-black/80 backdrop-blur-md border-slate-700/50"
+            )}>
                 {isSearchOpen ? (
                     <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200 w-full">
                         <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} className="text-slate-400 hover:text-white shrink-0">

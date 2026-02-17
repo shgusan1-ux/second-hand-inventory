@@ -14,6 +14,12 @@ import { ensureDbInitialized } from '@/lib/db-init';
 let productCache: { data: any; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
+// 외부 모듈에서 캐시 무효화 (auth 우회)
+export function invalidateProductCache() {
+    productCache = null;
+    console.log('[ProductCache] 캐시 무효화됨 (직접 호출)');
+}
+
 // 네이버 스마트스토어 기준: 판매중 1007 + 품절 1 + 판매중지 9 = 1017
 const PRODUCT_STATUS_FILTER = ['SALE', 'OUTOFSTOCK', 'SUSPENSION'];
 
@@ -66,7 +72,8 @@ function calculateStatusCounts(contents: any[]) {
 const VALID_CATEGORIES_SET = new Set([
     'NEW', 'CURATED', 'ARCHIVE', 'CLEARANCE', 'CLEARANCE_KEEP', 'CLEARANCE_DISPOSE',
     'MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE',
-    'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE',
+    'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE', 'UNISEX ARCHIVE',
+    'UNCATEGORIZED', 'KIDS',
 ]);
 
 // 내부 tier 키 → 표시용 아카이브명 매핑
@@ -77,6 +84,7 @@ const TIER_TO_ARCHIVE: Record<string, string> = {
     JAPAN: 'JAPANESE ARCHIVE',
     HERITAGE: 'HERITAGE EUROPE',
     BRITISH: 'BRITISH ARCHIVE',
+    UNISEX: 'UNISEX ARCHIVE',
 };
 
 function processProducts(contents: any[], overrideMap: any, lcSettings?: LifecycleSettings, customBrands?: any[]) {
@@ -157,10 +165,17 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             classification.visionStatus = visionData?.analysis_status || 'none';
         }
 
+        // 키즈 상품 감지: 전용 카테고리로 분류
+        const isKids = (classification.gender === 'KIDS' || /키즈|아동|주니어|kids|junior|boy['s]?|girl['s]?/i.test(prodName))
+            && !/키즈나|키즈노/i.test(prodName); // 브랜드명 오탐 방지
+
         // 내부카테고리: DB에 수동 확정된 값이 있으면 절대 변경하지 않음
         let internalCategory: string;
 
-        if (hasValidSaved) {
+        if (isKids && !hasValidSaved) {
+            // 키즈 상품 → 전용 카테고리
+            internalCategory = 'KIDS';
+        } else if (hasValidSaved) {
             // 사용자가 확정한 유효한 카테고리 → 변경 요청 전까지 영구 보존
             internalCategory = savedCategory;
         } else {
@@ -191,6 +206,11 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             }
         }
 
+        // sellerTags에서 BS태그 읽기 (네이버 검색 결과에 포함됨)
+        const sellerTags: { text: string }[] = cp.sellerTags || p.sellerTags || [];
+        const bsTag = sellerTags.find((t: any) => t.text?.startsWith('BS'));
+        const naverTag = bsTag?.text || null;
+
         return {
             ...cp,
             originProductNo: prodId,
@@ -201,7 +221,7 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             internalCategory,
             archiveTier: savedCategory, // 수동 확정된 카테고리 (lifecycle 무관하게 보존)
             classification,
-            descriptionGrade: p.descriptionGrade || override.description_grade || null, // 네이버 상세페이지 GRADE
+            descriptionGrade: p.descriptionGrade || override.description_grade || null,
             suggestedArchiveId: override.suggested_archive_id,
             suggestionReason: override.suggestion_reason,
             inferredBrand: override.inferred_brand,
@@ -209,6 +229,11 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
             isApproved: override.is_approved,
             isMatched: !!override.matched_id,
             naverCategoryId: cp.categoryId,
+            // sellerTag (네이버에서 읽은 BS태그)
+            naverTag,
+            // 전송 기록 (exhibition_sync_logs에서)
+            lastSyncedCategory: override.last_synced_category || null,
+            lastSyncedAt: override.last_synced_at || null,
         };
     }).filter(p => p !== null);
 }
@@ -230,15 +255,15 @@ async function fetchOverrideMap(ids: string[]): Promise<{ map: any; customBrands
     if (ids.length === 0) return { map: {}, customBrands: [] };
     try {
         // 병렬 DB 쿼리 (독립적인 5개 쿼리를 동시 실행)
-        const [overrides, naverMap, visionRows, customBrandsResult, naverProducts] = await Promise.all([
+        const [overrides, naverMap, visionRows, customBrandsResult, naverProducts, syncLogs] = await Promise.all([
             // 1. User overrides (핵심: internal_category 포함)
             batchInQuery(
                 `SELECT id, override_date, internal_category, first_seen_at FROM product_overrides WHERE id IN (__PH__)`,
                 ids
             ),
-            // 2. Naver product map enrichment
+            // 2. Naver product map enrichment (스캔 결과 포함)
             batchInQuery(
-                `SELECT origin_product_no, inferred_brand FROM naver_product_map WHERE origin_product_no IN (__PH__)`,
+                `SELECT origin_product_no, inferred_brand, naver_display_category, display_scanned_at FROM naver_product_map WHERE origin_product_no IN (__PH__)`,
                 ids
             ).catch(() => [] as any[]),
             // 3. Vision 분석 결과
@@ -258,6 +283,13 @@ async function fetchOverrideMap(ids: string[]): Promise<{ map: any; customBrands
                 `SELECT origin_product_no, seller_management_code, description_grade FROM naver_products WHERE origin_product_no IN (__PH__)`,
                 ids
             ).catch(() => [] as any[]),
+            // 6. exhibition_sync_logs (마지막 성공 전송 기록 → 네이버 실제 전시카테고리)
+            db.query(`
+                SELECT product_no, target_category, MAX(created_at) as last_synced_at
+                FROM exhibition_sync_logs
+                WHERE status = 'SUCCESS'
+                GROUP BY product_no
+            `).then(r => r.rows).catch(() => [] as any[]),
         ]);
 
         console.log(`[fetchOverrideMap] overrides: ${overrides.length}개, vision: ${visionRows.length}개 (병렬 쿼리)`);
@@ -295,6 +327,14 @@ async function fetchOverrideMap(ids: string[]): Promise<{ map: any; customBrands
                     map[id].description_grade = np.description_grade;
                 }
             }
+        });
+
+        // 전시카테고리 전송 기록 (exhibition_sync_logs → 마지막 성공 전송 카테고리)
+        syncLogs.forEach((log: any) => {
+            const id = String(log.product_no);
+            if (!map[id]) map[id] = {};
+            map[id].last_synced_category = log.target_category;
+            map[id].last_synced_at = log.last_synced_at;
         });
 
         return { map, customBrands: customBrandsResult };
@@ -376,15 +416,14 @@ async function loadProductsFromDB(): Promise<any[] | null> {
     }
 }
 
-// 메모리 캐시된 상품에 DB 최신 internal_category 오버라이드 적용
-// (다른 Vercel 인스턴스에서 카테고리 변경 시 메모리 캐시가 stale 상태이므로)
+// 메모리 캐시된 상품에 DB 최신 internal_category 및 Vision 상태 오버라이드 적용
 async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
     const ids = contents.map((p: any) => String(p.originProductNo)).filter(Boolean);
     if (ids.length === 0) return contents;
 
     try {
-        // 병렬 배치 쿼리
-        const [rows, gradeRows] = await Promise.all([
+        // 병렬 배치 쿼리 (Overrides, DescriptionGrade, VisionStatus)
+        const [rows, gradeRows, visionRows] = await Promise.all([
             batchInQuery(
                 `SELECT id, internal_category FROM product_overrides WHERE id IN (__PH__) AND internal_category IS NOT NULL`,
                 ids
@@ -393,31 +432,60 @@ async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
                 `SELECT origin_product_no, description_grade FROM naver_products WHERE origin_product_no IN (__PH__) AND description_grade IS NOT NULL`,
                 ids
             ).catch(() => [] as any[]),
+            batchInQuery(
+                `SELECT origin_product_no, analysis_status, vision_brand, vision_grade, vision_confidence FROM product_vision_analysis WHERE origin_product_no IN (__PH__)`,
+                ids
+            ).catch(() => [] as any[]),
         ]);
 
+        const overrideMap = new Map<string, string>(rows.map((r: any) => [String(r.id), r.internal_category]));
         const gradeMap = new Map<string, string>(gradeRows.map((r: any) => [String(r.origin_product_no), r.description_grade]));
+        const visionMap = new Map<string, any>(visionRows.map((r: any) => [String(r.origin_product_no), r]));
 
-        if (rows.length === 0 && gradeMap.size === 0) return contents;
+        if (rows.length === 0 && gradeMap.size === 0 && visionMap.size === 0) return contents;
 
-        const overrideMap = new Map(rows.map((r: any) => [String(r.id), r.internal_category]));
         let patchCount = 0;
         const result = contents.map((p: any) => {
             const pid = String(p.originProductNo);
             const dbCategory = overrideMap.get(pid);
             const dbGrade = gradeMap.get(pid);
+            const visionData = visionMap.get(pid);
+
             const catChanged = dbCategory !== undefined && dbCategory !== p.internalCategory;
             const gradeNeeded = dbGrade && !p.descriptionGrade;
-            if (catChanged || gradeNeeded) {
+
+            // Vision 상태 패치 (완료되었는데 캐시에 반영 안 된 경우 업데이트)
+            const visionStatusChanged = visionData && visionData.analysis_status === 'completed' && p.classification?.visionStatus !== 'completed';
+
+            if (catChanged || gradeNeeded || visionStatusChanged) {
                 patchCount++;
-                return {
-                    ...p,
-                    ...(catChanged ? { internalCategory: dbCategory, archiveTier: dbCategory } : {}),
-                    ...(gradeNeeded ? { descriptionGrade: dbGrade } : {}),
-                };
+                const newProps: any = {};
+
+                if (catChanged) {
+                    newProps.internalCategory = dbCategory;
+                    newProps.archiveTier = dbCategory;
+                }
+
+                if (gradeNeeded) {
+                    newProps.descriptionGrade = dbGrade;
+                }
+
+                if (visionStatusChanged) {
+                    // Vision 정보 일부 머지 (전체를 다 가져오진 않더라도 핵심 정보 반영)
+                    const newClass = { ...(p.classification || {}) };
+                    newClass.visionStatus = 'completed';
+                    newClass.visionGrade = visionData.vision_grade;
+                    if (visionData.vision_brand) newClass.brand = visionData.vision_brand;
+                    // 필요한 경우 confidence 등 업데이트
+                    newProps.classification = newClass;
+                }
+
+                return { ...p, ...newProps };
             }
             return p;
         });
-        if (patchCount > 0) console.log(`[patchCache] ${patchCount}개 상품 카테고리/등급 패치 완료`);
+
+        if (patchCount > 0) console.log(`[patchCache] ${patchCount}개 상품 최신 상태(카테고리/Vision) 패치 완료`);
         return result;
     } catch (e: any) {
         console.error('[patchCacheWithFreshOverrides] DB 조회 실패:', e.message);
@@ -481,9 +549,14 @@ export async function GET(request: Request) {
 
         // 캐시 무효화 요청 (카테고리 이동 후 서버 캐시 클리어)
         const invalidateCache = searchParams.get('invalidateCache') === 'true';
+        const internal = searchParams.get('_internal');
+
         if (invalidateCache) {
             productCache = null;
-            return handleSuccess({ invalidated: true, message: '서버 캐시가 무효화되었습니다' });
+            console.log(`[ProductCache] 캐시 무효화됨${internal ? ` (Internal: ${internal})` : ''}`);
+            if (!fetchAll) {
+                return handleSuccess({ invalidated: true, message: '서버 캐시가 무효화되었습니다' });
+            }
         }
 
         // cacheOnly 모드: 메모리 캐시 → DB → 빈 데이터 순서로 시도

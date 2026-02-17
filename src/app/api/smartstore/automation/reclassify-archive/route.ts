@@ -18,6 +18,7 @@ export const maxDuration = 300; // 5분
 const ARCHIVE_SUB_CATEGORIES = [
     'MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE',
     'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE', 'UNISEX ARCHIVE',
+    'ARCHIVE', 'UNCATEGORIZED',
 ];
 
 const CONCURRENCY = 3;
@@ -124,10 +125,14 @@ export async function POST(request: Request) {
                                 imageUrl: imageUrl || undefined,
                             });
 
-                            // DB 업데이트
+                            // DB 업데이트 (INSERT or UPDATE)
                             await db.query(
-                                `UPDATE product_overrides SET internal_category = $1, updated_at = $2 WHERE id = $3`,
-                                [result.category, new Date(), productId]
+                                `INSERT INTO product_overrides (id, internal_category, updated_at)
+                                 VALUES ($1, $2, $3)
+                                 ON CONFLICT (id) DO UPDATE SET
+                                   internal_category = EXCLUDED.internal_category,
+                                   updated_at = EXCLUDED.updated_at`,
+                                [productId, result.category, new Date()]
                             );
 
                             completedCount++;
@@ -172,7 +177,7 @@ export async function POST(request: Request) {
             // 캐시 무효화
             try {
                 const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-                await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true`);
+                await fetch(`${baseUrl}/api/smartstore/products?invalidateCache=true&_internal=bs-internal-2024`);
             } catch { /* 무시 */ }
 
             const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);

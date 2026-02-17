@@ -393,97 +393,41 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       <div className="bg-gradient-to-r from-slate-900 to-blue-900 rounded-xl p-4 text-white">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <h3 className="font-bold text-sm">다차원 AI 분류 엔진</h3>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
+            <h3 className="font-bold text-sm text-slate-100">재고 관리 및 라이프사이클 대시보드</h3>
           </div>
-          <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded">v2.0 ACTIVE</span>
+          <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded border border-white/5">INVENTORY ACTIVE</span>
         </div>
-        <p className="text-xs text-white/60">
-          브랜드 / 의류타입 / 성별 / 사이즈 / 네이버 카테고리를 실시간 분류합니다.
-          전체 {stats.total.toLocaleString()}개 상품 중 {stats.classifiedCount.toLocaleString()}개 분류 완료.
+        <p className="text-xs text-slate-300/80">
+          상품의 카테고리 분포 및 라이프사이클 단계를 실시간으로 모니터링하고 관리합니다.
+          전체 {stats.total.toLocaleString()}개 상품 관리 중.
         </p>
       </div>
 
-      {/* 4단계 분류 파이프라인 */}
-      <div className="bg-white rounded-xl border p-4">
-        <h4 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider">4단계 분류 파이프라인</h4>
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
-          {[
-            { step: '1', name: '상품명', desc: '텍스트 분류', icon: '📝', color: 'bg-blue-500' },
-            { step: '2', name: '브랜드 DB', desc: '마스터 매칭', icon: '🏷️', color: 'bg-amber-500' },
-            { step: '3', name: 'Vision', desc: 'Gemini 3.0', icon: '🔮', color: 'bg-violet-500' },
-            { step: '4', name: 'Merge', desc: '통합 판정', icon: '🎯', color: 'bg-emerald-500' },
-          ].map((s, i) => (
-            <div key={s.step} className="flex items-center gap-1 shrink-0">
-              <div className="text-center min-w-[70px]">
-                <div className={`w-8 h-8 ${s.color} rounded-full flex items-center justify-center mx-auto mb-1 shadow-sm`}>
-                  <span className="text-sm">{s.icon}</span>
-                </div>
-                <p className="text-[10px] font-bold text-slate-700">{s.name}</p>
-                <p className="text-[8px] text-slate-400">{s.desc}</p>
-              </div>
-              {i < 3 && (
-                <svg className="w-4 h-4 text-slate-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* 핵심 지표 */}
-      <div className="grid grid-cols-4 gap-2">
-        <div className="bg-white rounded-xl border p-3 text-center">
-          <p className="text-[10px] text-slate-400 font-bold mb-1">분류율</p>
-          <p className="text-xl font-black text-slate-900">
-            {stats.total > 0 ? Math.round((stats.classifiedCount / stats.total) * 100) : 0}%
-          </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border p-4 flex flex-col items-center justify-center">
+          <p className="text-[11px] text-slate-400 font-bold mb-1 uppercase tracking-wider">카테고리 분류율</p>
+          <div className="flex items-baseline gap-1">
+            <p className="text-3xl font-black text-slate-900">
+              {stats.total > 0 ? Math.round((stats.classifiedCount / stats.total) * 100) : 0}
+            </p>
+            <span className="text-lg font-bold text-slate-400">%</span>
+          </div>
         </div>
-        <div className="bg-white rounded-xl border p-3 text-center">
-          <p className="text-[10px] text-slate-400 font-bold mb-1">평균 신뢰도</p>
-          <p className={`text-xl font-black ${stats.avgConfidence >= 70 ? 'text-emerald-600' : stats.avgConfidence >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
-            {stats.avgConfidence}%
-          </p>
-        </div>
-        <div
-          onClick={() => setStatDetailType('HIGH_CONFIDENCE')}
-          className="bg-white rounded-xl border p-3 text-center cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-        >
-          <p className="text-[10px] text-slate-400 font-bold mb-1 group-hover:text-emerald-600 transition-colors">고신뢰</p>
-          <p className="text-xl font-black text-emerald-600">{stats.highConf}</p>
-        </div>
-        <div
-          onClick={() => setStatDetailType('LOW_CONFIDENCE')}
-          className="bg-white rounded-xl border p-3 text-center cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-        >
-          <p className="text-[10px] text-slate-400 font-bold mb-1 group-hover:text-red-500 transition-colors">저신뢰</p>
-          <p className="text-xl font-black text-red-500">{stats.lowConf}</p>
+        <div className="bg-white rounded-xl border p-4 flex flex-col items-center justify-center">
+          <p className="text-[11px] text-slate-400 font-bold mb-1 uppercase tracking-wider">라이프사이클 적용 중</p>
+          <div className="flex items-baseline gap-1">
+            <p className="text-3xl font-black text-emerald-600">{stats.total - (stats.byLifecycle['NEW'] || 0)}</p>
+            <span className="text-sm font-bold text-slate-400">/ {stats.total}개</span>
+          </div>
         </div>
       </div>
 
       {/* Vision 등급 분포 + 자동가격조정 요약 */}
       <div className="grid grid-cols-2 gap-4">
         {/* 등급 분포 */}
-        <div className="bg-white rounded-xl border p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Vision 등급 분포</h4>
-            <span className="text-[10px] text-slate-400">{stats.visionCompleted}개 분석완료</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { grade: 'S급', color: 'bg-amber-500', textColor: 'text-amber-600', bgLight: 'bg-amber-50' },
-              { grade: 'A급', color: 'bg-blue-500', textColor: 'text-blue-600', bgLight: 'bg-blue-50' },
-              { grade: 'B급', color: 'bg-slate-500', textColor: 'text-slate-600', bgLight: 'bg-slate-50' },
-            ].map(g => (
-              <div key={g.grade} className={`text-center p-2 rounded-lg ${g.bgLight}`}>
-                <div className={`w-full h-1 ${g.color} rounded-full mb-1.5`} />
-                <p className={`text-lg font-black ${g.textColor}`}>{stats.byGrade[g.grade] || 0}</p>
-                <p className="text-[9px] font-bold text-slate-600">{g.grade}</p>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* 자동가격조정 요약 */}
         <div className="bg-white rounded-xl border p-4">
@@ -656,36 +600,6 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
 
         <div className="space-y-4">
           {/* Vision 배치 분석 */}
-          <div className="bg-gradient-to-r from-violet-50 to-blue-50 rounded-xl border border-violet-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <h4 className="text-sm font-bold text-violet-800">Gemini Vision 분석</h4>
-              </div>
-              <span className="text-[10px] text-violet-500 font-mono">gemini-1.5-flash</span>
-            </div>
-
-            <p className="text-[11px] text-violet-600 mb-3">
-              미분석 상품 <span className="font-black">{eligibleProducts.length}개</span>를 새 창에서 자동 분석합니다.
-              분석 중에도 다른 작업을 할 수 있습니다.
-            </p>
-
-            <button
-              onClick={() => {
-                window.open('/smartstore/vision-analyzer', 'vision-analyzer', 'width=900,height=700,scrollbars=yes,resizable=yes');
-              }}
-              disabled={eligibleProducts.length === 0}
-              className="w-full py-2.5 text-xs font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-violet-200 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              새 창에서 자동 분석 시작 ({eligibleProducts.length}개)
-            </button>
-          </div>
 
           {/* 네이버 상품 송신 */}
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-4">

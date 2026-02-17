@@ -140,12 +140,14 @@ async function initTables() {
         ['CURATED', 'CURATED', 2, 'CURATED'],
         ['MILITARY ARCHIVE', 'MILITARY', 3, 'ARCHIVE'],
         ['WORKWEAR ARCHIVE', 'WORKWEAR', 4, 'ARCHIVE'],
-        ['JAPANESE ARCHIVE', 'JAPANESE ARCHIVE', 5, 'ARCHIVE'],
-        ['HERITAGE EUROPE', 'HERITAGE EUROPE', 6, 'ARCHIVE'],
-        ['BRITISH ARCHIVE', 'BRITISH ARCHIVE', 7, 'ARCHIVE'],
-        ['CLEARANCE', 'CLEARANCE', 8, 'CLEARANCE'],
-        ['KEEP_SELLING', '판매유지', 9, 'CLEARANCE'],
-        ['DISCARD', '폐기 결정', 10, 'CLEARANCE']
+        ['OUTDOOR ARCHIVE', 'OUTDOOR', 5, 'ARCHIVE'],
+        ['JAPANESE ARCHIVE', 'JAPANESE ARCHIVE', 6, 'ARCHIVE'],
+        ['HERITAGE EUROPE', 'HERITAGE EUROPE', 7, 'ARCHIVE'],
+        ['BRITISH ARCHIVE', 'BRITISH ARCHIVE', 8, 'ARCHIVE'],
+        ['UNISEX ARCHIVE', 'UNISEX', 9, 'ARCHIVE'],
+        ['CLEARANCE', 'CLEARANCE', 10, 'CLEARANCE'],
+        ['KEEP_SELLING', '판매유지', 11, 'CLEARANCE'],
+        ['DISCARD', '폐기 결정', 12, 'CLEARANCE']
       ];
       for (const [id, name, order, cls] of seedData) {
         await client.execute({

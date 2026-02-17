@@ -31,6 +31,7 @@ const ARCHIVE_SUB_CATEGORIES = [
   { id: 'JAPANESE ARCHIVE', name: 'JAPANESE ARCHIVE', description: '빔즈, 포터, 캐피탈, Visvim, 일본 데님', color: 'bg-red-500' },
   { id: 'HERITAGE EUROPE', name: 'HERITAGE EUROPE', description: '프랑스/독일 빈티지, 몰스킨, Le Laboureur', color: 'bg-blue-500' },
   { id: 'BRITISH ARCHIVE', name: 'BRITISH ARCHIVE', description: '바버, 버버리, 아쿠아스큐텀, 트렌치/트위드', color: 'bg-indigo-500' },
+  { id: 'UNISEX ARCHIVE', name: 'UNISEX', description: '유니섹스 빈티지, 오버사이즈, 젠더리스 아이템', color: 'bg-violet-500' },
 ];
 
 // CLEARANCE 하위 카테고리 (판매유지/폐기결정)

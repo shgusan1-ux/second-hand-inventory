@@ -11,15 +11,15 @@
  * Gemini 3 Pro (무조건 사용) + Gemini 2.5 Flash (fallback)
  */
 
+import { classifyArchiveLocal } from '@/lib/archive-classifier';
 import { classifyArchive } from '@/lib/classification/archive';
 import { lookupBrand } from '@/lib/classification/brand-tier-database';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-// Gemini 3 Pro — 세계 최고 멀티모달 모델
 const GEMINI_3_PRO_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
-// Fallback: Gemini 2.5 Flash
-const GEMINI_25_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+// Primary: Gemini 2.0 Flash - 빠르고 안정적
+const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 const ARCHIVE_CATEGORIES = [
     'MILITARY ARCHIVE',
@@ -74,23 +74,23 @@ const COMBINED_PROMPT = (productName: string, hasImage: boolean) => `당신은 �
 상품명: "${productName}"
 
 ━━━ 7개 ARCHIVE 카테고리 ━━━
-1. MILITARY ARCHIVE — 군용/밀리터리 (Alpha Industries, Rothco, M-65, MA-1, BDU, 카모, 야상)
-2. WORKWEAR ARCHIVE — 워크웨어/작업복 (Carhartt, Dickies, Red Kap, 초어코트, 커버올, 더블니, 히코리)
-3. OUTDOOR ARCHIVE — 아웃도어 (Patagonia, TNF, Arc'teryx, Gore-Tex, 플리스, 눕시, 아노락)
-4. JAPANESE ARCHIVE — 일본/아메카지 (Visvim, Kapital, Beams, Needles, 셀비지, 인디고, 보로)
-5. HERITAGE EUROPE — 유럽 럭셔리/하이엔드만 (Gucci, Prada, Dior, Saint Laurent, Balenciaga, Valentino, Versace 등 유럽 명품)
-6. BRITISH ARCHIVE — 영국 전통 (Barbour, Burberry, Fred Perry, Mackintosh, 왁스코튼, 타탄, 트위드)
-7. UNISEX ARCHIVE — 미국 캐주얼/대중 브랜드 + 유니섹스 (Polo Ralph Lauren, Tommy Hilfiger, Gap, Nike, Adidas, Champion, Lacoste, Levi's, 남녀공용, 프리사이즈)
+1. MILITARY ARCHIVE — 군용/밀리터리 의류. 브랜드: Alpha Industries, Rothco, Propper. 아이템: M-65, MA-1, BDU, 카모, 야상, 필드재킷, 카고팬츠. 키워드: 밀리터리, 군용, 군복, 전투복
+2. WORKWEAR ARCHIVE — 워크웨어/작업복 스타일. 브랜드: Carhartt, Dickies, Red Kap, Ben Davis. 아이템: 초어코트, 커버올, 오버올, 더블니, 히코리. 키워드: 워크웨어, 작업복, 페인터
+3. OUTDOOR ARCHIVE — 아웃도어/등산 기능성. 브랜드: Patagonia, The North Face, Arc'teryx, Columbia, Marmot. 아이템: Gore-Tex, 플리스, 눕시, 아노락, 윈드브레이커. 키워드: 아웃도어, 등산, 트레킹
+4. JAPANESE ARCHIVE — 일본 브랜드 또는 아메카지 스타일. 브랜드: Visvim, Kapital, Beams, Needles, Human Made, WTAPS, Neighborhood. 아이템: 셀비지 데님, 인디고, 보로, 사시코. 키워드: 아메카지, 일본제
+5. HERITAGE EUROPE — 유럽 럭셔리/하이엔드 브랜드만. 브랜드: Gucci, Prada, Dior, Saint Laurent, Balenciaga, Valentino, Versace, Givenchy, Celine, Bottega Veneta. 유럽 명품 브랜드만 해당
+6. BRITISH ARCHIVE — 영국 전통 브랜드/스타일. 브랜드: Barbour, Burberry, Fred Perry, Mackintosh, Aquascutum, Paul Smith. 아이템: 왁스코튼, 타탄, 트위드, 더플코트, 해링턴
+7. UNISEX ARCHIVE — 미국 캐주얼/스포츠 브랜드만 해당. 브랜드: Polo Ralph Lauren, Tommy Hilfiger, Gap, Nike, Adidas, Champion, Lacoste, Levi's, Stussy, Supreme. 반드시 이런 대중 캐주얼 브랜드가 식별될 때만 분류
 
-분류 규칙:
-- 브랜드 식별이 최우선. 브랜드 원산지와 DNA를 고려
-- 동일 브랜드라도 아이템 특성에 따라 다를 수 있음 (Nike 카고 → MILITARY)
+⚠️ 핵심 분류 규칙:
+- 브랜드 식별이 최우선. 브랜드 원산지와 DNA를 기반으로 판단
+- 아이템의 디자인/기능 특성도 중요 (카고팬츠→MILITARY, 플리스→OUTDOOR)
 - 일본 브랜드 → JAPANESE, 영국 브랜드 → BRITISH 우선
-- HERITAGE EUROPE는 오직 유럽 럭셔리/하이엔드 브랜드만 (Gucci, Prada, Dior 등)
-- 미국 대중 캐주얼 (Polo, Tommy, Gap, Nike, Adidas, Champion, Levi's 등) → UNISEX ARCHIVE
-- Lacoste 등 프렌치 캐주얼도 대중적이면 → UNISEX ARCHIVE
-- 브랜드 불명 + 성별 무관 기본 아이템 → UNISEX ARCHIVE
-- 확신 없으면 confidence 30 이하
+- HERITAGE EUROPE는 오직 유럽 럭셔리/하이엔드 브랜드만
+- UNISEX는 미국 대중 캐주얼 브랜드가 확실히 식별될 때만! 브랜드 불명이면 UNISEX가 아님
+- ❌ 브랜드 불명 + 특징 불명확 → NONE (confidence 20 이하). 절대 UNISEX로 넣지 마세요
+- ❌ "프리사이즈", "남녀공용" 같은 사이즈 표기는 UNISEX 분류 근거가 아님
+- 확신 없으면 반드시 NONE + confidence 20 이하로 응답
 ${hasImage ? '\n- 이미지에서 소재, 패턴, 디테일, 구조를 관찰하여 판단에 활용' : ''}
 
 JSON으로만 응답:
@@ -104,12 +104,37 @@ JSON으로만 응답:
 
 // ─── 핵심: 1번의 API 콜로 모든 것을 분석 ────────────────────────────
 
+export interface ClassifySettings {
+    threshold?: number;
+    weights?: { ai?: number; brand?: number; brandDb?: number; visual?: number; keyword?: number; context?: number };
+}
+
 export async function classifyForArchive(product: {
     id: string;
     name: string;
     imageUrl?: string;
-}): Promise<ArchiveAIResult> {
-    // 즉시 계산 (0ms)
+}, modelType: 'flash' | 'pro' = 'flash', settings?: ClassifySettings): Promise<ArchiveAIResult> {
+
+    // 0. [Hybrid] 룰 기반 즉시 분류 (속도 최적화 A)
+    // 브랜드나 강력한 키워드가 있으면 AI 없이 즉시 반환 (0.01초)
+    const localResult = classifyArchiveLocal(product.name);
+    if (localResult.category && localResult.confidence >= 80) {
+        return {
+            category: localResult.category,
+            confidence: localResult.confidence,
+            brandAnalysis: {
+                brand: '', country: '', founded: '', styleLineage: 'Rule-based',
+                category: localResult.category, confidence: localResult.confidence, reason: localResult.reason
+            },
+            visualAnalysis: null,
+            keywordCategory: localResult.category,
+            keywordScore: 100,
+            reason: `⚡[즉시분류] ${localResult.reason}`,
+        };
+    }
+
+    // AI 분석 경로 (Hybrid 실패 시)
+    // 변수 복원 (Fusion scoring용)
     const keywordResult = classifyArchive(product.name, []);
     const contextScore = analyzeContext(product.name);
     const localBrand = lookupBrand(product.name);
@@ -123,28 +148,31 @@ export async function classifyForArchive(product: {
     const prompt = COMBINED_PROMPT(product.name, hasImage) + localHint;
 
     let combinedResult: any = null;
+    let primaryUrl = modelType === 'pro' ? GEMINI_3_PRO_URL : GEMINI_FLASH_URL;
+    let fallbackUrl = modelType === 'pro' ? GEMINI_FLASH_URL : GEMINI_3_PRO_URL;
+    let primaryName = modelType === 'pro' ? 'Gemini 3 Pro' : 'Gemini 2.0 Flash';
 
-    // 1차: Gemini 3 Pro (이미지 있으면 Vision, 없으면 Text)
+    // 1차 시도 (Primary)
     try {
         if (hasImage) {
-            combinedResult = await callGeminiVision(GEMINI_3_PRO_URL, prompt, product.imageUrl!);
+            combinedResult = await callGeminiVision(primaryUrl, prompt, product.imageUrl!);
         } else {
-            combinedResult = await callGeminiText(GEMINI_3_PRO_URL, prompt);
+            combinedResult = await callGeminiText(primaryUrl, prompt);
         }
     } catch (e) {
-        console.warn('[AI-Archive] Gemini 3 Pro 실패:', (e as Error).message);
+        console.warn(`[AI-Archive] ${primaryName} 실패, Fallback 시도:`, (e as Error).message);
     }
 
-    // 2차: Gemini 2.5 Flash fallback
+    // 2차 시도 (Fallback)
     if (!combinedResult?.finalCategory) {
         try {
             if (hasImage) {
-                combinedResult = await callGeminiVision(GEMINI_25_FLASH_URL, prompt, product.imageUrl!);
+                combinedResult = await callGeminiVision(fallbackUrl, prompt, product.imageUrl!);
             } else {
-                combinedResult = await callGeminiText(GEMINI_25_FLASH_URL, prompt);
+                combinedResult = await callGeminiText(fallbackUrl, prompt);
             }
         } catch (e) {
-            console.warn('[AI-Archive] Gemini 2.5 Flash도 실패:', (e as Error).message);
+            console.warn('[AI-Archive] Fallback도 실패:', (e as Error).message);
         }
     }
 
@@ -154,35 +182,38 @@ export async function classifyForArchive(product: {
     const aiCategory = normalizeCategory(combinedResult?.finalCategory);
     const aiConfidence = Math.min(100, Math.max(0, combinedResult?.finalConfidence || 0));
 
+    // brand-tier-database 신호 (ADIDAS→UNISEX, COLUMBIA→OUTDOOR 등)
+    const TIER_TO_CAT: Record<string, ArchiveCat> = {
+        'MILITARY': 'MILITARY ARCHIVE', 'WORKWEAR': 'WORKWEAR ARCHIVE',
+        'OUTDOOR': 'OUTDOOR ARCHIVE', 'JAPAN': 'JAPANESE ARCHIVE',
+        'HERITAGE': 'HERITAGE EUROPE', 'BRITISH': 'BRITISH ARCHIVE',
+        'UNISEX': 'UNISEX ARCHIVE',
+    };
+    const dbBrandCategory: ArchiveCat | null = localBrand.info ? (TIER_TO_CAT[localBrand.tier] || null) : null;
+    const dbBrandConfidence = localBrand.info ? 75 : 0; // DB에 등록된 브랜드는 75점
+
+    // 가중치 (settings에서 오거나 기본값)
+    const w = {
+        ai: (settings?.weights?.ai ?? 40) / 100,
+        brand: (settings?.weights?.brand ?? 15) / 100,
+        brandDb: (settings?.weights?.brandDb ?? 20) / 100,
+        visual: (settings?.weights?.visual ?? 10) / 100,
+        keyword: (settings?.weights?.keyword ?? 10) / 100,
+        context: (settings?.weights?.context ?? 5) / 100,
+    };
+    const minThreshold = settings?.threshold ?? 25;
+
     // Fusion scoring
     const scores: Record<string, number> = {};
     ARCHIVE_CATEGORIES.forEach(cat => {
         scores[cat] = 0;
 
-        // AI 통합 판정 (50%)
-        if (aiCategory === cat) {
-            scores[cat] += aiConfidence * 0.50;
-        }
-
-        // Brand 개별 판정 (20%)
-        if (brandResult.category === cat) {
-            scores[cat] += brandResult.confidence * 0.20;
-        }
-
-        // Visual 개별 판정 (15%)
-        if (visualResult && visualResult.category === cat) {
-            scores[cat] += visualResult.confidence * 0.15;
-        }
-
-        // Keyword signal (10%)
-        if (keywordResult.category === cat) {
-            scores[cat] += keywordResult.score * 0.10;
-        }
-
-        // Context signal (5%)
-        if (contextScore.category === cat) {
-            scores[cat] += contextScore.confidence * 0.05;
-        }
+        if (aiCategory === cat) scores[cat] += aiConfidence * w.ai;
+        if (brandResult.category === cat) scores[cat] += brandResult.confidence * w.brand;
+        if (dbBrandCategory === cat) scores[cat] += dbBrandConfidence * w.brandDb;
+        if (visualResult && visualResult.category === cat) scores[cat] += visualResult.confidence * w.visual;
+        if (keywordResult.category === cat) scores[cat] += keywordResult.score * w.keyword;
+        if (contextScore.category === cat) scores[cat] += contextScore.confidence * w.context;
     });
 
     // 동의 보너스
@@ -204,11 +235,11 @@ export async function classifyForArchive(product: {
     if (combinedResult?.finalReason) reasons.push(combinedResult.finalReason);
     else {
         if (brandResult.category !== 'NONE') reasons.push(`브랜드:${brandResult.brand}→${brandResult.category}`);
-        if (visualResult?.category !== 'NONE') reasons.push(`시각:${visualResult.category}`);
+        if (visualResult && visualResult.category !== 'NONE') reasons.push(`시각:${visualResult.category}`);
     }
 
     return {
-        category: bestScore > 20 ? bestCat as ArchiveCat : 'ARCHIVE',
+        category: bestScore > minThreshold ? bestCat as ArchiveCat : 'ARCHIVE',
         confidence: Math.round(Math.min(100, bestScore)),
         brandAnalysis: brandResult,
         visualAnalysis: visualResult,
@@ -272,7 +303,7 @@ function analyzeContext(productName: string): { category: ArchiveCat | 'NONE'; c
     const name = productName.toUpperCase();
 
     const patterns: [string[], ArchiveCat, number][] = [
-        [['남녀공용', '유니섹스', 'UNISEX', '프리사이즈', 'FREE SIZE', 'FREESIZE'], 'UNISEX ARCHIVE', 60],
+        [['남녀공용', '유니섹스', 'UNISEX'], 'UNISEX ARCHIVE', 25],
         [['M-65', 'M65', 'MA-1', 'MA1', 'N-3B', 'BDU', 'FIELD JACKET', 'CARGO', 'CAMO', 'CAMOUFLAGE', '군용', '군복', '밀리터리', '야상'], 'MILITARY ARCHIVE', 55],
         [['CHORE', 'COVERALL', 'OVERALL', 'DOUBLE KNEE', 'HICKORY', '초어', '커버올', '오버올', '더블니', '워크웨어'], 'WORKWEAR ARCHIVE', 55],
         [['GORE-TEX', 'GORETEX', 'FLEECE', 'ANORAK', 'NUPTSE', '플리스', '고어텍스', '아노락', '눕시'], 'OUTDOOR ARCHIVE', 55],

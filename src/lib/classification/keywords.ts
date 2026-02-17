@@ -38,16 +38,13 @@ export const ARCHIVE_KEYWORDS = {
         '셀비지', '인디고', '사시코', '보로', '꼼데가르송'
     ],
     'HERITAGE EUROPE': [
-        'Ralph Lauren', 'Polo', 'Brooks Brothers', 'Tommy Hilfiger',
-        'Lacoste', 'Gant', 'J.Crew', 'J.Press',
         'Gucci', 'Prada', 'Louis Vuitton', 'Hermes', 'Dior', 'Chanel',
         'Valentino', 'Fendi', 'Bottega Veneta', 'Versace', 'Armani',
         'A.P.C.', 'Acne Studios', 'COS', 'Our Legacy', 'Lemaire', 'AMI',
-        'Levi\'s', 'Champion', 'Nike', 'Adidas',
         'French', 'German', 'Swedish', 'Italian', 'Euro',
-        'Heritage', 'Vintage', 'Classic', 'Preppy', 'Ivy',
-        '유럽', '프랑스', '독일', '헤리티지', '프레피', '아이비',
-        '랄프로렌', '폴로', '라코스테', '구찌', '프라다'
+        'Heritage', 'Vintage', 'Classic', 'Elegant',
+        '유럽', '프랑스', '독일', '이탈리아', '명품', '하이엔드', '디자이너',
+        '구찌', '프라다', '루이비통', '에르메스', '샤넬'
     ],
     'BRITISH ARCHIVE': [
         'Burberry', 'Aquascutum', 'Grenfell', 'Barbour', 'Belstaff',
@@ -60,11 +57,13 @@ export const ARCHIVE_KEYWORDS = {
         '영국', '바버', '버버리', '브리티시', '왁스', '타탄', '트위드', '트렌치', '더플'
     ],
     'UNISEX ARCHIVE': [
+        'Ralph Lauren', 'Polo', 'Brooks Brothers', 'Tommy Hilfiger',
+        'Lacoste', 'Gant', 'J.Crew', 'J.Press',
+        'Levi\'s', 'Champion', 'Nike', 'Adidas', 'Stussy', 'Supreme', 'Gap',
         'Unisex', '남녀공용', '유니섹스', '남녀', '공용',
         '프리사이즈', 'Free Size', 'Freesize', 'One Size',
         '오버사이즈', 'Oversize', 'Oversized', '오버핏',
-        '박시핏', 'Boxy', '젠더리스', 'Genderless', 'Gender Neutral',
-        '무지', 'Basic', 'Plain', 'Essential',
-        '노브랜드', 'No Brand', 'Generic'
+        '박시핏', 'Boxy', '젠더리스', 'Genderless', '무지', 'Basic',
+        '랄프로렌', '폴로', '타미힐피거', '라코스테', '나이키', '아디다스', '리바이스', '갭'
     ]
 };

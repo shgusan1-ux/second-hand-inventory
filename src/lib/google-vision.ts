@@ -5,10 +5,15 @@ let client: any = null;
 function getVisionClient() {
     if (!client) {
         // Initialize the client
-        // Check if credentials are provided via environment variable (for Vercel) or file path
-        const clientConfig = process.env.GOOGLE_VISION_CREDENTIALS_JSON
-            ? { credentials: JSON.parse(process.env.GOOGLE_VISION_CREDENTIALS_JSON) }
-            : {}; // If empty, it looks for GOOGLE_APPLICATION_CREDENTIALS env var automatically
+        let clientConfig = {};
+        const jsonEnv = process.env.GOOGLE_VISION_CREDENTIALS_JSON;
+        if (jsonEnv && jsonEnv.trim()) {
+            try {
+                clientConfig = { credentials: JSON.parse(jsonEnv) };
+            } catch (e) {
+                console.error('Failed to parse GOOGLE_VISION_CREDENTIALS_JSON:', e);
+            }
+        }
 
         client = new vision.ImageAnnotatorClient(clientConfig);
     }

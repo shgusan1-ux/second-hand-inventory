@@ -1,0 +1,60 @@
+Table: products
+id (TEXT), name (TEXT), brand (TEXT), category (TEXT), price_consumer (INTEGER), price_sell (INTEGER), status (TEXT), condition (TEXT), image_url (TEXT), created_at (DATETIME), sold_at (DATETIME), md_comment (TEXT), images (TEXT), size (TEXT), master_reg_date (TIMESTAMP)
+---
+Table: categories
+id (TEXT), name (TEXT), sort_order (INTEGER), classification (TEXT)
+---
+Table: users
+id (TEXT), username (TEXT), password_hash (TEXT), name (TEXT), role (TEXT), created_at (TEXT), password_hint (TEXT), job_title (TEXT), email (TEXT), security_memo (TEXT)
+---
+Table: audit_logs
+id (INTEGER), user_id (TEXT), action (TEXT), target_type (TEXT), target_id (TEXT), details (TEXT), created_at (TEXT)
+---
+Table: sqlite_sequence
+name (), seq ()
+---
+Table: dashboard_tasks
+id (TEXT), content (TEXT), created_at (TIMESTAMP), is_completed (BOOLEAN), completed_at (TIMESTAMP)
+---
+Table: user_permissions
+user_id (TEXT), category (TEXT)
+---
+Table: attendance_logs
+id (TEXT), user_id (TEXT), work_date (TEXT), check_in (TEXT), check_out (TEXT), created_at (TIMESTAMP)
+---
+Table: memos
+id (SERIAL), content (TEXT), author_name (VARCHAR(50)), created_at (TIMESTAMP)
+---
+Table: chat_messages
+id (SERIAL), sender_id (TEXT), sender_name (TEXT), content (TEXT), created_at (TIMESTAMP), attachment (TEXT)
+---
+Table: user_presence
+user_id (TEXT), last_active_at (TIMESTAMP), name (TEXT), job_title (TEXT)
+---
+Table: password_accounts
+id (SERIAL), site_name (TEXT), site_url (TEXT), account_id (TEXT), account_password (TEXT), description (TEXT), updated_at (TIMESTAMP), updated_by (TEXT)
+---
+Table: product_overrides
+id (TEXT), override_date (TIMESTAMP), internal_category (TEXT), updated_at (TIMESTAMP), ai_price (INTEGER), optimized_title (TEXT), ai_description (TEXT)
+---
+Table: security_logs
+id (INTEGER), user_id (TEXT), user_name (TEXT), action (TEXT), details (TEXT), created_at (TIMESTAMP)
+---
+Table: messages
+id (INTEGER), sender_id (TEXT), receiver_id (TEXT), content (TEXT), is_read (BOOLEAN), created_at (TIMESTAMP)
+---
+Table: memo_comments
+id (INTEGER), memo_id (INTEGER), content (TEXT), author_name (VARCHAR(50)), created_at (TIMESTAMP)
+---
+Table: system_settings
+key (VARCHAR(50)), value (TEXT), updated_at (TIMESTAMP)
+---
+Table: transactions
+id (INTEGER), type (VARCHAR(10)), amount (INTEGER), category (VARCHAR(50)), description (TEXT), date (VARCHAR(20)), payment_method (VARCHAR(20)), created_by (VARCHAR(50)), created_at (TIMESTAMP)
+---
+Table: naver_product_map
+origin_product_no (TEXT), channel_product_no (TEXT), naver_category_id (TEXT), archive_category_id (TEXT), name (TEXT), sale_price (INTEGER), stock_quantity (INTEGER), status_type (TEXT), seller_management_code (TEXT), last_synced_at (TIMESTAMP), suggested_archive_id (TEXT), suggestion_reason (TEXT), is_approved (BOOLEAN), inferred_brand (TEXT), ocr_text (TEXT), product_description (TEXT)
+---
+Table: naver_categories
+id (TEXT), name (TEXT), whole_category_name (TEXT), is_last (BOOLEAN), updated_at (TIMESTAMP)
+---

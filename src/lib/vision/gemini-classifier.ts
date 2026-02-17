@@ -1,12 +1,11 @@
 /**
- * Gemini 3.0 Pro Vision 기반 상품 분류기
- * 모델 고정: gemini-3.0-pro
+ * Gemini 2.0 Flash Vision 기반 상품 분류기
  */
 
 import type { GeminiVisionResult } from './types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 async function fetchImageAsBase64(url: string): Promise<string> {
@@ -99,18 +98,27 @@ export async function classifyProductByVision(
   const data = await response.json();
 
   if (!response.ok) {
-    console.error(`[Vision] Gemini API HTTP ${response.status}:`, JSON.stringify(data).substring(0, 500));
-    return null;
+    const errMsg = `Gemini API HTTP ${response.status}: ${JSON.stringify(data).substring(0, 300)}`;
+    console.error(`[Vision] ${errMsg}`);
+    throw new Error(errMsg);
   }
 
   if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-    console.error('[Vision] Gemini 응답에 text 없음:', JSON.stringify(data).substring(0, 500));
-    return null;
+    const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason || 'unknown';
+    const errMsg = `Gemini 응답 없음 (reason: ${reason}): ${JSON.stringify(data).substring(0, 300)}`;
+    console.error(`[Vision] ${errMsg}`);
+    throw new Error(errMsg);
   }
 
   const text = data.candidates[0].content.parts[0].text;
   const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
-  const result = JSON.parse(jsonStr);
+
+  let result;
+  try {
+    result = JSON.parse(jsonStr);
+  } catch {
+    throw new Error(`JSON 파싱 실패: ${jsonStr.substring(0, 200)}`);
+  }
 
   return {
     brand: result.brand || '',

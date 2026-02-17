@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
             const blob = await put(`thumbnails/generated/${fileName}`, file, {
                 access: 'public',
                 contentType: 'image/jpeg',
+                addRandomSuffix: false,
+                allowOverwrite: true,
             });
 
             return NextResponse.json({

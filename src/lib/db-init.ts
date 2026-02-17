@@ -223,6 +223,63 @@ export async function initDatabase() {
       await db.query(`ALTER TABLE naver_products ADD COLUMN description_grade TEXT`);
     } catch (e) { /* Column likely exists */ }
 
+    // naver_product_map에 실제 네이버 전시카테고리 저장 컬럼 추가
+    try {
+      await db.query(`ALTER TABLE naver_product_map ADD COLUMN naver_display_category TEXT`);
+    } catch (e) { /* Column likely exists */ }
+    try {
+      await db.query(`ALTER TABLE naver_product_map ADD COLUMN display_category_ids TEXT`);
+    } catch (e) { /* Column likely exists */ }
+    try {
+      await db.query(`ALTER TABLE naver_product_map ADD COLUMN display_scanned_at TIMESTAMP`);
+    } catch (e) { /* Column likely exists */ }
+    try {
+      await db.query(`ALTER TABLE naver_product_map ADD COLUMN seller_tags TEXT`);
+    } catch (e) { /* Column likely exists */ }
+
+    // 아카이브 카테고리 설정 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS archive_category_settings (
+        category_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0
+      )
+    `);
+
+    // 초기 데이터 (기존 하드코딩된 목록 기반)
+    const { rows: existingCats } = await db.query('SELECT count(*) as count FROM archive_category_settings');
+    if (parseInt(existingCats[0].count) === 0) {
+      const defaultCats = [
+        ['MILITARY ARCHIVE', 'Military', 0],
+        ['WORKWEAR ARCHIVE', 'Workwear', 1],
+        ['OUTDOOR ARCHIVE', 'Outdoor', 2],
+        ['JAPANESE ARCHIVE', 'Japan', 3],
+        ['HERITAGE EUROPE', 'Euro Vintage', 4],
+        ['BRITISH ARCHIVE', 'British', 5],
+        ['UNISEX ARCHIVE', 'Unisex', 6]
+      ];
+      for (const [id, label, order] of defaultCats) {
+        await db.query(
+          'INSERT INTO archive_category_settings (category_id, display_name, sort_order) VALUES ($1, $2, $3)',
+          [id, label, order]
+        );
+      }
+    }
+
+    // 사업 로드맵 (마인드맵) 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS business_roadmap (
+        id TEXT PRIMARY KEY,
+        term TEXT NOT NULL,
+        parent_id TEXT,
+        content TEXT NOT NULL,
+        color TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);

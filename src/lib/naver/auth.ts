@@ -39,7 +39,9 @@ export async function getNaverAccessToken(): Promise<string> {
 
     const timestamp = Date.now();
     // Naver Commerce API uses bcrypt where the clientSecret is the salt.
-    const signature = bcrypt.hashSync(`${clientId}_${timestamp}`, clientSecret);
+    const hashed = bcrypt.hashSync(`${clientId}_${timestamp}`, clientSecret);
+    // MUST be Base64 encoded as per Naver docs
+    const signature = Buffer.from(hashed, 'utf-8').toString('base64');
 
     const body = {
         client_id: clientId,

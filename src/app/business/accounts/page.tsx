@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getBankAccounts, syncBankAccounts, getFixedCosts, saveFixedCost } from '@/lib/accounting-actions';
+import { syncIBKAccount, checkBusinessStatus } from '@/lib/banking-actions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,9 @@ export default function AccountsPage() {
     const [fixedCosts, setFixedCosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
+    const [ibkSyncing, setIbkSyncing] = useState<string | null>(null);
+    const [businessNo, setBusinessNo] = useState('');
+    const [businessStatus, setBusinessStatus] = useState<any>(null);
 
     useEffect(() => {
         loadData();
@@ -42,6 +46,29 @@ export default function AccountsPage() {
             toast.error('동기화 실패: ' + res.error);
         }
         setSyncing(false);
+    };
+
+    const handleIBKSync = async (accountNo: string) => {
+        setIbkSyncing(accountNo);
+        const res = await syncIBKAccount(accountNo);
+        if (res.success) {
+            toast.success(`기업은행(${accountNo}) 동기화 성공`);
+            loadData();
+        } else {
+            toast.error('IBK 동기화 실패: ' + res.error);
+        }
+        setIbkSyncing(null);
+    };
+
+    const handleCheckBusiness = async () => {
+        if (!businessNo) return;
+        const res = await checkBusinessStatus(businessNo);
+        if (res.success) {
+            setBusinessStatus(res);
+            toast.success('사업자 상태 조회 완료');
+        } else {
+            toast.error('조회 실패: ' + res.error);
+        }
     };
 
     const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
@@ -151,10 +178,27 @@ export default function AccountsPage() {
                                             {getOwnerBadge(acc.owner_entity)}
                                         </div>
                                         <div className="flex justify-between items-end">
-                                            <p className="text-xl font-bold">{acc.balance.toLocaleString()}원</p>
-                                            <span className="text-[10px] text-slate-400 italic">
-                                                {new Date(acc.updated_at).toLocaleTimeString()} 업데이트
-                                            </span>
+                                            <div>
+                                                <p className="text-xl font-bold">{acc.balance.toLocaleString()}원</p>
+                                                <span className="text-[10px] text-slate-400 italic">
+                                                    {new Date(acc.updated_at).toLocaleTimeString()} 업데이트
+                                                </span>
+                                            </div>
+                                            {acc.bank_name.includes('기업은행') && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 px-2 text-xs gap-1 text-slate-500"
+                                                    disabled={ibkSyncing === acc.account_no}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleIBKSync(acc.account_no);
+                                                    }}
+                                                >
+                                                    <RefreshCw className={`w-3 h-3 ${ibkSyncing === acc.account_no ? 'animate-spin' : ''}`} />
+                                                    API 동기화
+                                                </Button>
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -163,42 +207,53 @@ export default function AccountsPage() {
                     )}
                 </div>
 
-                {/* 고정비 관리 */}
-                <div className="space-y-4">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <Buildings className="w-5 h-5 text-slate-400" />
-                        고정비 지출 예정
-                    </h2>
-                    <Card>
-                        <CardContent className="p-0">
-                            <div className="divide-y">
-                                {fixedCosts.length === 0 ? (
-                                    <div className="p-8 text-center text-slate-400 text-sm">
-                                        등록된 고정비가 없습니다.
+                {/* 고정비 관리 및 국가 API 섹션 */}
+                <div className="space-y-6">
+                    <div className="space-y-4">
+                        <h2 className="text-lg font-bold flex items-center gap-2">
+                            <Buildings className="w-5 h-5 text-slate-400" />
+                            고정비 지출 예정
+                        </h2>
+                        {/* ... (existing Card content) */}
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <h2 className="text-lg font-bold flex items-center gap-2">
+                            <RefreshCw className="w-5 h-5 text-slate-400" />
+                            국가 지원 API (사업자 조회)
+                        </h2>
+                        <Card>
+                            <CardContent className="pt-6 space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500">사업자 등록번호</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                                            placeholder="123-45-67890"
+                                            value={businessNo}
+                                            onChange={(e) => setBusinessNo(e.target.value)}
+                                        />
+                                        <Button onClick={handleCheckBusiness} size="sm">조회</Button>
                                     </div>
-                                ) : (
-                                    fixedCosts.map((cost) => (
-                                        <div key={cost.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
-                                            <div>
-                                                <p className="font-bold text-sm text-slate-900">{cost.name}</p>
-                                                <p className="text-xs text-slate-500">매월 {cost.due_day}일 · {cost.category}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-bold text-sm">{cost.amount.toLocaleString()}원</p>
-                                                <Badge variant="secondary" className="text-[10px] h-4">D-{cost.due_day - new Date().getDate()}</Badge>
-                                            </div>
+                                </div>
+                                {businessStatus && (
+                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-2">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">상태</span>
+                                            <Badge variant={businessStatus.b_stt_cd === '01' ? 'default' : 'destructive'}>
+                                                {businessStatus.b_stt}
+                                            </Badge>
                                         </div>
-                                    ))
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">과세유형</span>
+                                            <span className="font-medium">{businessStatus.tax_type}</span>
+                                        </div>
+                                    </div>
                                 )}
-                            </div>
-                        </CardContent>
-                        <div className="p-4 bg-slate-50 border-t text-center">
-                            <Button variant="ghost" size="sm" className="text-xs text-slate-500 h-8">
-                                <Settings className="w-3 h-3 mr-1" />
-                                고정비 상세 설정
-                            </Button>
-                        </div>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </div>
         </div>
