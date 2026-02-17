@@ -19,6 +19,7 @@ interface Product {
     [key: string]: any;
   };
   images?: any;
+  channelProductNo?: number;
 }
 
 interface ImageManagementTabProps {
@@ -141,14 +142,43 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
 
         toast.dismiss(loadingToast);
 
-        if (uploadResp.ok) {
-          successCount++;
-          addLog(`[Item: ${id}] SUCCESS!`);
-          toast.success(`${id} 처리 완료`);
 
+        if (uploadResp.ok) {
           const data = await uploadResp.json();
+          // Define newUrl here so it's available for the Naver update
           const newUrl = data.url ? `${data.url}?t=${Date.now()}` : `/thumbnails/generated/${id}.jpg?t=${Date.now()}`;
 
+          // 3. Naver Update (New Step)
+          addLog(`[Item: ${id}] Updating Naver Image...`);
+
+          let naverSuccess = false;
+          try {
+            const updateRes = await fetch('/api/smartstore/products/update-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                originProductNo: id,
+                imageUrl: newUrl
+              })
+            });
+
+            if (!updateRes.ok) {
+              const err = await updateRes.json();
+              throw new Error(`Naver Update Failed: ${err.error || updateRes.statusText}`);
+            }
+            naverSuccess = true;
+          } catch (naverErr: any) {
+            addLog(`[Item: ${id}] Naver Update Error: ${naverErr.message}`);
+            // We still consider upload success, but warn about Naver
+            toast.error(`${id} 이미지는 생성됐으나 네이버 전송 실패`);
+          }
+
+          if (naverSuccess) {
+            addLog(`[Item: ${id}] Naver Image Updated Successfully!`);
+            toast.success(`${id} 처리 및 네이버 전송 완료`);
+          }
+
+          successCount++;
           setProducts(prev => prev.map(p =>
             p.originProductNo === id ? { ...p, thumbnailUrl: newUrl } : p
           ));
@@ -273,8 +303,8 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
                 className={`bg-white rounded-xl border overflow-hidden transition-all cursor-pointer group relative ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}
                 onClick={() => setSelectedProduct(p)}
               >
-                <div className="aspect-square bg-slate-100 relative">
-                  <div className="absolute top-2 left-2 z-10" onClick={(e) => toggleSelect(p.originProductNo, e)}>
+                <div className="aspect-square bg-slate-100 relative group-hover:opacity-90 transition-opacity">
+                  <div className="absolute top-2 left-2 z-20" onClick={(e) => toggleSelect(p.originProductNo, e)}>
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -282,20 +312,56 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
                       className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shadow-sm"
                     />
                   </div>
-                  {imgUrl ? (
-                    <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
+
+                  {/* Image Link */}
+                  {p.channelProductNo ? (
+                    <a
+                      href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full h-full"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {imgUrl ? (
+                        <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      )}
+                    </a>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-300">
-                      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                    <div className="w-full h-full" onClick={() => setSelectedProduct(p)}>
+                      {imgUrl ? (
+                        <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
                   )}
+
                   {imgCount > 1 && (
-                    <span className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                    <span className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full z-10">
                       {imgCount}장
                     </span>
                   )}
+
+                  {/* View Details Button Overlay */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedProduct(p); }}
+                    className="absolute bottom-2 right-2 p-1.5 bg-white/80 rounded-full hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                    title="상세 보기"
+                  >
+                    <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="p-2">
                   <p className="text-xs font-medium text-slate-700 truncate">{p.name}</p>

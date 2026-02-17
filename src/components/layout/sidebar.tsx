@@ -19,7 +19,7 @@ const mainNav = [
 // 2. Inventory Management
 const inventoryManagement = [
     { name: '통합 재고 관리', href: '/inventory', icon: Package },
-    { name: '반품 관리', href: '/returns', icon: RotateCcw },
+    { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
     { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
     { name: '통계', href: '/statistics', icon: BarChart3 },
 ];

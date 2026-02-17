@@ -107,6 +107,26 @@ export function ArchiveManagementModal({ open, onClose, onRefresh }: ArchiveMana
         }
     };
 
+    const handlePopulateBrands = async () => {
+        if (!confirm('AI가 분석한 최신 패션 트렌드와 아카이브 브랜드 목록(약 20개 내외)을 자동으로 등록하시겠습니까?')) return;
+
+        setBrandsLoading(true);
+        try {
+            const res = await fetch('/api/cron/collect-brands');
+            const data = await res.json();
+            if (data.success) {
+                toast.success(`AI가 ${data.collectedCount}개의 새로운 브랜드를 찾아냈습니다!`);
+                loadBrands();
+            } else {
+                toast.error(data.error || '등록 실패');
+            }
+        } catch (e: any) {
+            toast.error('오류: ' + e.message);
+        } finally {
+            setBrandsLoading(false);
+        }
+    };
+
     if (!open) return null;
 
     return (
@@ -199,12 +219,21 @@ export function ArchiveManagementModal({ open, onClose, onRefresh }: ArchiveMana
                                 <span className="w-1.5 h-4 bg-purple-500 rounded-full" />
                                 브랜드 마스터 리스트
                             </h3>
-                            <button
-                                onClick={() => setShowAddBrand(!showAddBrand)}
-                                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${showAddBrand ? 'bg-slate-100 text-slate-600' : 'bg-blue-600 text-white shadow-lg'}`}
-                            >
-                                {showAddBrand ? '취소' : '+ 새 브랜드'}
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handlePopulateBrands}
+                                    disabled={brandsLoading}
+                                    className="px-4 py-2 rounded-xl text-xs font-black transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50"
+                                >
+                                    인기 브랜드 자동등록
+                                </button>
+                                <button
+                                    onClick={() => setShowAddBrand(!showAddBrand)}
+                                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${showAddBrand ? 'bg-slate-100 text-slate-600' : 'bg-blue-600 text-white shadow-lg'}`}
+                                >
+                                    {showAddBrand ? '취소' : '+ 새 브랜드'}
+                                </button>
+                            </div>
                         </div>
 
                         {showAddBrand && (
@@ -274,9 +303,9 @@ export function ArchiveManagementModal({ open, onClose, onRefresh }: ArchiveMana
                                         <div>
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${brand.tier === 'MILITARY' ? 'bg-green-100 text-green-700' :
-                                                        brand.tier === 'WORKWEAR' ? 'bg-amber-100 text-amber-700' :
-                                                            brand.tier === 'JAPAN' ? 'bg-red-100 text-red-700' :
-                                                                'bg-slate-100 text-slate-600'
+                                                    brand.tier === 'WORKWEAR' ? 'bg-amber-100 text-amber-700' :
+                                                        brand.tier === 'JAPAN' ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 text-slate-600'
                                                     }`}>
                                                     {TIER_LABELS[brand.tier] || brand.tier}
                                                 </span>

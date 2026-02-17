@@ -1033,27 +1033,7 @@ export async function searchProducts(searchParams: any) {
     // Reuses getInventoryForExport logic but explicitly for search action (POST)
     return getInventoryForExport(searchParams);
 }
-// Memo Actions
-export async function addMemo(content: string) {
-    const session = await getSession();
-    const author = session ? session.name : '익명';
 
-    try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS memos (
-                id SERIAL PRIMARY KEY,
-                content TEXT NOT NULL,
-                author_name VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        await db.query('INSERT INTO memos (content, author_name) VALUES ($1, $2)', [content, author]);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: '메모 저장 실패' };
-    }
-}
 
 // Bulk Update Action
 export async function bulkUpdateProducts(ids: string[], updates: any) {
@@ -1098,52 +1078,9 @@ export async function bulkUpdateProducts(ids: string[], updates: any) {
     }
 }
 
-export async function addMemoComment(memoId: number, content: string) {
-    const session = await getSession();
-    const author = session ? session.name : '익명';
 
-    try {
-        await db.query('INSERT INTO memo_comments (memo_id, content, author_name) VALUES ($1, $2, $3)', [memoId, content, author]);
-        revalidatePath('/');
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: '댓글 등록 실패' };
-    }
-}
 
-export async function getMemos() {
-    try {
-        const res = await db.query('SELECT * FROM memos ORDER BY created_at DESC LIMIT 20');
-        const memos = res.rows;
 
-        if (memos.length > 0) {
-            const memoIds = memos.map((m: any) => m.id);
-            const placeholders = memoIds.map((_, i) => `$${i + 1}`).join(',');
-
-            try {
-                const commentRes = await db.query(`
-                    SELECT * FROM memo_comments 
-                    WHERE memo_id IN (${placeholders}) 
-                    ORDER BY created_at ASC
-                `, memoIds);
-
-                const comments = commentRes.rows;
-
-                memos.forEach((m: any) => {
-                    m.comments = comments.filter((c: any) => c.memo_id === m.id);
-                });
-            } catch (e) {
-                console.error("Failed to fetch memo comments:", e);
-                memos.forEach((m: any) => m.comments = []);
-            }
-        }
-
-        return memos;
-    } catch (e) {
-        console.error("Failed to get memos:", e);
-        return [];
-    }
-}
 
 export async function bulkUpdateProductsAI(ids: string[], options: { grade: boolean, price: boolean, description: boolean, name: boolean }) {
     if (!ids || ids.length === 0) return { success: false, error: '선택된 상품이 없습니다.' };

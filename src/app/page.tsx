@@ -1,6 +1,6 @@
 import { getDashboardStats } from '@/lib/data';
 import { getMarketWeather } from '@/lib/weather';
-import { getDashboardTasks, getMemos, getUsersForOrgChart } from '@/lib/actions';
+import { getDashboardTasks, getUsersForOrgChart } from '@/lib/actions';
 import { getSession } from '@/lib/auth';
 import { checkSystemUpdates } from '@/lib/updates';
 import { redirect } from 'next/navigation';
@@ -10,7 +10,6 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
-import { MemoWidget } from '@/components/dashboard/memo-widget';
 import { AttendanceClockWidget } from '@/components/layout/attendance-clock-widget';
 import { OrgChart } from '@/components/dashboard/org-chart';
 import { AttendanceSummaryWidget } from '@/components/dashboard/attendance-summary-widget';
@@ -33,7 +32,6 @@ export default async function DashboardPage() {
   const weather = await getMarketWeather();
   await checkSystemUpdates();
   const tasks = await getDashboardTasks();
-  const memos = await getMemos();
   const orgUsers = await getUsersForOrgChart();
   const attendanceRecords = await getAllTodayAttendance();
 
@@ -262,15 +260,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Shared Memo Pad */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ag-float-1 ag-card overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 dark:text-white">공유 메모</h3>
-            </div>
-            <div className="p-0">
-              <MemoWidget memos={memos} />
-            </div>
-          </div>
+
         </div>
       </div>
 

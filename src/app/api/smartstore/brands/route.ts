@@ -92,3 +92,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// DELETE: 브랜드 삭제 (논리적 삭제)
+export async function DELETE(request: NextRequest) {
+  try {
+    await ensureDbInitialized();
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID가 필요합니다' }, { status: 400 });
+    }
+
+    await db.query('UPDATE custom_brands SET is_active = FALSE WHERE id = $1', [id]);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+

@@ -184,7 +184,15 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {selectedProducts.map((p, idx) => (
-                    <div key={p.originProductNo} className="relative group bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 ag-float-1">
+                    <div
+                        key={p.originProductNo}
+                        className="relative group bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 ag-float-1 cursor-pointer"
+                        onClick={() => {
+                            if (p.channelProductNo) {
+                                window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank');
+                            }
+                        }}
+                    >
                         {/* 순위 배지 */}
                         <div className={`absolute top-3 left-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-lg ${idx < 3 ? 'bg-amber-400 text-amber-900' : 'bg-white/90 text-slate-900'
                             }`}>
