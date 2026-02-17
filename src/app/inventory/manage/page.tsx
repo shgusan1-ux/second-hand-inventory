@@ -182,10 +182,6 @@ export default async function InventoryManagePage({
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-3xl font-bold tracking-tight text-emerald-900">재고 관리 (수정/업데이트)</h1>
-                <p className="text-sm font-medium text-emerald-600">상품 정보를 수정, 삭제하거나 대량 업데이트할 수 있는 관리자 페이지입니다.</p>
-            </div>
 
             <Suspense fallback={<div className="h-40 bg-slate-100 animate-pulse rounded-lg"></div>}>
                 <InventoryManager

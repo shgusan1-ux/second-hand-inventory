@@ -18,12 +18,8 @@ const mainNav = [
 
 // 2. Inventory Management
 const inventoryManagement = [
-    { name: '재고 등록', href: '/inventory/new', icon: PlusCircle },
-    { name: '재고 목록 (조회)', href: '/inventory', icon: Package },
-    { name: '재고 관리 (수정)', href: '/inventory/manage', icon: Settings },
-    { name: '재고 발송 및 폐기', href: '/inventory/discarded', icon: Truck }, // Combined/Renamed
-    { name: '반품 등록', href: '/returns/new', icon: RotateCcw },
-    { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
+    { name: '통합 재고 관리', href: '/inventory', icon: Package },
+    { name: '반품 관리', href: '/returns', icon: RotateCcw },
     { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
     { name: '통계', href: '/statistics', icon: BarChart3 },
 ];
@@ -79,10 +75,7 @@ export function Sidebar({ user }: { user?: any }) {
                 <div className="pt-4 pb-2">
                     <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">재고 관리</div>
                     {inventoryManagement.map((item) => {
-                        let isActive = pathname.startsWith(item.href);
-                        if (item.href === '/inventory') {
-                            isActive = pathname === '/inventory' || (pathname.startsWith('/inventory/') && !['/inventory/manage', '/inventory/new', '/inventory/discarded'].some(p => pathname.startsWith(p)));
-                        }
+                        const isActive = pathname.startsWith(item.href);
 
                         return (
                             <Link

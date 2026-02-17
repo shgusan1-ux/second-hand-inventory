@@ -1,8 +1,7 @@
 import { Suspense } from 'react';
 import { db } from '@/lib/db';
-import { Card, CardContent } from '@/components/ui/card';
-import { InventoryFilter } from '@/components/inventory/inventory-filter';
-import { InventoryTable } from '@/components/inventory/inventory-table';
+import { InventoryManager } from '@/components/inventory/inventory-manager';
+import { getCategories } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,17 +20,19 @@ export default async function InventoryPage({
         endDate?: string;
         limit?: string;
         page?: string;
+        field?: string;
         sort?: string;
         order?: string;
     }>;
 }) {
     const resolvedParams = await searchParams;
     const query = resolvedParams.q || '';
+    const searchField = resolvedParams.field || 'all';
     const excludeCode = resolvedParams.excludeCode || '';
     const startDate = resolvedParams.startDate || '';
     const endDate = resolvedParams.endDate || '';
     const statusParam = resolvedParams.status || '';
-    const categoriesParam = resolvedParams.category /* legacy */ || resolvedParams.categories || '';
+    const categoriesParam = resolvedParams.category || resolvedParams.categories || '';
     const conditionsParam = resolvedParams.conditions || '';
     const sizesParam = resolvedParams.sizes || '';
 
@@ -46,7 +47,6 @@ export default async function InventoryPage({
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Status Filter logic
     // Status Filter logic
     if (statusParam) {
         const statuses = statusParam.split(',').map(s => s.trim()).filter(Boolean);
@@ -91,27 +91,30 @@ export default async function InventoryPage({
 
     // Search Query
     if (query) {
-        // Bulk Search Logic: Check for comma or newline separators
-        // This allows users to paste multiple IDs to find them quickly
         const terms = query.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
 
         if (terms.length > 1) {
-            // Bulk ID Search Mode
             const placeholders = terms.map(() => `$${paramIndex++}`);
             sqlConditions.push(`p.id IN (${placeholders.join(', ')})`);
             params.push(...terms);
         } else {
-            // Single Term Broad Search Mode
-            // Include Category Name and Classification in search
-            sqlConditions.push(`(p.name LIKE $${paramIndex} OR p.id LIKE $${paramIndex} OR p.brand LIKE $${paramIndex} OR c.name LIKE $${paramIndex} OR c.classification LIKE $${paramIndex})`);
-            params.push(`%${query}%`);
+            if (searchField === 'name') {
+                sqlConditions.push(`p.name LIKE $${paramIndex}`);
+            } else if (searchField === 'id') {
+                sqlConditions.push(`p.id LIKE $${paramIndex}`);
+            } else if (searchField === 'brand') {
+                sqlConditions.push(`p.brand LIKE $${paramIndex}`);
+            } else {
+                sqlConditions.push(`(p.name LIKE $${paramIndex} OR p.id LIKE $${paramIndex} OR p.brand LIKE $${paramIndex} OR c.name LIKE $${paramIndex} OR c.classification LIKE $${paramIndex})`);
+            }
+            params.push(`%${query.trim()}%`);
             paramIndex++;
         }
     }
 
     // Exclude Code
     if (excludeCode) {
-        const excludes = excludeCode.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+        const excludes = excludeCode.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         if (excludes.length > 0) {
             const placeholders = excludes.map(() => `$${paramIndex++}`);
             sqlConditions.push(`p.id NOT IN (${placeholders.join(', ')})`);
@@ -134,73 +137,58 @@ export default async function InventoryPage({
 
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';
 
-    // 1. Fetch Total Count for Pagination
-    // Note: We cast the result to avoid TS errors with specific DB adapter return types
-    const countSql = `
-        SELECT COUNT(*) as count 
-        FROM products p
-        LEFT JOIN categories c ON p.category = c.id
-        ${whereClause}
-    `;
-    const countResult = await db.query(countSql, params);
-    const totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
-
     // Sort Logic
     const sort = resolvedParams.sort || 'created_at';
     const order = resolvedParams.order || 'desc';
-
-    // Whitelist sort fields
-    const validSorts = ['id', 'name', 'price_sell', 'status', 'created_at'];
-    // If sort is generic, we default to p.created_at, but if it is id/name, we might need alias.
-    // 'id' -> 'p.id', 'name' -> 'p.name'. 
-    // Usually 'ORDER BY id' works if id is ambiguous? No, expected duplicate.
-    // I should strictly control sort alias.
-
     let dbSort = 'p.created_at';
     if (sort === 'id') dbSort = 'p.id';
     else if (sort === 'name') dbSort = 'p.name';
     else if (sort === 'price_sell') dbSort = 'p.price_sell';
     else if (sort === 'status') dbSort = 'p.status';
-    else if (sort === 'created_at') dbSort = 'p.created_at';
-
     const safeOrder = order === 'asc' ? 'ASC' : 'DESC';
 
-    // 2. Fetch Data
-    const dataSql = `
-        SELECT p.*, c.name as category_name, c.classification as category_classification 
-        FROM products p 
-        LEFT JOIN categories c ON p.category = c.id
-        ${whereClause} 
-        ORDER BY ${dbSort} ${safeOrder} 
-        LIMIT ${safeLimit} OFFSET ${offset}
-    `;
-    // Warning: We must NOT pass LIMIT/OFFSET as params because we hardcoded them in string.
-    // The `params` array matches the placeholders in `whereClause`.
-    const result = await db.query(dataSql, params);
-    const products = result.rows;
+    let totalCount = 0;
+    let products = [];
 
-    // 3. Fetch Brands for Filter
-    const brandResult = await db.query('SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND brand != \'\' ORDER BY brand ASC');
-    const brands = brandResult.rows.map(r => r.brand);
+    try {
+        const countRes = await db.query(`
+            SELECT COUNT(*) as count 
+            FROM products p
+            LEFT JOIN categories c ON p.category = c.id
+            ${whereClause}
+        `, params);
+        totalCount = parseInt(countRes.rows[0]?.count || '0', 10);
+
+        const dataRes = await db.query(`
+            SELECT p.*, c.name as category_name, c.classification as category_classification 
+            FROM products p
+            LEFT JOIN categories c ON p.category = c.id
+            ${whereClause} 
+            ORDER BY ${dbSort} ${safeOrder} 
+            LIMIT ${safeLimit} OFFSET ${offset}
+        `, params);
+        products = dataRes.rows;
+    } catch (error) {
+        console.error("Inventory Page DB Error:", error);
+    }
+
+    const categories = await getCategories();
+    // Fetch unique brands for the filter
+    const brandRes = await db.query("SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND brand != '' ORDER BY brand ASC");
+    const brands = brandRes.rows.map(r => r.brand);
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-3xl font-bold tracking-tight text-blue-900">재고 목록 (조회 전용)</h1>
-                <p className="text-sm font-medium text-blue-600">빠른 상품 검색과 조회만을 위한 페이지입니다. (수정/삭제 불가)</p>
-            </div>
-
-            <Suspense fallback={<div className="h-20 bg-slate-100 animate-pulse rounded-lg"></div>}>
-                <InventoryFilter brands={brands} />
+            <Suspense fallback={<div className="h-40 bg-slate-100 animate-pulse rounded-lg"></div>}>
+                <InventoryManager
+                    initialProducts={products}
+                    initialTotalCount={totalCount}
+                    initialLimit={safeLimit}
+                    currentPage={page}
+                    categories={categories}
+                    brands={brands}
+                />
             </Suspense>
-
-            {/* Render Client Component Table */}
-            <InventoryTable
-                products={products}
-                totalCount={totalCount}
-                limit={safeLimit}
-                currentPage={page}
-            />
         </div>
     );
 }

@@ -1,5 +1,3 @@
-import bcrypt from 'bcryptjs';
-
 export interface NaverTokenResponse {
     access_token: string;
     expires_in: number;
@@ -9,26 +7,24 @@ export interface NaverTokenResponse {
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 export async function getNaverAccessToken(): Promise<string> {
-    const proxyUrl = process.env.SMARTSTORE_PROXY_URL;
-    const proxyKey = process.env.SMARTSTORE_PROXY_KEY;
-    let clientId = process.env.NAVER_CLIENT_ID;
-    let clientSecret = process.env.NAVER_CLIENT_SECRET;
+    const proxyUrl = (process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001').trim();
+    const proxyKey = (process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key').trim();
+    let clientId = process.env.NAVER_CLIENT_ID?.trim();
 
-    // Fallback to DB if ENV is missing for credentials
-    if (!clientId || !clientSecret) {
+    // Fallback to DB if ENV is missing
+    if (!clientId) {
         try {
             const { getSmartStoreConfig } = await import('../actions');
             const config = await getSmartStoreConfig();
             if (config) {
                 clientId = clientId || config.clientId;
-                clientSecret = clientSecret || config.clientSecret;
             }
         } catch (e) {
             console.error('Failed to load Naver config from DB:', e);
         }
     }
 
-    if (!clientId || !clientSecret || !proxyUrl || !proxyKey) {
+    if (!clientId || !proxyUrl || !proxyKey) {
         throw new Error('Naver API credentials or Proxy configuration is missing.');
     }
 
@@ -37,27 +33,14 @@ export async function getNaverAccessToken(): Promise<string> {
         return cachedToken.token;
     }
 
-    const timestamp = Date.now();
-    // Naver Commerce API uses bcrypt where the clientSecret is the salt.
-    const hashed = bcrypt.hashSync(`${clientId}_${timestamp}`, clientSecret);
-    // MUST be Base64 encoded as per Naver docs
-    const signature = Buffer.from(hashed, 'utf-8').toString('base64');
-
-    const body = {
-        client_id: clientId,
-        timestamp: timestamp.toString(),
-        grant_type: 'client_credentials',
-        client_secret_sign: signature,
-        type: 'SELF'
-    };
-
+    // 프록시가 bcrypt 서명을 직접 처리 (Vercel에서 $가 포함된 clientSecret 확장 문제 방지)
     const response = await fetch(`${proxyUrl}/oauth/token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'x-proxy-key': proxyKey
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ client_id: clientId }),
     });
 
     const data: any = await response.json();

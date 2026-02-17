@@ -6,6 +6,14 @@ import { InventoryTable } from '@/components/inventory/inventory-table';
 import { useRouter, useSearchParams } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Plus, Trash2 } from 'lucide-react';
+import { ProductForm } from './product-form';
+import { BulkProductForm } from './bulk-product-form';
+import { CornerLogisImportForm } from './corner-logis-import';
+import { DiscardedList } from './discarded-list';
 
 interface InventoryManagerProps {
     initialProducts: any[];
@@ -13,6 +21,7 @@ interface InventoryManagerProps {
     initialLimit: number;
     currentPage: number;
     categories: any[];
+    brands?: string[];
 }
 
 export function InventoryManager({
@@ -20,7 +29,8 @@ export function InventoryManager({
     initialTotalCount,
     initialLimit,
     currentPage,
-    categories
+    categories,
+    brands = []
 }: InventoryManagerProps) {
     const [products, setProducts] = useState(initialProducts);
     const [totalCount, setTotalCount] = useState(initialTotalCount);
@@ -107,7 +117,7 @@ export function InventoryManager({
         setSortConfig(null);
         setBulkPage(1);
 
-        router.push('/inventory/manage');
+        router.push('/inventory');
     };
 
     const handleExportAll = () => {
@@ -185,8 +195,68 @@ export function InventoryManager({
 
     return (
         <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 font-black">통합 재고 관리</h1>
+                    <p className="text-xs sm:text-sm font-medium text-slate-500">상품 정보를 수정, 삭제하거나 대량 업데이트하고 새로운 재고를 등록합니다.</p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 sm:h-11">
+                                <Plus className="h-4 w-4" />
+                                <span className="whitespace-nowrap">재고 등록</span>
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+                            <DialogHeader>
+                                <DialogTitle>새 재고 등록</DialogTitle>
+                            </DialogHeader>
+                            <Tabs defaultValue="single" className="w-full mt-4">
+                                <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-xl">
+                                    <TabsTrigger value="single" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">개별 상품 등록</TabsTrigger>
+                                    <TabsTrigger value="bulk" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">대량 등록 (Excel)</TabsTrigger>
+                                    <TabsTrigger value="conor" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">코너로지스 가져오기</TabsTrigger>
+                                </TabsList>
+
+                                <TabsContent value="single" className="mt-6">
+                                    <div className="bg-white rounded-xl border border-slate-100 p-1">
+                                        <ProductForm categories={categories} />
+                                    </div>
+                                </TabsContent>
+
+                                <TabsContent value="bulk" className="mt-6">
+                                    <BulkProductForm />
+                                </TabsContent>
+
+                                <TabsContent value="conor" className="mt-6">
+                                    <CornerLogisImportForm />
+                                </TabsContent>
+                            </Tabs>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="flex-1 sm:flex-none border-slate-200 text-slate-600 hover:bg-slate-50 gap-2 h-10 sm:h-11">
+                                <Trash2 className="h-4 w-4" />
+                                <span className="whitespace-nowrap">발송 및 폐기 관리</span>
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                                <DialogTitle>발송 및 폐기 상품 목록</DialogTitle>
+                            </DialogHeader>
+                            <div className="mt-4">
+                                <DiscardedList />
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            </div>
+
             <InventoryFilter
-                brands={[]}
+                brands={brands}
                 categories={categories}
                 onBulkSearch={handleBulkSearch}
                 onReset={handleReset}

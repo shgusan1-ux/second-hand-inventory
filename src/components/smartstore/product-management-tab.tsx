@@ -7,6 +7,7 @@ import { ProductAnalysisDetail } from './product-analysis-detail';
 import { calculateSalesScore } from '@/lib/smartstore-rank';
 import { getMarketWeather } from '@/lib/weather';
 import { ArchiveManagementModal } from './archive-management-modal';
+import { useArchiveSettings, type ArchiveCategory } from '@/hooks/use-archive-settings';
 
 type VisionStatus = 'none' | 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -1568,28 +1569,44 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                       </span>
                     </td>
                     <td className="px-1 py-2" onClick={e => e.stopPropagation()}>
-                      <a
-                        href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-9 h-9 rounded-lg overflow-hidden bg-slate-50 shrink-0 hover:ring-2 hover:ring-blue-400 transition-all"
-                      >
-                        {p.thumbnailUrl ? (
-                          <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">이미지</div>
-                        )}
-                      </a>
+                      {p.channelProductNo ? (
+                        <a
+                          href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-9 h-9 rounded-lg overflow-hidden bg-slate-50 shrink-0 hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer"
+                          onClick={e => { e.preventDefault(); window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank'); }}
+                        >
+                          {p.thumbnailUrl ? (
+                            <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">이미지</div>
+                          )}
+                        </a>
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-50 shrink-0">
+                          {p.thumbnailUrl ? (
+                            <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300 text-[7px] font-bold">이미지</div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 max-w-[220px]" onClick={e => e.stopPropagation()}>
-                      <a
-                        href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] font-bold text-slate-800 truncate leading-tight block hover:text-blue-600 hover:underline transition-colors"
-                      >
-                        {p.name}
-                      </a>
+                      {p.channelProductNo ? (
+                        <a
+                          href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-bold text-slate-800 truncate leading-tight block hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                          onClick={e => { e.preventDefault(); window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank'); }}
+                        >
+                          {p.name}
+                        </a>
+                      ) : (
+                        <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
@@ -1747,15 +1764,19 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                         </span>
                       )}
                     </div>
-                    <a
-                      href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-2 block hover:text-blue-600 hover:underline transition-colors"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {p.name}
-                    </a>
+                    {p.channelProductNo ? (
+                      <a
+                        href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-2 block hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                        onClick={e => { e.stopPropagation(); e.preventDefault(); window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank'); }}
+                      >
+                        {p.name}
+                      </a>
+                    ) : (
+                      <p className="font-bold text-sm text-slate-900 line-clamp-1 leading-tight mb-2">{p.name}</p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2.5 flex-wrap">

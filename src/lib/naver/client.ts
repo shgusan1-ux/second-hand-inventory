@@ -1,8 +1,8 @@
 import { TokenResponse, ProductSearchResponse, ProductDetailResponse, NaverCategory } from './types';
 import { getNaverAccessToken } from './auth';
 
-const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001';
-const PROXY_KEY = process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key';
+const PROXY_URL = (process.env.NEXT_PUBLIC_PROXY_URL || process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001').trim();
+const PROXY_KEY = (process.env.SMARTSTORE_PROXY_KEY || 'brownstreet-proxy-key').trim();
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
