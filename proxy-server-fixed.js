@@ -8,7 +8,23 @@ const PORT = 3001;
 // Client secret stored on proxy (avoids $ variable expansion issues in Vercel)
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || '$2a$04$lGhHeyqRRFiNMw.A7fnheO';
 
-app.use(express.json());
+// raw body를 먼저 캡처 (이미지 업로드용)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data') || contentType.includes('application/octet-stream')) {
+    // multipart/binary 데이터는 raw buffer로 수집
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      req.rawBody = Buffer.concat(chunks);
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
@@ -73,19 +89,28 @@ app.use(/^\/(v\d+)/, async (req, res) => {
 
     const headers = {};
     if (req.headers.authorization) headers.authorization = req.headers.authorization;
-    if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
 
     let body = undefined;
+    const contentType = req.headers['content-type'] || '';
+
     if (req.method !== 'GET' && req.method !== 'DELETE') {
-      body = JSON.stringify(req.body);
-      headers['content-type'] = 'application/json';
+      if (contentType.includes('multipart/form-data') && req.rawBody) {
+        // multipart 데이터: raw body 그대로 전달
+        body = req.rawBody;
+        headers['content-type'] = contentType; // boundary 포함된 원본 Content-Type 유지
+        console.log('[API] Multipart upload, body size:', req.rawBody.length);
+      } else {
+        // JSON 데이터
+        body = JSON.stringify(req.body);
+        headers['content-type'] = 'application/json';
+      }
     }
 
     const response = await fetch(url, { method: req.method, headers, body });
-    const contentType = response.headers.get('content-type') || '';
+    const respContentType = response.headers.get('content-type') || '';
 
     let data;
-    if (contentType.includes('json')) {
+    if (respContentType.includes('json')) {
       data = await response.json();
     } else {
       data = await response.text();
@@ -105,8 +130,9 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
-  console.log('Naver Commerce Proxy v4');
+  console.log('Naver Commerce Proxy v5');
   console.log('Port:', PORT);
+  console.log('Supports: JSON + Multipart');
   console.log('Using client_secret as bcrypt salt');
   console.log('=================================');
 });

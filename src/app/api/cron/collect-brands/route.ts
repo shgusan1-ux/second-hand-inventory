@@ -10,11 +10,14 @@ export const maxDuration = 300; // 5 minutes
  * AI(Gemini)를 활용하여 새로운 패션 브랜드를 발굴하고 마스터 데이터베이스에 추가합니다.
  */
 export async function GET(request: Request) {
-    // Vercel Cron 헤더 확인 (프로덕션 환경 보안용)
-    const isCron = request.headers.get('x-vercel-cron') === '1' || process.env.NODE_ENV === 'development';
+    // Vercel Cron 헤더 또는 세션 확인 (모달에서 수동 실행 허용)
+    const isCron = request.headers.get('x-vercel-cron') === '1';
+    const isDev = process.env.NODE_ENV === 'development';
+    const url = new URL(request.url);
+    const force = url.searchParams.get('force') === 'true';
 
-    if (!isCron) {
-        return new Response('Unauthorized', { status: 401 });
+    if (!isCron && !isDev && !force) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     console.log('[Cron] 일일 브랜드 수집 시작...');

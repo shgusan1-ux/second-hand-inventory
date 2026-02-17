@@ -112,7 +112,7 @@ export function ArchiveManagementModal({ open, onClose, onRefresh }: ArchiveMana
 
         setBrandsLoading(true);
         try {
-            const res = await fetch('/api/cron/collect-brands');
+            const res = await fetch('/api/cron/collect-brands?force=true');
             const data = await res.json();
             if (data.success) {
                 toast.success(`AI가 ${data.collectedCount}개의 새로운 브랜드를 찾아냈습니다!`);

@@ -76,15 +76,23 @@ const VALID_CATEGORIES_SET = new Set([
     'UNCATEGORIZED', 'KIDS',
 ]);
 
-// 내부 tier 키 → 표시용 아카이브명 매핑
+// 내부 tier 키 → 표시용 아카이브명 매핑 (숏네임 및 롱네임 대응)
 const TIER_TO_ARCHIVE: Record<string, string> = {
-    MILITARY: 'MILITARY ARCHIVE',
-    WORKWEAR: 'WORKWEAR ARCHIVE',
-    OUTDOOR: 'OUTDOOR ARCHIVE',
-    JAPAN: 'JAPANESE ARCHIVE',
-    HERITAGE: 'HERITAGE EUROPE',
-    BRITISH: 'BRITISH ARCHIVE',
-    UNISEX: 'UNISEX ARCHIVE',
+    'MILITARY': 'MILITARY ARCHIVE',
+    'WORKWEAR': 'WORKWEAR ARCHIVE',
+    'OUTDOOR': 'OUTDOOR ARCHIVE',
+    'JAPAN': 'JAPANESE ARCHIVE',
+    'HERITAGE': 'HERITAGE EUROPE',
+    'BRITISH': 'BRITISH ARCHIVE',
+    'UNISEX': 'UNISEX ARCHIVE',
+    // 롱네임으로 들어와도 그대로 유지되도록 매핑 추가
+    'MILITARY ARCHIVE': 'MILITARY ARCHIVE',
+    'WORKWEAR ARCHIVE': 'WORKWEAR ARCHIVE',
+    'OUTDOOR ARCHIVE': 'OUTDOOR ARCHIVE',
+    'JAPANESE ARCHIVE': 'JAPANESE ARCHIVE',
+    'HERITAGE EUROPE': 'HERITAGE EUROPE',
+    'BRITISH ARCHIVE': 'BRITISH ARCHIVE',
+    'UNISEX ARCHIVE': 'UNISEX ARCHIVE',
 };
 
 function processProducts(contents: any[], overrideMap: any, lcSettings?: LifecycleSettings, customBrands?: any[]) {
@@ -189,7 +197,15 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
                     break;
                 case 'ARCHIVE': {
                     if (classification.brandTier && classification.brandTier !== 'OTHER') {
-                        internalCategory = TIER_TO_ARCHIVE[classification.brandTier] || classification.brandTier + ' ARCHIVE';
+                        // 이미 롱네임이면 그대로, 숏네임이면 변환
+                        const mapped = TIER_TO_ARCHIVE[classification.brandTier];
+                        if (mapped) {
+                            internalCategory = mapped;
+                        } else if (classification.brandTier.endsWith(' ARCHIVE')) {
+                            internalCategory = classification.brandTier;
+                        } else {
+                            internalCategory = classification.brandTier + ' ARCHIVE';
+                        }
                     } else if (archiveInfo?.category && archiveInfo.category !== 'UNCATEGORIZED') {
                         internalCategory = TIER_TO_ARCHIVE[archiveInfo.category] || archiveInfo.category;
                     } else {

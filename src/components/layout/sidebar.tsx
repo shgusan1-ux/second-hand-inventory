@@ -11,26 +11,27 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/lib/actions';
 
-// 1. Dashboard
-const mainNav = [
+// 1. Sales Hub (판매 사이트)
+const salesHub = [
     { name: '대시보드', href: '/', icon: LayoutDashboard },
+    { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
+    { name: '매출/매입 관리', href: '/sales', icon: CreditCard },
+    { name: '통계/분석', href: '/statistics', icon: BarChart3 },
 ];
 
-// 2. Inventory Management
-const inventoryManagement = [
+// 2. Management Hub (관리 사이트)
+const managementHub = [
     { name: '통합 재고 관리', href: '/inventory', icon: Package },
     { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
-    { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
-    { name: '통계', href: '/statistics', icon: BarChart3 },
-];
-
-
-// 4. Admin & Business Support (User skipped 3?)
-const adminSupport = [
     { name: '임직원 소통', href: '/members', icon: Users },
     { name: '경영지원', href: '/business', icon: Briefcase },
     { name: '보안/계정관리', href: '/security', icon: Lock },
-    { name: '매출/매입관리', href: '/sales', icon: CreditCard },
+];
+
+// 3. Manuals
+const manuals = [
+    { name: '온라인 메뉴얼', href: '/manual/online', icon: Megaphone },
+    { name: '오프라인 메뉴얼', href: '/manual/offline', icon: Archive },
 ];
 
 export function Sidebar({ user }: { user?: any }) {
@@ -45,38 +46,11 @@ export function Sidebar({ user }: { user?: any }) {
                 </Link>
             </div>
             <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-                {/* 1. Dashboard */}
-                {mainNav.map((item) => {
-                    const isActive = pathname === item.href;
-                    return (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={cn(
-                                'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                                isActive
-                                    ? 'bg-slate-800 text-emerald-400'
-                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                            )}
-                        >
-                            <item.icon
-                                className={cn(
-                                    'mr-3 h-5 w-5 flex-shrink-0',
-                                    isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white'
-                                )}
-                                aria-hidden="true"
-                            />
-                            {item.name}
-                        </Link>
-                    );
-                })}
-
-                {/* 2. Inventory Management */}
-                <div className="pt-4 pb-2">
-                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">재고 관리</div>
-                    {inventoryManagement.map((item) => {
-                        const isActive = pathname.startsWith(item.href);
-
+                {/* 1. Sales Hub */}
+                <div className="pb-2">
+                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Service Hub (판매 사이트)</div>
+                    {salesHub.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
                         return (
                             <Link
                                 key={item.name}
@@ -101,18 +75,18 @@ export function Sidebar({ user }: { user?: any }) {
                     })}
                 </div>
 
-
-                {/* 4. Admin & Business Support */}
-                {isAdmin && (
-                    <div className="pt-4 pb-2">
-                        <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">관리 및 경영지원</div>
-                        {adminSupport.map((item) => (
+                {/* 2. Management Hub */}
+                <div className="pt-4 pb-2 border-t border-slate-800/50">
+                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Management Hub (관리 사이트)</div>
+                    {managementHub.map((item) => {
+                        const isActive = pathname.startsWith(item.href);
+                        return (
                             <Link
                                 key={item.name}
                                 href={item.href}
                                 className={cn(
                                     'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                                    pathname.startsWith(item.href)
+                                    isActive
                                         ? 'bg-slate-800 text-emerald-400'
                                         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                                 )}
@@ -120,23 +94,23 @@ export function Sidebar({ user }: { user?: any }) {
                                 <item.icon
                                     className={cn(
                                         'mr-3 h-5 w-5 flex-shrink-0',
-                                        pathname.startsWith(item.href) ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white'
+                                        isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white'
                                     )}
                                     aria-hidden="true"
                                 />
                                 {item.name}
                             </Link>
-                        ))}
-                    </div>
-                )}
+                        );
+                    })}
+                </div>
 
-                {/* 5. Settings */}
+                {/* 5. Settings & Manuals */}
                 <div className="pt-4 pb-2 border-t border-slate-800 mt-4">
-                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">환경설정</div>
+                    <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Settings & Manuals</div>
                     <Link
                         href="/settings"
                         className={cn(
-                            'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                            'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors mb-1',
                             pathname.startsWith('/settings')
                                 ? 'bg-slate-800 text-emerald-400'
                                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -150,6 +124,31 @@ export function Sidebar({ user }: { user?: any }) {
                         />
                         설정
                     </Link>
+
+                    {/* Manual Category */}
+                    <div className="mt-4">
+                        <div className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">시스템 메뉴얼</div>
+                        {manuals.map((item) => (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={cn(
+                                    'group flex items-center rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                                    pathname.startsWith(item.href)
+                                        ? 'bg-slate-800/50 text-emerald-400'
+                                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                                )}
+                            >
+                                <item.icon
+                                    className={cn(
+                                        'mr-3 h-4 w-4 flex-shrink-0',
+                                        pathname.startsWith(item.href) ? 'text-emerald-400' : 'text-slate-500 group-hover:text-white'
+                                    )}
+                                />
+                                {item.name}
+                            </Link>
+                        ))}
+                    </div>
                 </div>
             </nav>
             <div className="p-4 border-t border-slate-800 bg-slate-900/50">
