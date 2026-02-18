@@ -114,15 +114,15 @@ const FALLBACK_DEFAULT_STYLING = {
 };
 
 const FALLBACK_GENDER_DESCRIPTIONS: Record<string, string> = {
-    MAN: '한국인 남성 모델 (20대 중반, 키 178cm, 요즘 트렌드와 옷의 특징에 어울리는 체형과 핏)',
-    WOMAN: '한국인 여성 모델 (20대 중반, 키 168cm, 요즘 트렌드와 옷의 특징에 어울리는 체형과 핏)',
-    KIDS: '한국인 아동 모델 (8-10세, 밝고 활발한 표정, 깔끔한 스타일)',
+    MAN: 'Korean male model (mid-20s, 178cm tall, body type and fit matching current trends)',
+    WOMAN: 'Korean female model (mid-20s, 168cm tall, body type and fit matching current trends)',
+    KIDS: 'Korean child model (8-10 years old, bright and cheerful expression, clean style)',
 };
 
 const FALLBACK_GENDER_STYLE_TIPS: Record<string, string> = {
-    MAN: '남성 코디: 무신사 스냅, 하이버 스타일링처럼 깔끔하면서도 트렌디한 시티보이 감성. 오버사이즈+슬림 밸런스, 뉴트럴 톤 위주',
-    WOMAN: '여성 코디: W컨셉, 29CM 스타일링처럼 미니멀하면서 세련된 감성. 적절한 실루엣 대비, 톤온톤 또는 포인트 컬러',
-    KIDS: '아동 코디: 밝고 활발한 컬러감, 편안하면서 세련된 캐주얼',
+    MAN: 'Men styling: Clean yet trendy city-boy aesthetic like Musinsa Snap. Oversized+slim balance, neutral tones',
+    WOMAN: 'Women styling: Minimal yet refined aesthetic like W Concept, 29CM. Balanced silhouettes, tone-on-tone or accent color',
+    KIDS: 'Kids styling: Bright cheerful colors, comfortable yet stylish casual',
 };
 
 const FALLBACK_MAIN_PROMPT = `You are a top-tier Korean fashion e-commerce studio photographer.

@@ -157,7 +157,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
     }
 
     return { stageCounts: stage, archiveSubCounts: archive, curatedDaysCounts: curated, clearanceSubCounts: clearance, newOver30Count: newOver30, archiveOver120Count: archiveOver120, clearanceOver120Count: clearanceOver120 };
-  }, [products]);
+  }, [products, ARCHIVE_SUBS]);
 
   // 각 카테고리 200개 제한 (유지가치 점수 낮은 상품부터 다음 단계로 이동)
   const STAGE_LIMIT = 200;
@@ -239,7 +239,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
       }
     }
     return overflows;
-  }, [products, archiveSubCounts]);
+  }, [products, archiveSubCounts, ARCHIVE_SUBS]);
 
   const newOverflowIds = useMemo(() => {
     if (newOverflowCount <= 0) return [];
@@ -825,7 +825,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
 
       return true;
     });
-  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, issueFilter]);
+  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, issueFilter, ARCHIVE_SUBS]);
 
   // 정렬
   const GRADE_ORDER: Record<string, number> = { 'V급': 0, 'S급': 1, 'A급': 2, 'B급': 3, 'C급': 4 };

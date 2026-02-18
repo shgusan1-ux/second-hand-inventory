@@ -6,62 +6,64 @@ const SETTING_KEY = 'fitting_prompt_config';
 
 // 기본 프롬프트 설정
 const DEFAULT_CONFIG = {
-    // 메인 프롬프트 템플릿
-    mainPrompt: `당신은 한국 최고의 패션 이커머스 스튜디오 포토그래퍼입니다.
+    // 메인 프롬프트 템플릿 (영어 - Gemini가 영어 지시를 더 잘 따름)
+    mainPrompt: `You are a top-tier Korean fashion e-commerce studio photographer.
 
-[입력 이미지 설명]
-- 첫 번째 이미지: 참고용 모델 사진 (이 사람의 얼굴, 체형, 포즈를 참고)
-- 두 번째 이미지: 실제 판매할 의류 상품 사진 (이 옷을 모델에게 입혀야 함 - 이 상품이 메인!)
+[INPUT IMAGES]
+- Image 1: Reference model photo (use this person's face, body type, and pose)
+- Image 2: THE PRODUCT clothing to sell (this garment MUST be worn by the model — THIS IS THE MAIN PRODUCT!)
 
-[작업 목표]
-{{genderKR}} 모델이 두 번째 이미지의 옷을 입고 있는 전문 이커머스 상품 사진을 생성하세요.
+[TASK]
+Generate a professional e-commerce product photo of a {{genderKR}} model wearing the clothing from Image 2.
 {{productNameLine}}
 
-★★★ 가장 중요: 두 번째 이미지의 상품 의류가 사진에서 가장 눈에 띄고 부각되어야 합니다!
-- 상품이 티셔츠라면: 자켓으로 가려지면 안 됨. 티셔츠가 전면에 완전히 보여야 함
-- 상품이 아우터라면: 아우터가 열려서 이너가 더 눈에 띄면 안 됨. 아우터가 메인
-- 상품이 하의라면: 상의가 너무 길어서 하의를 가리면 안 됨. 하의 전체가 보여야 함
-- 코디 아이템은 상품을 돋보이게 하는 보조 역할일 뿐, 절대 상품보다 눈에 띄면 안 됨
+★★★ CRITICAL RULE — THE PRODUCT FROM IMAGE 2 MUST BE THE MOST PROMINENT ITEM IN THE PHOTO ★★★
+- If the product is a TOP (t-shirt, shirt, sweater): DO NOT add any jacket, coat, or outer layer. The top must be 100% visible from front. NO layering on top.
+- If the product is OUTERWEAR (jacket, coat): The outerwear must be the hero piece. Keep inner layers minimal and plain.
+- If the product is BOTTOMS (pants, skirt): The entire bottom garment must be fully visible. Use a short/cropped top so nothing covers the bottoms.
+- Coordinating items are SUPPORTING ONLY — they must NEVER be more visually prominent than the product.
+- NEVER add clothing items that obscure, cover, or compete with the product garment.
 
-[모델 설정]
+[MODEL SETUP]
 {{genderDesc}}
 
-[스타일링 방향 - 한국 패션 쇼핑몰 코디 참고]
-- 컨셉: {{stylingDescription}}
-- 코디 아이템: 상품 의류와 함께 {{coordiText}}을 매치
-- 상품이 상의인 경우: 상의가 완전히 드러나도록! 위의 코디 아이템 중 하의/신발/액세서리만 매치. 자켓이나 아우터로 상의를 가리지 말 것
-- 상품이 하의인 경우: 하의 전체가 보이도록! 위의 코디 아이템 중 상의/신발/액세서리를 매치. 상의 기장이 짧은 것을 선택할 것
-- 상품이 아우터인 경우: 아우터가 메인으로 보이도록! 심플한 이너/하의/신발을 매치
-- 코디 참고 기준: 한국 대표 패션 플랫폼(무신사 스토어, 29CM, W컨셉, 하이버, SSF샵)의 2024-2025 베스트 코디셋을 참고
+[STYLING DIRECTION — Korean Fashion Platform Reference]
+- Concept: {{stylingDescription}}
+- Coordinate with: {{coordiText}}
+- For TOP products: Match ONLY with bottoms + shoes + accessories. ABSOLUTELY NO jackets or outerwear over the product.
+- For BOTTOM products: Match with a SHORT cropped top + shoes + accessories. The entire length of bottoms must be visible.
+- For OUTERWEAR products: Match with simple inner + bottoms + shoes. Outerwear is the main visual focus.
+- Reference: Korean fashion platforms (Musinsa, 29CM, W Concept) 2024-2025 best styling sets
 - {{genderStyleTip}}
-- 전체적으로 한국 20-30대가 실제 입고 다닐 법한 현실적인 코디 (SNS 인스타그램에 올릴만한 데일리룩)
-- 컬러 매칭: 코디 아이템은 상품 의류의 색상과 조화되되, 상품보다 튀지 않는 톤다운된 컬러로
+- Realistic daily look that Korean 20-30s would actually wear (Instagram-worthy)
+- Color coordination: Supporting items should complement the product color in muted tones, never outshine it
 
-[절대 지켜야 할 촬영 요구사항]
-1. ★ 정사각형(1:1) 비율 이미지 생성 (직사각형 아님!)
-2. 순백색 스튜디오 배경 (소품, 배경 장식 일체 없음). 모델 주변에 충분한 흰색 여백을 확보할 것 (상하좌우 최소 20% 이상 여백)
-3. 전신 사진 (머리 위 여유 공간 ~ 발끝 아래 여유 공간까지). 모델이 이미지 중앙에 서 있고, 머리 위와 발 아래에 넉넉한 여백이 있어야 함
-4. 자연광 느낌의 스튜디오 조명 (그림자 최소화, 소프트 디퓨즈드 라이팅)
-5. 모델의 시선: 카메라 렌즈를 정확히 똑바로 바라봐야 함. 아래를 내려다보거나 위를 올려다보면 안 됨. 눈높이와 카메라가 정확히 같은 높이에서 정면 응시 (eye-level straight gaze into camera lens)
-6. 의류 상품의 색상, 패턴, 질감, 디테일(버튼, 지퍼, 로고 등)을 원본과 동일하게 표현 - AI가 임의로 변형하지 않을 것
-7. 사실적인 원단 질감, 정확한 색상 재현, 옷의 특징과 요즘 트렌드에 맞는 자연스러운 핏
-8. 전문 패션 이커머스 상품 촬영 수준의 고품질 (무신사, 29CM 상품 상세 이미지 수준)
-9. ★ 코디하려는 상품 의류가 사진에서 가장 부각되어야 함. 다른 코디 아이템에 의해 가려지거나 묻히면 절대 안 됨!
+[MANDATORY PHOTO REQUIREMENTS — STRICT]
+1. ★ SQUARE (1:1) aspect ratio image — NOT portrait, NOT landscape
+2. PURE WHITE (#FFFFFF) studio background — no props, no floor lines, no shadows on background. Clean infinite white.
+3. FULL BODY shot with GENEROUS margins — at least 15-20% white space above head and below feet. Model centered.
+4. Soft diffused studio lighting, minimal shadows, professional fashion photography lighting setup
+5. Model looking STRAIGHT into camera lens at eye level — not looking up or down
+6. EXACT reproduction of the product garment's color, pattern, texture, and details (buttons, zippers, logos) from Image 2 — DO NOT alter or reimagine the garment
+7. Photorealistic fabric texture, accurate color reproduction, natural fit appropriate for current trends
+8. Professional fashion e-commerce quality (Musinsa, 29CM product detail image standard)
+9. ★ THE PRODUCT GARMENT MUST BE THE VISUAL HERO — it should occupy the most visual attention. No other item should compete.
+10. High resolution, sharp details, commercial photography quality
 
-지금 이미지를 생성하세요.`,
+Generate the image now.`,
 
     // 성별별 모델 설명
     genderDescriptions: {
-        MAN: '한국인 남성 모델 (20대 중반, 키 178cm, 요즘 트렌드와 옷의 특징에 어울리는 체형과 핏)',
-        WOMAN: '한국인 여성 모델 (20대 중반, 키 168cm, 요즘 트렌드와 옷의 특징에 어울리는 체형과 핏)',
-        KIDS: '한국인 아동 모델 (8-10세, 밝고 활발한 표정, 깔끔한 스타일)',
+        MAN: 'Korean male model (mid-20s, 178cm tall, body type and fit matching current trends)',
+        WOMAN: 'Korean female model (mid-20s, 168cm tall, body type and fit matching current trends)',
+        KIDS: 'Korean child model (8-10 years old, bright and cheerful expression, clean style)',
     },
 
     // 성별별 스타일 팁
     genderStyleTips: {
-        MAN: '남성 코디: 무신사 스냅, 하이버 스타일링처럼 깔끔하면서도 트렌디한 시티보이 감성. 오버사이즈+슬림 밸런스, 뉴트럴 톤 위주',
-        WOMAN: '여성 코디: W컨셉, 29CM 스타일링처럼 미니멀하면서 세련된 감성. 적절한 실루엣 대비, 톤온톤 또는 포인트 컬러',
-        KIDS: '아동 코디: 밝고 활발한 컬러감, 편안하면서 세련된 캐주얼',
+        MAN: 'Men styling: Clean yet trendy city-boy aesthetic like Musinsa Snap. Oversized+slim balance, neutral tones',
+        WOMAN: 'Women styling: Minimal yet refined aesthetic like W Concept, 29CM. Balanced silhouettes, tone-on-tone or accent color',
+        KIDS: 'Kids styling: Bright cheerful colors, comfortable yet stylish casual',
     },
 
     // 카테고리별 코디 스타일링

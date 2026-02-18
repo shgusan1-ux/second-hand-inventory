@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { calculateSalesScore } from '@/lib/smartstore-rank';
 import { getMarketWeather } from '@/lib/weather';
+import { useArchiveSettings } from '@/hooks/use-archive-settings';
 
 interface Product {
     originProductNo: string;
@@ -37,10 +38,11 @@ interface MainDisplayTabProps {
     syncingDisplay?: boolean;
 }
 
-const ARCHIVE_SUBS = ['MILITARY ARCHIVE', 'WORKWEAR ARCHIVE', 'OUTDOOR ARCHIVE', 'JAPANESE ARCHIVE', 'HERITAGE EUROPE', 'BRITISH ARCHIVE', 'UNISEX ARCHIVE'];
-const isArchiveCategory = (cat?: string) => cat === 'ARCHIVE' || ARCHIVE_SUBS.includes(cat || '');
-
 export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syncingDisplay }: MainDisplayTabProps) {
+    const { categories: archiveCategories } = useArchiveSettings();
+    const ARCHIVE_SUBS = useMemo(() => archiveCategories.map(c => c.category_id), [archiveCategories]);
+    const isArchiveCategory = (cat?: string) => cat === 'ARCHIVE' || ARCHIVE_SUBS.includes(cat || '');
+
     const [internalCategory, setInternalCategory] = useState<'NEW' | 'CURATED' | 'ARCHIVE'>('NEW');
     const [currentTemp, setCurrentTemp] = useState<number>(20);
     const [pageSize, setPageSize] = useState<number>(30);
@@ -73,7 +75,7 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
             .map(p => ({ ...p, _score: calculateSalesScore(p as any, currentTemp) }))
             .sort((a, b) => b._score - a._score)
             .slice(0, pageSize); // 선택된 개수만큼
-    }, [products, activeCategory, currentTemp, pageSize]);
+    }, [products, activeCategory, currentTemp, pageSize, ARCHIVE_SUBS]);
 
     const handleCopyCodes = () => {
         const codes = selectedProducts.map(p => p.sellerManagementCode || p.originProductNo).filter(Boolean);
@@ -261,6 +263,6 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 }
