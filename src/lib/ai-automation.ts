@@ -11,7 +11,7 @@
 
 // Gemini API 설정 (Google AI) - 3.0 Pro 고정
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // Replicate API 설정 (가상 피팅용)
 const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';

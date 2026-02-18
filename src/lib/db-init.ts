@@ -280,6 +280,34 @@ export async function initDatabase() {
       )
     `);
 
+    // 가상피팅 모델 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS fitting_models (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        image_url TEXT NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 가상피팅 결과 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS fitting_results (
+        id TEXT PRIMARY KEY,
+        product_no TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        source_image_url TEXT,
+        result_image_url TEXT,
+        naver_synced BOOLEAN DEFAULT FALSE,
+        status TEXT DEFAULT 'pending',
+        prompt_used TEXT,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
@@ -288,6 +316,8 @@ export async function initDatabase() {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance_logs(created_at)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_account ON account_transactions(account_id)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON account_transactions(transaction_date)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_product ON fitting_results(product_no)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_status ON fitting_results(status)`);
 
     console.log('✅ DB 초기화 완료');
     isInitialized = true;

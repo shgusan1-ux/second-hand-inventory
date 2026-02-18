@@ -207,7 +207,7 @@ export default function VisionAnalyzerPage() {
             <div className={`w-3 h-3 rounded-full ${state === 'running' ? 'bg-emerald-400 animate-pulse' : state === 'done' ? 'bg-blue-400' : 'bg-slate-600'}`} />
             <div>
               <h1 className="text-sm font-bold">Gemini Vision 자동 분석기</h1>
-              <p className="text-[10px] text-slate-500 font-mono">gemini-1.5-flash · 배치 10개 · 동시성 2</p>
+              <p className="text-[10px] text-slate-500 font-mono">gemini-2.0-flash · 배치 10개 · 동시성 2</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

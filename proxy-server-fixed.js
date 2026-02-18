@@ -30,9 +30,50 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-proxy-key');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-proxy-key, x-filename');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
+});
+
+app.post('/naver-image-upload', async (req, res) => {
+  try {
+    const auth = req.headers.authorization;
+    const filename = req.headers['x-filename'] || 'image.jpg';
+
+    if (!req.rawBody) {
+      return res.status(400).json({ error: 'No image data received' });
+    }
+
+    console.log('[UPLOAD] Constructing multipart for:', filename);
+
+    // Naver SPEC: multipart/form-data, 필드명 'imageFiles'
+    const boundary = '----NaverUpload' + Date.now();
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="imageFiles"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
+
+    const body = Buffer.concat([
+      Buffer.from(header, 'utf-8'),
+      req.rawBody,
+      Buffer.from(footer, 'utf-8')
+    ]);
+
+    const naverRes = await fetch('https://api.commerce.naver.com/external/v1/product-images/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': auth,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Accept': 'application/json'
+      },
+      body: body
+    });
+
+    const data = await naverRes.json();
+    console.log('[UPLOAD] status:', naverRes.status);
+    return res.status(naverRes.status).json(data);
+  } catch (error) {
+    console.error('[UPLOAD ERROR]', error);
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/oauth/token', async (req, res) => {
@@ -77,6 +118,54 @@ app.post('/oauth/token', async (req, res) => {
     return res.status(response.status).json(data);
   } catch (error) {
     console.error('[TOKEN ERROR]', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// 전용 이미지 업로드 엔드포인트 (Vercel → 프록시 → 네이버)
+// Vercel에서 raw 이미지 바이트를 보내면, 프록시가 multipart/form-data를 구성하여 네이버에 전송
+app.post('/naver-image-upload', async (req, res) => {
+  try {
+    const authorization = req.headers.authorization;
+    const fileName = req.headers['x-filename'] || 'upload.jpg';
+
+    if (!req.rawBody || req.rawBody.length === 0) {
+      return res.status(400).json({ error: 'No image data received' });
+    }
+
+    console.log('[IMAGE UPLOAD] fileName:', fileName, 'size:', req.rawBody.length);
+
+    // multipart/form-data 직접 구성
+    const boundary = '----NaverFormBoundary' + Date.now();
+    const headerStr = `--${boundary}\r\nContent-Disposition: form-data; name="imageFiles"; filename="${fileName}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+    const footerStr = `\r\n--${boundary}--\r\n`;
+
+    const body = Buffer.concat([
+      Buffer.from(headerStr),
+      req.rawBody,
+      Buffer.from(footerStr)
+    ]);
+
+    console.log('[IMAGE UPLOAD] multipart body size:', body.length);
+
+    const response = await fetch('https://api.commerce.naver.com/external/v1/product-images/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': authorization,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: body,
+    });
+
+    const respText = await response.text();
+    console.log('[IMAGE UPLOAD] status:', response.status, respText.substring(0, 300));
+
+    let data;
+    try { data = JSON.parse(respText); } catch { data = respText; }
+
+    return res.status(response.status).json(data);
+  } catch (error) {
+    console.error('[IMAGE UPLOAD ERROR]', error.message);
     return res.status(500).json({ error: error.message });
   }
 });

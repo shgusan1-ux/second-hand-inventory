@@ -162,20 +162,26 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
               })
             });
 
+            const resData = await updateRes.json();
             if (!updateRes.ok) {
-              const err = await updateRes.json();
-              throw new Error(`Naver Update Failed: ${err.error || updateRes.statusText}`);
+              // 서버 로그도 함께 표시
+              if (resData.logs) resData.logs.forEach((l: string) => addLog(`  [서버] ${l}`));
+              throw new Error(`Naver Update Failed: ${resData.error || updateRes.statusText}`);
             }
+            // 성공 시에도 서버 로그 표시
+            if (resData.logs) resData.logs.forEach((l: string) => addLog(`  [서버] ${l}`));
             naverSuccess = true;
           } catch (naverErr: any) {
             addLog(`[Item: ${id}] Naver Update Error: ${naverErr.message}`);
-            // We still consider upload success, but warn about Naver
             toast.error(`${id} 이미지는 생성됐으나 네이버 전송 실패`);
           }
 
           if (naverSuccess) {
-            addLog(`[Item: ${id}] Naver Image Updated Successfully!`);
-            toast.success(`${id} 처리 및 네이버 전송 완료`);
+            addLog(`[Item: ${id}] Naver Image Updated Successfully! ✓`);
+            toast.success(`${id} Naver 동기화 완료`);
+          } else {
+            // naverErr cases are handled in catch, but if it fell through
+            addLog(`[Item: ${id}] Warning: Uploaded but Naver sync might have failed.`);
           }
 
           successCount++;
