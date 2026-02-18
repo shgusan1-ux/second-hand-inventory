@@ -497,7 +497,7 @@ export default function FittingEditorPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <p className="text-xs text-slate-500 mb-2 text-center font-medium uppercase tracking-wider">원본 이미지</p>
-                                            <div className="aspect-[3/4] bg-slate-800 rounded-xl overflow-hidden border border-white/5">
+                                            <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/5">
                                                 <img
                                                     src={selectedP.representativeImage?.url || selectedP.thumbnailUrl || ''}
                                                     alt="Original"
@@ -512,7 +512,7 @@ export default function FittingEditorPage() {
                                                     <span className="ml-2 text-emerald-400">(네이버 동기화됨)</span>
                                                 )}
                                             </p>
-                                            <div className="aspect-[3/4] bg-slate-800 rounded-xl overflow-hidden border border-white/5 flex items-center justify-center relative">
+                                            <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/5 flex items-center justify-center relative">
                                                 {selectedResult ? (
                                                     <>
                                                         <img

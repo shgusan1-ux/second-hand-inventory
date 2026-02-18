@@ -29,7 +29,7 @@ const DEFAULT_LIFECYCLE = {
 };
 
 export function SettingsTab({ onRefresh }: SettingsTabProps) {
-  const [section, setSection] = useState<'archive' | 'lifecycle'>('archive');
+  const [section, setSection] = useState<'archive' | 'lifecycle' | 'fitting'>('archive');
   const { categories: archiveCategories, updateCategory, loading: categoriesLoading } = useArchiveSettings();
 
   const TIERS = useMemo(() => [
@@ -73,9 +73,66 @@ export function SettingsTab({ onRefresh }: SettingsTabProps) {
     setBrandsLoading(false);
   };
 
+  // 가상피팅 프롬프트 설정
+  const [fittingPromptConfig, setFittingPromptConfig] = useState<any>(null);
+  const [fittingLoading, setFittingLoading] = useState(false);
+  const [fittingIsDefault, setFittingIsDefault] = useState(true);
+  const [editingPromptField, setEditingPromptField] = useState<string | null>(null);
+
+  const loadFittingPrompt = async () => {
+    setFittingLoading(true);
+    try {
+      const res = await fetch('/api/smartstore/settings/fitting-prompt');
+      const data = await res.json();
+      if (data.success) {
+        setFittingPromptConfig(data.config);
+        setFittingIsDefault(data.isDefault);
+      }
+    } catch (e) {
+      console.error('프롬프트 로드 실패:', e);
+    }
+    setFittingLoading(false);
+  };
+
+  const saveFittingPrompt = async () => {
+    if (!fittingPromptConfig) return;
+    try {
+      const res = await fetch('/api/smartstore/settings/fitting-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fittingPromptConfig),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('프롬프트 설정이 저장되었습니다.');
+        setFittingIsDefault(false);
+      } else {
+        toast.error(data.error || '저장 실패');
+      }
+    } catch (e: any) {
+      toast.error('오류: ' + e.message);
+    }
+  };
+
+  const resetFittingPrompt = async () => {
+    if (!confirm('프롬프트를 기본값으로 초기화하시겠습니까?')) return;
+    try {
+      const res = await fetch('/api/smartstore/settings/fitting-prompt', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setFittingPromptConfig(data.config);
+        setFittingIsDefault(true);
+        toast.success('기본값으로 초기화되었습니다.');
+      }
+    } catch (e: any) {
+      toast.error('오류: ' + e.message);
+    }
+  };
+
   useEffect(() => {
     if (section === 'archive') loadBrands();
     if (section === 'lifecycle') loadLifecycleSettings();
+    if (section === 'fitting') loadFittingPrompt();
   }, [section]);
 
   const loadLifecycleSettings = async () => {
@@ -148,6 +205,7 @@ export function SettingsTab({ onRefresh }: SettingsTabProps) {
   const sectionButtons = [
     { id: 'archive' as const, label: '아카이브 분류', icon: '📦' },
     { id: 'lifecycle' as const, label: '라이프사이클', icon: '⏳' },
+    { id: 'fitting' as const, label: '가상피팅', icon: '👔' },
   ];
 
   return (
@@ -244,12 +302,37 @@ export function SettingsTab({ onRefresh }: SettingsTabProps) {
                 브랜드 마스터 관리
                 <span className="text-xs text-slate-400 font-normal">({brands.length}개)</span>
               </h3>
-              <button
-                onClick={() => setShowAddBrand(!showAddBrand)}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-colors bg-blue-50/50"
-              >
-                {showAddBrand ? '취소' : '+ 새 브랜드 추가'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    const loadingId = toast.loading('AI가 새로운 브랜드를 검색 중입니다...');
+                    try {
+                      const res = await fetch('/api/cron/collect-brands?force=true');
+                      const data = await res.json();
+                      if (data.success) {
+                        toast.success(`새로운 브랜드 ${data.collectedCount}개를 수집했습니다!`, { id: loadingId });
+                        loadBrands();
+                      } else {
+                        toast.error(data.error || '수집 실패', { id: loadingId });
+                      }
+                    } catch (e) {
+                      toast.error('오류가 발생했습니다.', { id: loadingId });
+                    }
+                  }}
+                  className="text-xs font-bold text-purple-600 hover:text-purple-700 px-3 py-1.5 rounded-xl hover:bg-purple-50 transition-colors bg-purple-50/50 flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  AI 웹서칭 수집
+                </button>
+                <button
+                  onClick={() => setShowAddBrand(!showAddBrand)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-colors bg-blue-50/50"
+                >
+                  {showAddBrand ? '취소' : '+ 새 브랜드 추가'}
+                </button>
+              </div>
             </div>
 
             {/* 브랜드 추가 폼 */}
@@ -346,6 +429,233 @@ export function SettingsTab({ onRefresh }: SettingsTabProps) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 가상피팅 프롬프트 설정 */}
+      {section === 'fitting' && (
+        <div className="space-y-3">
+          {fittingLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block w-6 h-6 border-2 border-slate-200 border-t-violet-500 rounded-full animate-spin" />
+              <p className="text-xs text-slate-400 mt-2">프롬프트 설정 로딩...</p>
+            </div>
+          ) : fittingPromptConfig ? (
+            <>
+              {/* 상태 표시 */}
+              <div className={`flex items-center justify-between p-3 rounded-xl border ${fittingIsDefault ? 'bg-slate-50 border-slate-200' : 'bg-violet-50 border-violet-200'}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${fittingIsDefault ? 'bg-slate-400' : 'bg-violet-500'}`} />
+                  <span className="text-xs font-bold text-slate-600">
+                    {fittingIsDefault ? '기본 프롬프트 사용 중' : '커스텀 프롬프트 사용 중'}
+                  </span>
+                </div>
+                {!fittingIsDefault && (
+                  <button
+                    onClick={resetFittingPrompt}
+                    className="text-xs text-red-500 hover:text-red-700 font-bold px-3 py-1 rounded-lg hover:bg-red-50"
+                  >
+                    기본값으로 초기화
+                  </button>
+                )}
+              </div>
+
+              {/* 메인 프롬프트 */}
+              <div className="bg-white rounded-xl border p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500" />
+                    메인 프롬프트 템플릿
+                  </h3>
+                  <span className="text-[9px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded font-mono">
+                    변수: {'{{genderKR}} {{productNameLine}} {{genderDesc}} {{stylingDescription}} {{coordiText}} {{genderStyleTip}}'}
+                  </span>
+                </div>
+                <textarea
+                  value={fittingPromptConfig.mainPrompt || ''}
+                  onChange={e => setFittingPromptConfig((prev: any) => ({ ...prev, mainPrompt: e.target.value }))}
+                  rows={18}
+                  className="w-full text-xs font-mono border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-violet-400 outline-none resize-y leading-relaxed"
+                  placeholder="프롬프트 템플릿..."
+                />
+              </div>
+
+              {/* 성별 설정 */}
+              <div className="bg-white rounded-xl border p-4 shadow-sm">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  성별별 모델 설명
+                </h3>
+                <div className="space-y-2">
+                  {(['MAN', 'WOMAN', 'KIDS'] as const).map(g => (
+                    <div key={g} className="flex items-center gap-2">
+                      <span className={`text-[10px] font-black w-16 text-center py-1 rounded ${g === 'MAN' ? 'bg-blue-100 text-blue-700' : g === 'WOMAN' ? 'bg-pink-100 text-pink-700' : 'bg-amber-100 text-amber-700'
+                        }`}>{g}</span>
+                      <input
+                        value={fittingPromptConfig.genderDescriptions?.[g] || ''}
+                        onChange={e => setFittingPromptConfig((prev: any) => ({
+                          ...prev,
+                          genderDescriptions: { ...prev.genderDescriptions, [g]: e.target.value }
+                        }))}
+                        className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 성별 스타일 팁 */}
+              <div className="bg-white rounded-xl border p-4 shadow-sm">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-pink-500" />
+                  성별별 스타일 팁
+                </h3>
+                <div className="space-y-2">
+                  {(['MAN', 'WOMAN', 'KIDS'] as const).map(g => (
+                    <div key={g} className="flex items-start gap-2">
+                      <span className={`text-[10px] font-black w-16 text-center py-1 rounded flex-shrink-0 mt-1 ${g === 'MAN' ? 'bg-blue-100 text-blue-700' : g === 'WOMAN' ? 'bg-pink-100 text-pink-700' : 'bg-amber-100 text-amber-700'
+                        }`}>{g}</span>
+                      <textarea
+                        value={fittingPromptConfig.genderStyleTips?.[g] || ''}
+                        onChange={e => setFittingPromptConfig((prev: any) => ({
+                          ...prev,
+                          genderStyleTips: { ...prev.genderStyleTips, [g]: e.target.value }
+                        }))}
+                        rows={2}
+                        className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-pink-400 outline-none resize-y"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 카테고리별 코디 스타일링 */}
+              <div className="bg-white rounded-xl border p-4 shadow-sm">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  카테고리별 코디 스타일링
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(fittingPromptConfig.categoryStyling || {}).map(([catId, styling]: [string, any]) => (
+                    <div key={catId} className="bg-slate-50 rounded-lg border border-slate-100 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-black text-slate-700">{catId}</span>
+                        <button
+                          onClick={() => setEditingPromptField(editingPromptField === catId ? null : catId)}
+                          className="text-[10px] text-violet-600 hover:text-violet-700 font-bold"
+                        >
+                          {editingPromptField === catId ? '접기' : '편집'}
+                        </button>
+                      </div>
+                      {editingPromptField === catId ? (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400">컨셉 설명</label>
+                            <input
+                              value={styling.description || ''}
+                              onChange={e => setFittingPromptConfig((prev: any) => ({
+                                ...prev,
+                                categoryStyling: {
+                                  ...prev.categoryStyling,
+                                  [catId]: { ...styling, description: e.target.value }
+                                }
+                              }))}
+                              className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-400 outline-none"
+                            />
+                          </div>
+                          {(styling.coordiItems || []).map((items: string[], setIdx: number) => (
+                            <div key={setIdx} className="flex items-center gap-1">
+                              <span className="text-[9px] font-bold text-slate-400 w-10 flex-shrink-0">세트{setIdx + 1}</span>
+                              <input
+                                value={items.join(', ')}
+                                onChange={e => {
+                                  const newItems = e.target.value.split(',').map((s: string) => s.trim());
+                                  setFittingPromptConfig((prev: any) => {
+                                    const newCoordi = [...(prev.categoryStyling[catId].coordiItems || [])];
+                                    newCoordi[setIdx] = newItems;
+                                    return {
+                                      ...prev,
+                                      categoryStyling: {
+                                        ...prev.categoryStyling,
+                                        [catId]: { ...prev.categoryStyling[catId], coordiItems: newCoordi }
+                                      }
+                                    };
+                                  });
+                                }}
+                                className="flex-1 text-[11px] border border-slate-200 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-emerald-400 outline-none"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-[11px] text-slate-500 mb-1">{styling.description}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(styling.coordiItems || []).map((items: string[], i: number) => (
+                              <span key={i} className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                                세트{i + 1}: {items.slice(0, 2).join(', ')}...
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 기본 코디 (카테고리 없을 때) */}
+              <div className="bg-white rounded-xl border p-4 shadow-sm">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  기본 코디 (카테고리 없을 때)
+                </h3>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400">컨셉 설명</label>
+                    <input
+                      value={fittingPromptConfig.defaultStyling?.description || ''}
+                      onChange={e => setFittingPromptConfig((prev: any) => ({
+                        ...prev,
+                        defaultStyling: { ...prev.defaultStyling, description: e.target.value }
+                      }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-amber-400 outline-none"
+                    />
+                  </div>
+                  {(fittingPromptConfig.defaultStyling?.coordiItems || []).map((items: string[], setIdx: number) => (
+                    <div key={setIdx} className="flex items-center gap-1">
+                      <span className="text-[9px] font-bold text-slate-400 w-10 flex-shrink-0">세트{setIdx + 1}</span>
+                      <input
+                        value={items.join(', ')}
+                        onChange={e => {
+                          const newItems = e.target.value.split(',').map((s: string) => s.trim());
+                          setFittingPromptConfig((prev: any) => {
+                            const newCoordi = [...(prev.defaultStyling.coordiItems || [])];
+                            newCoordi[setIdx] = newItems;
+                            return {
+                              ...prev,
+                              defaultStyling: { ...prev.defaultStyling, coordiItems: newCoordi }
+                            };
+                          });
+                        }}
+                        className="flex-1 text-[11px] border border-slate-200 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-amber-400 outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 저장 버튼 */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={saveFittingPrompt}
+                  className="bg-violet-600 text-white text-xs font-bold px-6 py-2.5 rounded-lg hover:bg-violet-700 transition-colors shadow-sm"
+                >
+                  프롬프트 설정 저장
+                </button>
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

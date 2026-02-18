@@ -54,8 +54,8 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const [showModelManager, setShowModelManager] = useState(false);
     const [modelUploadType, setModelUploadType] = useState<'MAN' | 'WOMAN' | 'KIDS'>('MAN');
     const [modelUploadName, setModelUploadName] = useState('');
-    // previewProduct 제거 - 새창 에디터로 대체
     const [genderFilter, setGenderFilter] = useState<'ALL' | 'MAN' | 'WOMAN' | 'KIDS'>('ALL');
+    const [enlargedModelUrl, setEnlargedModelUrl] = useState<string | null>(null); // 모델 이미지 크게보기
     const [sortByAI, setSortByAI] = useState(false);
     const [aiRanking, setAiRanking] = useState<Map<string, { score: number; reasons: string[] }>>(new Map());
     const logRef = useRef<HTMLDivElement>(null);
@@ -321,7 +321,8 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                                                 <img
                                                     src={m.image_url}
                                                     alt={m.name}
-                                                    className="w-full aspect-[3/4] object-cover rounded-lg border"
+                                                    className="w-full aspect-[3/4] object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
+                                                    onClick={() => setEnlargedModelUrl(m.image_url)}
                                                 />
                                                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1.5 rounded-b-lg flex justify-between items-center">
                                                     <span>{m.name}{m.is_default ? ' (기본)' : ''}</span>
@@ -549,6 +550,28 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                     {logs.map((log, i) => (
                         <div key={i} className="leading-5">{log}</div>
                     ))}
+                </div>
+            )}
+
+            {/* 모델 이미지 크게보기 모달 */}
+            {enlargedModelUrl && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center cursor-pointer"
+                    onClick={() => setEnlargedModelUrl(null)}
+                >
+                    <div className="relative max-w-[90vw] max-h-[90vh]">
+                        <img
+                            src={enlargedModelUrl}
+                            alt="모델 이미지"
+                            className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl"
+                        />
+                        <button
+                            onClick={() => setEnlargedModelUrl(null)}
+                            className="absolute -top-3 -right-3 w-8 h-8 bg-white text-black rounded-full flex items-center justify-center font-bold text-lg shadow-lg hover:bg-slate-200"
+                        >
+                            X
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
