@@ -56,6 +56,7 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const [modelUploadName, setModelUploadName] = useState('');
     // previewProduct 제거 - 새창 에디터로 대체
     const [genderFilter, setGenderFilter] = useState<'ALL' | 'MAN' | 'WOMAN' | 'KIDS'>('ALL');
+    const [visionFilter, setVisionFilter] = useState<'ALL' | 'NO_BADGE' | 'HAS_BADGE'>('NO_BADGE'); // 기본값을 '뱃지 없음'으로 설정하여 사용자 편의성 증대
     const [sortByAI, setSortByAI] = useState(false);
     const [aiRanking, setAiRanking] = useState<Map<string, { score: number; reasons: string[] }>>(new Map());
     const logRef = useRef<HTMLDivElement>(null);
@@ -103,6 +104,12 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
             result = result.filter(p => extractGender(p.name) === genderFilter);
         }
 
+        if (visionFilter === 'NO_BADGE') {
+            result = result.filter(p => !p.classification?.visionGrade);
+        } else if (visionFilter === 'HAS_BADGE') {
+            result = result.filter(p => !!p.classification?.visionGrade);
+        }
+
         if (sortByAI && aiRanking.size > 0) {
             result.sort((a, b) => {
                 const aScore = aiRanking.get(a.originProductNo)?.score || 0;
@@ -112,7 +119,7 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
         }
 
         return result;
-    }, [products, searchTerm, genderFilter, sortByAI, aiRanking]);
+    }, [products, searchTerm, genderFilter, visionFilter, sortByAI, aiRanking]);
 
     // 성별별 통계
     const genderStats = useMemo(() => {
@@ -384,11 +391,22 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                         <button
                             key={g}
                             onClick={() => setGenderFilter(g)}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                                genderFilter === g ? 'bg-blue-600 text-white' : 'bg-white border text-slate-600 hover:bg-slate-50'
-                            }`}
+                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${genderFilter === g ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-50'
+                                }`}
                         >
-                            {g === 'ALL' ? '전체' : g}
+                            {g === 'ALL' ? '성별 전체' : g}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex gap-1">
+                    {(['ALL', 'NO_BADGE', 'HAS_BADGE'] as const).map(v => (
+                        <button
+                            key={v}
+                            onClick={() => setVisionFilter(v)}
+                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${visionFilter === v ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-50'
+                                }`}
+                        >
+                            {v === 'ALL' ? '뱃지 전체' : v === 'NO_BADGE' ? '뱃지 없음' : '뱃지 있음'}
                         </button>
                     ))}
                 </div>
@@ -454,9 +472,8 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                     return (
                         <div
                             key={product.originProductNo}
-                            className={`bg-white rounded-xl border overflow-hidden transition-all cursor-pointer group relative hover:shadow-md ${
-                                isSelected ? 'ring-2 ring-violet-500' : ''
-                            }`}
+                            className={`bg-white rounded-xl border overflow-hidden transition-all cursor-pointer group relative hover:shadow-md ${isSelected ? 'ring-2 ring-violet-500' : ''
+                                }`}
                             onClick={() => toggleSelect(product.originProductNo)}
                         >
                             <div className="aspect-square bg-slate-100 relative">
@@ -471,13 +488,19 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                                 </div>
 
                                 {/* 성별 뱃지 */}
-                                <div className={`absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    gender === 'MAN' ? 'bg-blue-500 text-white' :
-                                    gender === 'WOMAN' ? 'bg-pink-500 text-white' :
-                                    'bg-amber-500 text-white'
-                                }`}>
+                                <div className={`absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded text-[10px] font-bold ${gender === 'MAN' ? 'bg-blue-500 text-white' :
+                                        gender === 'WOMAN' ? 'bg-pink-500 text-white' :
+                                            'bg-amber-500 text-white'
+                                    }`}>
                                     {gender}
                                 </div>
+
+                                {/* Vision 등급 뱃지 */}
+                                {product.classification?.visionGrade && (
+                                    <div className="absolute top-2 left-10 z-20 px-1.5 py-0.5 rounded bg-slate-800/90 text-white text-[10px] font-black border border-white/20">
+                                        {product.classification.visionGrade}
+                                    </div>
+                                )}
 
                                 {/* 피팅 완료 뱃지 */}
                                 {resultUrl && (

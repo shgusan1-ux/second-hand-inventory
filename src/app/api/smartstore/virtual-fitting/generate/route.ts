@@ -16,10 +16,11 @@ interface ProductInput {
 }
 
 export async function POST(request: NextRequest) {
-    const { products, modelChoice = 'flash', syncToNaver = false } = await request.json() as {
+    const { products, modelChoice = 'flash', syncToNaver = false, variationSeed } = await request.json() as {
         products: ProductInput[];
         modelChoice: 'flash' | 'pro';
         syncToNaver: boolean;
+        variationSeed?: number;
     };
 
     await ensureDbInitialized();
@@ -92,10 +93,10 @@ export async function POST(request: NextRequest) {
                         total,
                         productNo: product.originProductNo,
                         phase: 'generating',
-                        message: `${product.name.substring(0, 30)}... DALL-E 3 생성 중`,
+                        message: `${product.name.substring(0, 30)}... Gemini 이미지 생성 중`,
                     });
 
-                    // DALL-E 3 이미지 생성 (GPT-4o 분석 → DALL-E 3 생성)
+                    // Gemini 이미지 생성 (모델+의류 → 피팅 이미지)
                     const result = await generateFittingImage({
                         personImageBase64: personB64,
                         clothingImageBase64: clothingB64,
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
                         archiveCategory: product.archiveCategory,
                         modelChoice,
                         productName: product.name,
+                        variationSeed,
                     });
 
                     send({
