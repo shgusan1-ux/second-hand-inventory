@@ -352,54 +352,36 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
             const imgUrl = getImageUrl(p);
             const imgCount = getImageCount(p);
             const isSelected = selectedIds.includes(p.originProductNo);
+            const salesLink = p.channelProductNo ? `https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}` : null;
+
             return (
               <div
                 key={p.originProductNo}
                 className={`bg-white rounded-xl border overflow-hidden transition-all cursor-pointer group relative ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`}
-                onClick={() => setSelectedProduct(p)}
+                onClick={() => toggleSelect(p.originProductNo)}
               >
                 <div className="aspect-square bg-slate-100 relative group-hover:opacity-90 transition-opacity">
                   <div className="absolute top-2 left-2 z-20" onClick={(e) => toggleSelect(p.originProductNo, e)}>
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => { }} // Handled by div click for better DX
+                      onChange={() => { }} // Handled by group click
                       className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shadow-sm"
                     />
                   </div>
 
-                  {/* Image Link */}
-                  {p.channelProductNo ? (
-                    <a
-                      href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block w-full h-full"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {imgUrl ? (
-                        <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      )}
-                    </a>
-                  ) : (
-                    <div className="w-full h-full" onClick={() => setSelectedProduct(p)}>
-                      {imgUrl ? (
-                        <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Image Display */}
+                  <div className="w-full h-full">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
 
                   {imgCount > 1 && (
                     <span className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full z-10">
@@ -407,16 +389,23 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
                     </span>
                   )}
 
-                  {/* View Details Button Overlay */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setSelectedProduct(p); }}
-                    className="absolute bottom-2 right-2 p-1.5 bg-white/80 rounded-full hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                    title="상세 보기"
-                  >
-                    <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </button>
+                  {/* Link Button (Magnifying Glass Icon) */}
+                  {salesLink && (
+                    <a
+                      href={salesLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bottom-2 right-2 p-1.5 bg-white/80 rounded-full hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                      title="판매 페이지 보기"
+                    >
+                      <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+
+                  {/* Optional: Detail view can be kept as a small sub-icon if needed, but user didn't ask */}
                 </div>
                 <div className="p-2">
                   <p className="text-xs font-medium text-slate-700 truncate">{p.name}</p>

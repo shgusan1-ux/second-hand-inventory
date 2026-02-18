@@ -1,4 +1,6 @@
 
+import { db } from '@/lib/db';
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 // 모델 이름: flash=빠르고 저렴, pro=나노바나나 Pro (디테일 최고)
@@ -24,8 +26,17 @@ export interface FittingResult {
     textResponse?: string;
 }
 
-// 아카이브 카테고리별 한국 트렌드 코디 스타일링 가이드
-const CATEGORY_STYLING: Record<string, { description: string; coordiItems: string[][] }> = {
+// 프롬프트 설정 타입
+interface PromptConfig {
+    mainPrompt: string;
+    genderDescriptions: Record<string, string>;
+    genderStyleTips: Record<string, string>;
+    categoryStyling: Record<string, { description: string; coordiItems: string[][] }>;
+    defaultStyling: { description: string; coordiItems: string[][] };
+}
+
+// === 하드코딩 기본값 (DB에 없을 때 폴백) ===
+const FALLBACK_CATEGORY_STYLING: Record<string, { description: string; coordiItems: string[][] }> = {
     'MILITARY ARCHIVE': {
         description: '밀리터리 무드의 시티보이/걸 스타일링. 2024-2025 한국 성수동·한남동 기반 밀리터리 캐주얼 트렌드',
         coordiItems: [
@@ -91,8 +102,7 @@ const CATEGORY_STYLING: Record<string, { description: string; coordiItems: strin
     },
 };
 
-// 기본 코디 (카테고리 없을 때)
-const DEFAULT_STYLING = {
+const FALLBACK_DEFAULT_STYLING = {
     description: '한국 20-30대 캐주얼 트렌드. 성수동·홍대 기반의 세련된 데일리룩',
     coordiItems: [
         ['스트레이트 데님', '뉴발란스 530', '크루넥 티셔츠', '미니 크로스백'],
@@ -102,47 +112,39 @@ const DEFAULT_STYLING = {
     ],
 };
 
-function buildPrompt(
-    gender: 'MAN' | 'WOMAN' | 'KIDS',
-    archiveCategory?: string,
-    productName?: string,
-    variationSeed?: number
-): string {
-    const styling = (archiveCategory && CATEGORY_STYLING[archiveCategory]) || DEFAULT_STYLING;
+const FALLBACK_GENDER_DESCRIPTIONS: Record<string, string> = {
+    MAN: '한국인 남성 모델 (20대 중반, 키 178cm, 슬림핏 체형, 깔끔한 헤어스타일, 자연스러운 표정)',
+    WOMAN: '한국인 여성 모델 (20대 중반, 키 168cm, 슬림핏 체형, 자연스러운 헤어, 세련된 표정)',
+    KIDS: '한국인 아동 모델 (8-10세, 밝고 활발한 표정, 깔끔한 스타일)',
+};
 
-    // variationSeed로 다른 코디 아이템 세트 선택
-    const seed = variationSeed ?? Math.floor(Math.random() * styling.coordiItems.length);
-    const coordiSet = styling.coordiItems[seed % styling.coordiItems.length];
-    const coordiText = coordiSet.join(', ');
+const FALLBACK_GENDER_STYLE_TIPS: Record<string, string> = {
+    MAN: '남성 코디: 무신사 스냅, 하이버 스타일링처럼 깔끔하면서도 트렌디한 시티보이 감성. 오버사이즈+슬림 밸런스, 뉴트럴 톤 위주',
+    WOMAN: '여성 코디: W컨셉, 29CM 스타일링처럼 미니멀하면서 세련된 감성. 적절한 실루엣 대비, 톤온톤 또는 포인트 컬러',
+    KIDS: '아동 코디: 밝고 활발한 컬러감, 편안하면서 세련된 캐주얼',
+};
 
-    const genderKR = gender === 'MAN' ? '남성' : gender === 'WOMAN' ? '여성' : '아동';
-    const genderDesc = gender === 'MAN'
-        ? '한국인 남성 모델 (20대 중반, 키 178cm, 슬림핏 체형, 깔끔한 헤어스타일, 자연스러운 표정)'
-        : gender === 'WOMAN'
-        ? '한국인 여성 모델 (20대 중반, 키 168cm, 슬림핏 체형, 자연스러운 헤어, 세련된 표정)'
-        : '한국인 아동 모델 (8-10세, 밝고 활발한 표정, 깔끔한 스타일)';
-
-    return `당신은 한국 최고의 패션 이커머스 스튜디오 포토그래퍼입니다.
+const FALLBACK_MAIN_PROMPT = `당신은 한국 최고의 패션 이커머스 스튜디오 포토그래퍼입니다.
 
 [입력 이미지 설명]
 - 첫 번째 이미지: 참고용 모델 사진 (이 사람의 얼굴, 체형을 참고)
 - 두 번째 이미지: 실제 판매할 의류 상품 사진 (이 옷을 모델에게 입혀야 함)
 
 [작업 목표]
-${genderKR} 모델이 두 번째 이미지의 옷을 입고 있는 전문 이커머스 상품 사진을 생성하세요.
-${productName ? `상품명: ${productName}` : ''}
+{{genderKR}} 모델이 두 번째 이미지의 옷을 입고 있는 전문 이커머스 상품 사진을 생성하세요.
+{{productNameLine}}
 
 [모델 설정]
-${genderDesc}
+{{genderDesc}}
 
 [스타일링 방향 - 한국 패션 쇼핑몰 코디 참고]
-- 컨셉: ${styling.description}
-- 코디 아이템: 상품 의류와 함께 ${coordiText}을 매치
+- 컨셉: {{stylingDescription}}
+- 코디 아이템: 상품 의류와 함께 {{coordiText}}을 매치
 - 상품이 상의인 경우: 위의 코디 아이템 중 하의/신발/액세서리를 자연스럽게 매치
 - 상품이 하의인 경우: 위의 코디 아이템 중 상의/신발/액세서리를 자연스럽게 매치
 - 상품이 아우터인 경우: 이너/하의/신발을 위 코디 아이템에서 자연스럽게 매치
 - 코디 참고 기준: 한국 대표 패션 플랫폼(무신사 스토어, 29CM, W컨셉, 하이버, SSF샵)의 2024-2025 베스트 코디셋을 참고
-- ${gender === 'MAN' ? '남성 코디: 무신사 스냅, 하이버 스타일링처럼 깔끔하면서도 트렌디한 시티보이 감성. 오버사이즈+슬림 밸런스, 뉴트럴 톤 위주' : gender === 'WOMAN' ? '여성 코디: W컨셉, 29CM 스타일링처럼 미니멀하면서 세련된 감성. 적절한 실루엣 대비, 톤온톤 또는 포인트 컬러' : '아동 코디: 밝고 활발한 컬러감, 편안하면서 세련된 캐주얼'}
+- {{genderStyleTip}}
 - 전체적으로 한국 20-30대가 실제 입고 다닐 법한 현실적인 코디 (SNS 인스타그램에 올릴만한 데일리룩)
 - 컬러 매칭: 메인 의류의 색상과 조화되는 보색/유사색 코디 (너무 튀지 않게)
 
@@ -157,6 +159,73 @@ ${genderDesc}
 8. 세로(portrait) 방향 이미지, 모델이 프레임의 60-70%를 차지하고 나머지는 흰색 여백
 
 지금 이미지를 생성하세요.`;
+
+// DB에서 프롬프트 설정 로드 (캐시 포함)
+let cachedConfig: PromptConfig | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 60_000; // 1분 캐시
+
+async function loadPromptConfig(): Promise<PromptConfig> {
+    // 캐시가 유효하면 반환
+    if (cachedConfig && (Date.now() - cacheTime) < CACHE_TTL) {
+        return cachedConfig;
+    }
+
+    try {
+        const res = await db.query(
+            `SELECT value FROM system_settings WHERE key = 'fitting_prompt_config'`
+        );
+
+        if (res.rows.length > 0) {
+            const config = typeof res.rows[0].value === 'string'
+                ? JSON.parse(res.rows[0].value)
+                : res.rows[0].value;
+            cachedConfig = config;
+            cacheTime = Date.now();
+            return config;
+        }
+    } catch (e) {
+        console.warn('[FittingPrompt] DB 로드 실패, 기본값 사용:', e);
+    }
+
+    // DB에 없으면 하드코딩 기본값 반환
+    return {
+        mainPrompt: FALLBACK_MAIN_PROMPT,
+        genderDescriptions: FALLBACK_GENDER_DESCRIPTIONS,
+        genderStyleTips: FALLBACK_GENDER_STYLE_TIPS,
+        categoryStyling: FALLBACK_CATEGORY_STYLING,
+        defaultStyling: FALLBACK_DEFAULT_STYLING,
+    };
+}
+
+// 프롬프트 빌드 (DB 설정 기반)
+async function buildPrompt(
+    gender: 'MAN' | 'WOMAN' | 'KIDS',
+    archiveCategory?: string,
+    productName?: string,
+    variationSeed?: number
+): Promise<string> {
+    const config = await loadPromptConfig();
+
+    const styling = (archiveCategory && config.categoryStyling[archiveCategory]) || config.defaultStyling;
+
+    // variationSeed로 다른 코디 아이템 세트 선택
+    const seed = variationSeed ?? Math.floor(Math.random() * styling.coordiItems.length);
+    const coordiSet = styling.coordiItems[seed % styling.coordiItems.length];
+    const coordiText = coordiSet.join(', ');
+
+    const genderKR = gender === 'MAN' ? '남성' : gender === 'WOMAN' ? '여성' : '아동';
+    const genderDesc = config.genderDescriptions[gender] || FALLBACK_GENDER_DESCRIPTIONS[gender];
+    const genderStyleTip = config.genderStyleTips[gender] || FALLBACK_GENDER_STYLE_TIPS[gender];
+
+    // 템플릿 변수 치환
+    return config.mainPrompt
+        .replace(/\{\{genderKR\}\}/g, genderKR)
+        .replace(/\{\{productNameLine\}\}/g, productName ? `상품명: ${productName}` : '')
+        .replace(/\{\{genderDesc\}\}/g, genderDesc)
+        .replace(/\{\{stylingDescription\}\}/g, styling.description)
+        .replace(/\{\{coordiText\}\}/g, coordiText)
+        .replace(/\{\{genderStyleTip\}\}/g, genderStyleTip);
 }
 
 // 메인 생성 함수 - Gemini 이미지 생성
@@ -166,7 +235,7 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
     }
 
     const modelName = MODELS[request.modelChoice] || MODELS.flash;
-    const prompt = buildPrompt(
+    const prompt = await buildPrompt(
         request.gender,
         request.archiveCategory,
         request.productName,
