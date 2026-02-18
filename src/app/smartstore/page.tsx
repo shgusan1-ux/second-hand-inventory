@@ -14,6 +14,7 @@ import { SettingsTab } from '@/components/smartstore/settings-tab';
 import { SyncLogsTab } from '@/components/smartstore/sync-logs-tab';
 import { NaverStatusTab } from '@/components/smartstore/naver-status-tab';
 import { MainDisplayTab } from '@/components/smartstore/main-display-tab';
+import { VirtualFittingTab } from '@/components/smartstore/virtual-fitting-tab';
 
 interface Product {
   originProductNo: string;
@@ -59,12 +60,13 @@ interface SyncFailure {
   message: string;
 }
 
-type TabId = 'products' | 'main-new' | 'main-curated' | 'main-archive' | 'categories' | 'inventory' | 'pricing' | 'images' | 'automation' | 'naver-status' | 'logs' | 'settings';
+type TabId = 'products' | 'main-new' | 'main-curated' | 'main-archive' | 'categories' | 'inventory' | 'pricing' | 'images' | 'virtual-fitting' | 'automation' | 'naver-status' | 'logs' | 'settings';
 
 const TOP_TABS = [
   { id: 'products', label: '상품관리', shortLabel: '상품' },
   { id: 'main-display', label: '메인진열관리', shortLabel: '메인진열' },
   { id: 'images', label: '이미지', shortLabel: '이미지' },
+  { id: 'virtual-fitting', label: '가상피팅', shortLabel: '피팅' },
   { id: 'naver-status', label: '네이버 현황', shortLabel: '현황' },
   { id: 'logs', label: '전송기록', shortLabel: '기록' },
   { id: 'settings', label: '설정', shortLabel: '설정' },
@@ -787,6 +789,9 @@ export default function SmartstorePage() {
         )}
         {activeTab === 'logs' && (
           <SyncLogsTab />
+        )}
+        {activeTab === 'virtual-fitting' && (
+          <VirtualFittingTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'settings' && (
           <SettingsTab onRefresh={handleRefresh} />

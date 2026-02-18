@@ -254,6 +254,26 @@ export default function VisionAnalyzerPage() {
           </div>
         </div>
 
+        {/* 이미지 누락 경고 */}
+        {products.length - eligible.length - autoStats.totalAnalyzed > 0 && (
+          <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-[11px] text-amber-200 font-medium">
+                이미지 누락으로 분석에서 제외된 상품이 <span className="font-bold text-amber-500">{products.length - eligible.length}</span>개 있습니다.
+              </p>
+            </div>
+            <button
+              onClick={() => window.opener?.setActiveTab('images')}
+              className="text-[10px] font-bold text-amber-500 hover:underline"
+            >
+              이미지 탭 이동
+            </button>
+          </div>
+        )}
+
         {/* 전체 진행률 바 */}
         {state !== 'idle' && (
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">

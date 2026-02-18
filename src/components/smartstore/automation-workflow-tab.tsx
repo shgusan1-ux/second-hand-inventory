@@ -24,6 +24,7 @@ interface Product {
   lifecycle?: { stage: string; daysSince: number; discountRate: number };
   internalCategory?: string;
   archiveTier?: string; // 수동 확정된 아카이브 tier (lifecycle 무관)
+  descriptionGrade?: string | null;
   classification?: Classification & { visionStatus?: string; visionGrade?: string };
   isMatched?: boolean;
 }
@@ -100,6 +101,8 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
     unmatchedCount: number;
     byGrade: Record<string, number>;
     visionCompleted: number;
+    visionBlocked: number;
+    badgeMissing: number;
   }>(() => {
     const classified = products.filter(p => p.classification);
     const total = products.length;
@@ -154,6 +157,14 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       if (grade && byGrade[grade] !== undefined) byGrade[grade]++;
     });
     const visionCompleted = products.filter(p => p.classification?.visionStatus === 'completed').length;
+    // Vision 불가 (이미지 없음)
+    const visionBlocked = products.filter(p => !p.thumbnailUrl).length;
+    // 비전 분석은 됐지만 뱃지 합성이 안 된 상품
+    const badgeMissing = products.filter(p => {
+      const hasGrade = !!(p.classification?.visionGrade || p.descriptionGrade);
+      const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
+      return hasGrade && !isBadgeSynced && !!p.thumbnailUrl;
+    }).length;
 
     // 매칭 현황 (관리자 페이지 연동)
     const matchedCount = products.filter(p => p.isMatched).length;
@@ -165,13 +176,19 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       highConf, midConf, lowConf,
       topBrands, byLifecycle,
       matchedCount, unmatchedCount,
-      byGrade, visionCompleted
+      byGrade, visionCompleted, visionBlocked, badgeMissing
     };
   }, [products]);
 
-  // 미분석 상품 목록
+  // 미분석 상품 목록 (이미지가 있는 경우만 분석 가능)
   const eligibleProducts = useMemo(() =>
     products.filter(p => p.thumbnailUrl && (!p.classification?.visionStatus || p.classification.visionStatus === 'none')),
+    [products]
+  );
+
+  // 분석 불가 목록 (이미지 누락)
+  const blockedProducts = useMemo(() =>
+    products.filter(p => !p.thumbnailUrl && (!p.classification?.visionStatus || p.classification.visionStatus === 'none')),
     [products]
   );
 
@@ -452,7 +469,7 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
       </div>
 
       {/* 스마트스토어 매칭 현황 (테크트리 사양) */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="bg-slate-50 rounded-xl border-2 border-dashed border-emerald-200 p-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-black text-emerald-600 uppercase mb-1">매칭 완료 상품</p>
@@ -469,6 +486,18 @@ export function AutomationWorkflowTab({ products, onRefresh }: AutomationWorkflo
           </div>
           <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
             <svg className="w-6 h-6 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" /></svg>
+          </div>
+        </div>
+        <div className="bg-rose-50 rounded-xl border-2 border-dashed border-rose-200 p-4 flex items-center justify-between col-span-2 md:col-span-1">
+          <div>
+            <p className="text-[11px] font-black text-rose-600 uppercase mb-1">Vision 분석 불가</p>
+            <p className="text-2xl font-black text-slate-900">{stats.visionBlocked.toLocaleString()}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+            <p className="text-[9px] text-rose-400 font-bold mt-1">이미지 업로드 필요</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
           </div>
         </div>
       </div>

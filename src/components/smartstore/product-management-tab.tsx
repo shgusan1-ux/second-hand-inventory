@@ -95,7 +95,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const [movingCategory, setMovingCategory] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [displaySyncProgress, setDisplaySyncProgress] = useState<{ current: number; total: number; message: string } | null>(null);
-  const [onlyMissingGrade, setOnlyMissingGrade] = useState(false);
+  const [issueFilter, setIssueFilter] = useState<'NONE' | 'MISSING_GRADE' | 'MISSING_BADGE' | 'MISSING_IMAGE' | 'MISSING_BOTH'>('NONE');
   const [updatingGradeId, setUpdatingGradeId] = useState<string | null>(null);
   const [applyingDiscount, setApplyingDiscount] = useState(false);
   const [discountProgress, setDiscountProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -810,14 +810,22 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
         return cat === 'KIDS';
       }
 
-      if (onlyMissingGrade) {
-        const hasGrade = p.classification?.visionGrade || p.descriptionGrade;
-        if (hasGrade) return false;
+      if (issueFilter !== 'NONE') {
+        const hasThumbnail = !!p.thumbnailUrl;
+        const hasGrade = !!(p.classification?.visionGrade || p.descriptionGrade);
+        const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
+
+        if (issueFilter === 'MISSING_GRADE' && hasGrade) return false;
+        if (issueFilter === 'MISSING_BADGE') {
+          if (!hasGrade || !hasThumbnail || isBadgeSynced) return false;
+        }
+        if (issueFilter === 'MISSING_IMAGE' && hasThumbnail) return false;
+        if (issueFilter === 'MISSING_BOTH' && (hasThumbnail || hasGrade)) return false;
       }
 
       return true;
     });
-  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, onlyMissingGrade]);
+  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, issueFilter]);
 
   // 정렬
   const GRADE_ORDER: Record<string, number> = { 'V급': 0, 'S급': 1, 'A급': 2, 'B급': 3, 'C급': 4 };
@@ -924,10 +932,17 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
           className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-400 shadow-sm"
         />
         <button
-          onClick={() => { setOnlyMissingGrade(!onlyMissingGrade); setCurrentPage(1); }}
-          className={`absolute right-4 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${onlyMissingGrade ? 'bg-rose-500 text-white border-rose-600 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+          onClick={() => {
+            const nextMap: any = { NONE: 'MISSING_GRADE', MISSING_GRADE: 'MISSING_BADGE', MISSING_BADGE: 'MISSING_IMAGE', MISSING_IMAGE: 'MISSING_BOTH', MISSING_BOTH: 'NONE' };
+            setIssueFilter(nextMap[issueFilter]);
+            setCurrentPage(1);
+          }}
+          className={`absolute right-4 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${issueFilter !== 'NONE' ? 'bg-rose-500 text-white border-rose-600 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
         >
-          {onlyMissingGrade ? '전체 보기' : '등급 누락 필터'}
+          {issueFilter === 'NONE' ? '정보 누락 필터' :
+            issueFilter === 'MISSING_GRADE' ? '등급 누락' :
+              issueFilter === 'MISSING_BADGE' ? '뱃지 누락' :
+                issueFilter === 'MISSING_IMAGE' ? '이미지 누락' : '이미지+등급 누락'}
         </button>
       </div>
 

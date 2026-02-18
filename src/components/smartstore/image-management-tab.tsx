@@ -34,6 +34,7 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [filterType, setFilterType] = useState<'ALL' | 'NO_IMAGE' | 'NO_BADGE'>('ALL');
   const [logs, setLogs] = useState<string[]>([]);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -55,12 +56,24 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   }, [initialProducts]);
 
   const filtered = useMemo(() => {
-    if (!searchTerm) return products;
-    return products.filter(p =>
+    let result = products;
+
+    if (filterType === 'NO_IMAGE') {
+      result = result.filter(p => !p.thumbnailUrl);
+    } else if (filterType === 'NO_BADGE') {
+      result = result.filter(p => {
+        const hasGrade = !!(p.classification?.visionGrade || (p as any).descriptionGrade);
+        const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
+        return hasGrade && p.thumbnailUrl && !isBadgeSynced;
+      });
+    }
+
+    if (!searchTerm) return result;
+    return result.filter(p =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.originProductNo.includes(searchTerm)
     );
-  }, [products, searchTerm]);
+  }, [products, searchTerm, filterType]);
 
   const getImageUrl = (p: Product): string | null => {
     return p.thumbnailUrl || null;
@@ -70,7 +83,12 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
     return p.thumbnailUrl ? 1 : 0;
   };
 
-  const noImageCount = products.filter(p => !getImageUrl(p)).length;
+  const noImageCount = products.filter(p => !p.thumbnailUrl).length;
+  const noBadgeCount = products.filter(p => {
+    const hasGrade = !!(p.classification?.visionGrade || (p as any).descriptionGrade);
+    const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
+    return hasGrade && p.thumbnailUrl && !isBadgeSynced;
+  }).length;
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -239,17 +257,27 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
 
       {/* 통계 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-slate-500">전체 상품</p>
-          <p className="text-2xl font-bold text-slate-800">{products.length}</p>
+        <div
+          onClick={() => setFilterType('ALL')}
+          className={`rounded-xl border p-4 cursor-pointer transition-all ${filterType === 'ALL' ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900 ring-offset-2' : 'bg-white hover:bg-slate-50'}`}
+        >
+          <p className={`text-xs ${filterType === 'ALL' ? 'text-slate-400' : 'text-slate-500'}`}>전체 상품</p>
+          <p className="text-2xl font-bold">{products.length}</p>
         </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-slate-500">이미지 있음</p>
-          <p className="text-2xl font-bold text-emerald-600">{products.length - noImageCount}</p>
+        <div
+          onClick={() => setFilterType('NO_IMAGE')}
+          className={`rounded-xl border p-4 cursor-pointer transition-all ${filterType === 'NO_IMAGE' ? 'bg-red-900 text-white border-red-900 shadow-md ring-2 ring-red-900 ring-offset-2' : 'bg-white hover:bg-red-50'}`}
+        >
+          <p className={`text-xs ${filterType === 'NO_IMAGE' ? 'text-red-200' : 'text-red-400'}`}>이미지 없음</p>
+          <p className={`text-2xl font-bold ${filterType === 'NO_IMAGE' ? 'text-white' : 'text-red-600'}`}>{noImageCount}</p>
         </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-red-400">이미지 없음</p>
-          <p className="text-2xl font-bold text-red-600">{noImageCount}</p>
+        <div
+          onClick={() => setFilterType('NO_BADGE')}
+          className={`rounded-xl border p-4 cursor-pointer transition-all ${filterType === 'NO_BADGE' ? 'bg-orange-600 text-white border-orange-600 shadow-md ring-2 ring-orange-600 ring-offset-2' : 'bg-white hover:bg-orange-50'}`}
+        >
+          <p className={`text-xs ${filterType === 'NO_BADGE' ? 'text-orange-100' : 'text-orange-400'}`}>썸네일 뱃지 없음</p>
+          <p className={`text-2xl font-bold ${filterType === 'NO_BADGE' ? 'text-white' : 'text-orange-600'}`}>{noBadgeCount}</p>
+          <p className={`text-[9px] mt-1 ${filterType === 'NO_BADGE' ? 'text-orange-100' : 'text-slate-400'}`}>합성 및 전송 필요</p>
         </div>
         <div className="bg-white rounded-xl border p-4">
           <p className="text-xs text-slate-500">보기 모드</p>
@@ -271,6 +299,12 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
       </div>
 
       <div className="flex gap-2">
+        <button
+          onClick={toggleSelectAll}
+          className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 shrink-0"
+        >
+          {selectedIds.length === filtered.length && filtered.length > 0 ? '전체 해제' : '전체 선택'}
+        </button>
         <input
           type="text"
           placeholder="상품 검색..."

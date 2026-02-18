@@ -1,5 +1,5 @@
 // 가상피팅 AI 추천 순위 - 판매 잠재력 기반 정렬
-import { lookupBrand } from '@/lib/brand-tier-database';
+import { lookupBrand } from '@/lib/classification/brand-tier-database';
 
 interface ProductForRanking {
     originProductNo: string;
