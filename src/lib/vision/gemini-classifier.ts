@@ -54,10 +54,11 @@ export async function classifyProductByVision(
 8. pattern: 패턴 하나 - "솔리드", "스트라이프", "체크", "도트", "프린트", "카모", "페이즐리", "기타"
 9. fabric: 추정 소재 (라벨 보이면 그대로, 아니면 추정) 예: "면 100%", "폴리에스터 혼방"
 10. size: 사이즈 (라벨 식별, 없으면 빈 문자열)
-11. confidence: 전체 분석 신뢰도 (0-100)
+11. hasBadge: 이미지 구석에 S, A, B, V 등이 적힌 인위적인 등급 뱃지/딱지가 합성되어 있는지 여부 (boolean)
+12. confidence: 전체 분석 신뢰도 (0-100)
 
 다음 JSON 형식으로만 답변:
-{"brand":"","clothingType":"상의","clothingSubType":"셔츠","gender":"MAN","grade":"A급","gradeReason":"","colors":[""],"pattern":"솔리드","fabric":"","size":"","confidence":70}`;
+{"brand":"","clothingType":"상의","clothingSubType":"셔츠","gender":"MAN","grade":"A급","gradeReason":"","colors":[""],"pattern":"솔리드","fabric":"","size":"","hasBadge":false,"confidence":70}`;
 
 
   // 이미지 파트 준비 (최대 4장)
@@ -131,6 +132,7 @@ export async function classifyProductByVision(
     pattern: result.pattern || '솔리드',
     fabric: result.fabric || '',
     size: result.size || '',
+    hasBadge: !!result.hasBadge,
     confidence: Math.min(100, Math.max(0, result.confidence || 0))
   };
 }

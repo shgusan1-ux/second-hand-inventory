@@ -55,16 +55,16 @@ async function analyzeAndSave(product: QueueProduct): Promise<boolean> {
         vision_brand = $1, vision_clothing_type = $2, vision_clothing_sub_type = $3,
         vision_gender = $4, vision_grade = $5, vision_grade_reason = $6,
         vision_color = $7, vision_pattern = $8, vision_fabric = $9,
-        vision_size = $10, vision_confidence = $11,
-        image_urls = $12, raw_response = $13,
+        vision_size = $10, vision_has_badge = $11, vision_confidence = $12,
+        image_urls = $13, raw_response = $14,
         analysis_status = 'completed', error_message = NULL,
         updated_at = CURRENT_TIMESTAMP
-       WHERE origin_product_no = $14`,
+       WHERE origin_product_no = $15`,
       [
         result.brand, result.clothingType, result.clothingSubType,
         result.gender, result.grade, result.gradeReason,
         JSON.stringify(result.colors), result.pattern, result.fabric,
-        result.size, result.confidence,
+        result.size, result.hasBadge, result.confidence,
         JSON.stringify(imageUrls), JSON.stringify(result),
         product.originProductNo
       ]

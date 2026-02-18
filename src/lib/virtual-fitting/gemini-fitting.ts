@@ -1,10 +1,10 @@
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-// 모델 이름: flash=빠르고 저렴, pro=고품질
+// 모델 이름: flash=빠르고 저렴, pro=나노바나나 Pro (디테일 최고)
 const MODELS = {
-    flash: 'gemini-2.0-flash-exp',
-    pro: 'gemini-2.0-flash-exp',
+    flash: 'gemini-2.5-flash-image',
+    pro: 'nano-banana-pro-preview',
 } as const;
 
 export interface FittingRequest {

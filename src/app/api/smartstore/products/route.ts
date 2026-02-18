@@ -146,12 +146,14 @@ function processProducts(contents: any[], overrideMap: any, lcSettings?: Lifecyc
                 pattern: visionData.vision_pattern || '',
                 fabric: visionData.vision_fabric || '',
                 size: visionData.vision_size || '',
+                hasBadge: !!visionData.vision_has_badge,
                 confidence: visionData.vision_confidence || 0,
             };
 
             classification = mergeClassifications(textClassification, visionResult, customBrand);
             classification.visionStatus = 'completed';
             classification.visionGrade = visionData.vision_grade || 'A급';
+            classification.hasBadge = !!visionData.vision_has_badge;
             classification.visionColors = visionData.vision_color ? JSON.parse(visionData.vision_color) : [];
         } else {
             // Vision 미완료: 수동 브랜드만 체크
@@ -286,7 +288,7 @@ async function fetchOverrideMap(ids: string[]): Promise<{ map: any; customBrands
             batchInQuery(
                 `SELECT origin_product_no, vision_brand, vision_clothing_type, vision_clothing_sub_type,
                         vision_gender, vision_grade, vision_grade_reason, vision_color, vision_pattern,
-                        vision_fabric, vision_size, vision_confidence, merged_confidence, analysis_status
+                        vision_fabric, vision_size, vision_has_badge, vision_confidence, merged_confidence, analysis_status
                  FROM product_vision_analysis WHERE origin_product_no IN (__PH__)`,
                 ids
             ).catch(() => [] as any[]),
@@ -449,7 +451,7 @@ async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
                 ids
             ).catch(() => [] as any[]),
             batchInQuery(
-                `SELECT origin_product_no, analysis_status, vision_brand, vision_grade, vision_confidence FROM product_vision_analysis WHERE origin_product_no IN (__PH__)`,
+                `SELECT origin_product_no, analysis_status, vision_brand, vision_grade, vision_has_badge, vision_confidence FROM product_vision_analysis WHERE origin_product_no IN (__PH__)`,
                 ids
             ).catch(() => [] as any[]),
         ]);
@@ -491,6 +493,7 @@ async function patchCacheWithFreshOverrides(contents: any[]): Promise<any[]> {
                     const newClass = { ...(p.classification || {}) };
                     newClass.visionStatus = 'completed';
                     newClass.visionGrade = visionData.vision_grade;
+                    newClass.hasBadge = !!visionData.vision_has_badge;
                     if (visionData.vision_brand) newClass.brand = visionData.vision_brand;
                     // 필요한 경우 confidence 등 업데이트
                     newProps.classification = newClass;

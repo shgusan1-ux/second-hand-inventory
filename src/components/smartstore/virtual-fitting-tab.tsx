@@ -105,9 +105,9 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
         }
 
         if (visionFilter === 'NO_BADGE') {
-            result = result.filter(p => !p.classification?.visionGrade);
+            result = result.filter(p => !p.classification?.hasBadge);
         } else if (visionFilter === 'HAS_BADGE') {
-            result = result.filter(p => !!p.classification?.visionGrade);
+            result = result.filter(p => !!p.classification?.hasBadge);
         }
 
         if (sortByAI && aiRanking.size > 0) {
@@ -489,8 +489,8 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
 
                                 {/* 성별 뱃지 */}
                                 <div className={`absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded text-[10px] font-bold ${gender === 'MAN' ? 'bg-blue-500 text-white' :
-                                        gender === 'WOMAN' ? 'bg-pink-500 text-white' :
-                                            'bg-amber-500 text-white'
+                                    gender === 'WOMAN' ? 'bg-pink-500 text-white' :
+                                        'bg-amber-500 text-white'
                                     }`}>
                                     {gender}
                                 </div>

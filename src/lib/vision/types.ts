@@ -11,6 +11,7 @@ export interface GeminiVisionResult {
   pattern: string;             // 스트라이프, 체크, 솔리드 등
   fabric: string;              // 면 100%, 폴리에스터 65% 면 35%
   size: string;                // M, 95, XL
+  hasBadge: boolean;           // 이미지 내 인위적 뱃지(S, A, B, V 등) 존재 여부
   confidence: number;          // 0-100
 }
 
@@ -26,6 +27,7 @@ export interface VisionAnalysisRecord {
   vision_pattern: string | null;
   vision_fabric: string | null;
   vision_size: string | null;
+  vision_has_badge: boolean | null;
   vision_confidence: number;
   merged_confidence: number;
   image_urls: string | null;          // JSON

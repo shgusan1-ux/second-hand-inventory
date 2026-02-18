@@ -237,6 +237,11 @@ export async function initDatabase() {
       await db.query(`ALTER TABLE naver_product_map ADD COLUMN seller_tags TEXT`);
     } catch (e) { /* Column likely exists */ }
 
+    // Vision 분석 결과에 뱃지 유무 컬럼 추가
+    try {
+      await db.query(`ALTER TABLE product_vision_analysis ADD COLUMN vision_has_badge BOOLEAN DEFAULT FALSE`);
+    } catch (e) { /* Column likely exists */ }
+
     // 아카이브 카테고리 설정 테이블
     await db.query(`
       CREATE TABLE IF NOT EXISTS archive_category_settings (
