@@ -184,11 +184,11 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3">
                 {selectedProducts.map((p, idx) => (
                     <div
                         key={p.originProductNo}
-                        className="relative group bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 ag-float-1 cursor-pointer"
+                        className="relative group bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 ag-float-1 cursor-pointer"
                         onClick={() => {
                             if (p.channelProductNo) {
                                 window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank');
@@ -196,13 +196,13 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
                         }}
                     >
                         {/* 순위 배지 */}
-                        <div className={`absolute top-3 left-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-lg ${idx < 3 ? 'bg-amber-400 text-amber-900' : 'bg-white/90 text-slate-900'
+                        <div className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg ${idx < 3 ? 'bg-amber-400 text-amber-900' : 'bg-white/90 text-slate-900'
                             }`}>
                             {idx + 1}
                         </div>
 
-                        {/* 점수 배지 (개발 모드용 또는 참고용) */}
-                        <div className="absolute top-3 right-3 z-10 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-[10px] text-white font-bold">
+                        {/* 점수 배지 */}
+                        <div className="absolute top-2 right-2 z-10 px-1.5 py-0.5 bg-black/50 backdrop-blur-md rounded-md text-[8px] text-white font-bold">
                             ★ {Math.round((p as any)._score)}
                         </div>
 
@@ -215,42 +215,39 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
                                 </div>
                             )}
 
                             {/* 하단 브랜드 / 정보 */}
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4">
-                                <p className="text-[10px] text-white/70 font-bold uppercase tracking-wider mb-1">
-                                    {p.classification?.brand || 'UNKNOWN BRAND'}
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-2">
+                                <p className="text-[8px] text-white/70 font-bold uppercase tracking-wider mb-0.5 truncate">
+                                    {p.classification?.brand || 'UNKNOWN'}
                                 </p>
-                                <p className="text-white text-xs font-bold line-clamp-1 group-hover:line-clamp-none transition-all">
+                                <p className="text-white text-[10px] font-bold line-clamp-1">
                                     {p.name}
                                 </p>
                             </div>
                         </div>
 
-                        <div className="p-4 space-y-3">
+                        <div className="p-2.5 space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-black text-slate-900">
+                                <span className="text-xs font-black text-slate-900">
                                     {p.salePrice.toLocaleString()}원
                                 </span>
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${p.classification?.brandTier === 'LUXURY' ? 'bg-amber-100 text-amber-700' :
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${p.classification?.brandTier === 'LUXURY' ? 'bg-amber-100 text-amber-700' :
                                     p.classification?.brandTier === 'PREMIUM' ? 'bg-violet-100 text-violet-700' :
                                         'bg-slate-100 text-slate-600'
                                     }`}>
                                     {p.classification?.brandTier || 'NORMAL'}
                                 </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold">
+                                <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-bold">
                                     {p.classification?.visionGrade || (p.descriptionGrade ? `${p.descriptionGrade}급` : 'B급')}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-medium">
-                                    {p.lifecycle?.daysSince || 0}일 경과
                                 </span>
                             </div>
                         </div>
