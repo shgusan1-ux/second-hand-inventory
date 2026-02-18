@@ -1,5 +1,6 @@
 
 import { db } from '@/lib/db';
+import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
@@ -124,53 +125,57 @@ const FALLBACK_GENDER_STYLE_TIPS: Record<string, string> = {
     KIDS: '아동 코디: 밝고 활발한 컬러감, 편안하면서 세련된 캐주얼',
 };
 
-const FALLBACK_MAIN_PROMPT = `당신은 한국 최고의 패션 이커머스 스튜디오 포토그래퍼입니다.
+const FALLBACK_MAIN_PROMPT = `You are a top-tier Korean fashion e-commerce studio photographer.
 
-[입력 이미지 설명]
-- 첫 번째 이미지: 참고용 모델 사진 (이 사람의 얼굴, 체형, 포즈를 참고)
-- 두 번째 이미지: 실제 판매할 의류 상품 사진 (이 옷을 모델에게 입혀야 함 - 이 상품이 메인!)
+[INPUT IMAGES]
+- Image 1: Reference model photo (use this person's face, body type, and pose)
+- Image 2: THE PRODUCT clothing to sell (this garment MUST be worn by the model — THIS IS THE MAIN PRODUCT!)
 
-[작업 목표]
-{{genderKR}} 모델이 두 번째 이미지의 옷을 입고 있는 전문 이커머스 상품 사진을 생성하세요.
+[TASK]
+Generate a professional e-commerce product photo of a {{genderKR}} model wearing the clothing from Image 2.
 {{productNameLine}}
 
-★★★ 가장 중요: 두 번째 이미지의 상품 의류가 사진에서 가장 눈에 띄고 부각되어야 합니다!
-- 상품이 티셔츠라면: 자켓으로 가려지면 안 됨. 티셔츠가 전면에 완전히 보여야 함
-- 상품이 아우터라면: 아우터가 열려서 이너가 더 눈에 띄면 안 됨. 아우터가 메인
-- 상품이 하의라면: 상의가 너무 길어서 하의를 가리면 안 됨. 하의 전체가 보여야 함
-- 코디 아이템은 상품을 돋보이게 하는 보조 역할일 뿐, 절대 상품보다 눈에 띄면 안 됨
+★★★ CRITICAL RULE — THE PRODUCT FROM IMAGE 2 MUST BE THE MOST PROMINENT ITEM IN THE PHOTO ★★★
+- If the product is a TOP (t-shirt, shirt, sweater): DO NOT add any jacket, coat, or outer layer. The top must be 100% visible from front. NO layering on top.
+- If the product is OUTERWEAR (jacket, coat): The outerwear must be the hero piece. Keep inner layers minimal and plain.
+- If the product is BOTTOMS (pants, skirt): The entire bottom garment must be fully visible. Use a short/cropped top so nothing covers the bottoms.
+- Coordinating items are SUPPORTING ONLY — they must NEVER be more visually prominent than the product.
+- NEVER add clothing items that obscure, cover, or compete with the product garment.
 
-[모델 설정]
+[MODEL SETUP]
 {{genderDesc}}
 
-[스타일링 방향 - 한국 패션 쇼핑몰 코디 참고]
-- 컨셉: {{stylingDescription}}
-- 코디 아이템: 상품 의류와 함께 {{coordiText}}을 매치
-- 상품이 상의인 경우: 상의가 완전히 드러나도록! 위의 코디 아이템 중 하의/신발/액세서리만 매치. 자켓이나 아우터로 상의를 가리지 말 것
-- 상품이 하의인 경우: 하의 전체가 보이도록! 위의 코디 아이템 중 상의/신발/액세서리를 매치. 상의 기장이 짧은 것을 선택할 것
-- 상품이 아우터인 경우: 아우터가 메인으로 보이도록! 심플한 이너/하의/신발을 매치
-- 코디 참고 기준: 한국 대표 패션 플랫폼(무신사 스토어, 29CM, W컨셉, 하이버, SSF샵)의 2024-2025 베스트 코디셋을 참고
+[STYLING DIRECTION — Korean Fashion Platform Reference]
+- Concept: {{stylingDescription}}
+- Coordinate with: {{coordiText}}
+- For TOP products: Match ONLY with bottoms + shoes + accessories. ABSOLUTELY NO jackets or outerwear over the product.
+- For BOTTOM products: Match with a SHORT cropped top + shoes + accessories. The entire length of bottoms must be visible.
+- For OUTERWEAR products: Match with simple inner + bottoms + shoes. Outerwear is the main visual focus.
+- Reference: Korean fashion platforms (Musinsa, 29CM, W Concept) 2024-2025 best styling sets
 - {{genderStyleTip}}
-- 전체적으로 한국 20-30대가 실제 입고 다닐 법한 현실적인 코디 (SNS 인스타그램에 올릴만한 데일리룩)
-- 컬러 매칭: 코디 아이템은 상품 의류의 색상과 조화되되, 상품보다 튀지 않는 톤다운된 컬러로
+- Realistic daily look that Korean 20-30s would actually wear (Instagram-worthy)
+- Color coordination: Supporting items should complement the product color in muted tones, never outshine it
 
-[절대 지켜야 할 촬영 요구사항]
-1. ★ 정사각형(1:1) 비율 이미지 생성 (직사각형 아님!)
-2. 순백색 스튜디오 배경 (소품, 배경 장식 일체 없음). 모델 주변에 충분한 흰색 여백을 확보할 것 (상하좌우 최소 20% 이상 여백)
-3. 전신 사진 (머리 위 여유 공간 ~ 발끝 아래 여유 공간까지). 모델이 이미지 중앙에 서 있고, 머리 위와 발 아래에 넉넉한 여백이 있어야 함
-4. 자연광 느낌의 스튜디오 조명 (그림자 최소화, 소프트 디퓨즈드 라이팅)
-5. 모델의 시선: 카메라 렌즈를 정확히 똑바로 바라봐야 함. 아래를 내려다보거나 위를 올려다보면 안 됨. 눈높이와 카메라가 정확히 같은 높이에서 정면 응시 (eye-level straight gaze into camera lens)
-6. 의류 상품의 색상, 패턴, 질감, 디테일(버튼, 지퍼, 로고 등)을 원본과 동일하게 표현 - AI가 임의로 변형하지 않을 것
-7. 사실적인 원단 질감, 정확한 색상 재현, 옷의 특징과 요즘 트렌드에 맞는 자연스러운 핏
-8. 전문 패션 이커머스 상품 촬영 수준의 고품질 (무신사, 29CM 상품 상세 이미지 수준)
-9. ★ 코디하려는 상품 의류가 사진에서 가장 부각되어야 함. 다른 코디 아이템에 의해 가려지거나 묻히면 절대 안 됨!
+[MANDATORY PHOTO REQUIREMENTS — STRICT]
+1. ★ SQUARE (1:1) aspect ratio image — NOT portrait, NOT landscape
+2. PURE WHITE (#FFFFFF) studio background — no props, no floor lines, no shadows on background. Clean infinite white.
+3. FULL BODY shot with GENEROUS margins — at least 15-20% white space above head and below feet. Model centered.
+4. Soft diffused studio lighting, minimal shadows, professional fashion photography lighting setup
+5. Model looking STRAIGHT into camera lens at eye level — not looking up or down
+6. EXACT reproduction of the product garment's color, pattern, texture, and details (buttons, zippers, logos) from Image 2 — DO NOT alter or reimagine the garment
+7. Photorealistic fabric texture, accurate color reproduction, natural fit appropriate for current trends
+8. Professional fashion e-commerce quality (Musinsa, 29CM product detail image standard)
+9. ★ THE PRODUCT GARMENT MUST BE THE VISUAL HERO — it should occupy the most visual attention. No other item should compete.
+10. High resolution, sharp details, commercial photography quality
 
-지금 이미지를 생성하세요.`;
+Generate the image now.`;
 
 // DB에서 프롬프트 설정 로드 (캐시 포함)
 let cachedConfig: PromptConfig | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 60_000; // 1분 캐시
+
+let lastPromptSource: 'db' | 'default' = 'default';
 
 async function loadPromptConfig(): Promise<PromptConfig> {
     // 캐시가 유효하면 반환
@@ -189,6 +194,8 @@ async function loadPromptConfig(): Promise<PromptConfig> {
                 : res.rows[0].value;
             cachedConfig = config;
             cacheTime = Date.now();
+            lastPromptSource = 'db';
+            console.log('[FittingPrompt] DB 커스텀 프롬프트 로드 완료');
             return config;
         }
     } catch (e) {
@@ -196,6 +203,8 @@ async function loadPromptConfig(): Promise<PromptConfig> {
     }
 
     // DB에 없으면 하드코딩 기본값 반환
+    lastPromptSource = 'default';
+    console.log('[FittingPrompt] DB에 커스텀 설정 없음, 기본값 사용');
     return {
         mainPrompt: FALLBACK_MAIN_PROMPT,
         genderDescriptions: FALLBACK_GENDER_DESCRIPTIONS,
@@ -203,6 +212,11 @@ async function loadPromptConfig(): Promise<PromptConfig> {
         categoryStyling: FALLBACK_CATEGORY_STYLING,
         defaultStyling: FALLBACK_DEFAULT_STYLING,
     };
+}
+
+// 프롬프트 소스 정보 조회 (로그 표시용)
+export function getLastPromptSource(): 'db' | 'default' {
+    return lastPromptSource;
 }
 
 // 프롬프트 빌드 (DB 설정 기반)
@@ -266,7 +280,7 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
                                 data: request.personImageBase64,
                             },
                         },
-                        { text: '위 사진이 참고용 모델 사진입니다. 아래 사진이 모델에게 입힐 의류 상품입니다 (이 상품이 가장 부각되어야 합니다):' },
+                        { text: 'Above is the REFERENCE MODEL photo. Below is THE PRODUCT GARMENT that must be worn by the model. This product must be the MOST PROMINENT item in the final image:' },
                         {
                             inline_data: {
                                 mime_type: 'image/jpeg',
@@ -278,6 +292,7 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
             ],
             generationConfig: {
                 responseModalities: ['TEXT', 'IMAGE'],
+                temperature: 1.0,
                 imageConfig: {
                     aspectRatio: '1:1',
                 },
@@ -312,11 +327,49 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
         throw new Error(`이미지 생성 실패 (${blockReason || '알 수 없는 이유'}): ${textResponse || '응답 없음'}`);
     }
 
+    // 후처리: 정사각형(1:1)으로 강제 변환 (흰 배경 패딩)
+    const squareResult = await ensureSquareImage(imageBase64, mimeType);
+
     return {
-        imageBase64,
-        mimeType,
+        imageBase64: squareResult.base64,
+        mimeType: squareResult.mimeType,
         textResponse: textResponse || undefined,
     };
+}
+
+// 이미지를 정사각형으로 변환 (흰색 패딩 추가)
+async function ensureSquareImage(base64: string, inputMimeType: string): Promise<{ base64: string; mimeType: string }> {
+    try {
+        const inputBuffer = Buffer.from(base64, 'base64');
+        const metadata = await sharp(inputBuffer).metadata();
+        const w = metadata.width || 1024;
+        const h = metadata.height || 1024;
+
+        // 이미 정사각형이면 그대로 반환
+        if (Math.abs(w - h) <= 2) {
+            return { base64, mimeType: inputMimeType };
+        }
+
+        const size = Math.max(w, h);
+        const outputBuffer = await sharp(inputBuffer)
+            .resize(w, h, { fit: 'inside', withoutEnlargement: true })
+            .extend({
+                top: Math.floor((size - h) / 2),
+                bottom: Math.ceil((size - h) / 2),
+                left: Math.floor((size - w) / 2),
+                right: Math.ceil((size - w) / 2),
+                background: { r: 255, g: 255, b: 255, alpha: 1 },
+            })
+            .flatten({ background: { r: 255, g: 255, b: 255 } })
+            .jpeg({ quality: 95 })
+            .toBuffer();
+
+        console.log(`[FittingImage] 정사각형 변환: ${w}x${h} → ${size}x${size} (JPEG)`);
+        return { base64: outputBuffer.toString('base64'), mimeType: 'image/jpeg' };
+    } catch (e) {
+        console.warn('[FittingImage] 정사각형 변환 실패, 원본 반환:', e);
+        return { base64, mimeType: inputMimeType };
+    }
 }
 
 // 이미지를 base64로 변환 (URL에서 다운로드)

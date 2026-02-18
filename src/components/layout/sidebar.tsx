@@ -15,14 +15,14 @@ import { logout } from '@/lib/actions';
 const salesHub = [
     { name: '대시보드', href: '/', icon: LayoutDashboard },
     { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
-    { name: '매출/매입 관리', href: '/sales', icon: CreditCard },
+    { name: '통합 재고 관리', href: '/inventory', icon: Package },
+    { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
     { name: '통계/분석', href: '/statistics', icon: BarChart3 },
 ];
 
 // 2. Management Hub (관리 사이트)
 const managementHub = [
-    { name: '통합 재고 관리', href: '/inventory', icon: Package },
-    { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
+    { name: 'MANAGEMENT HUB', href: '/sales', icon: CreditCard },
     { name: '임직원 소통', href: '/members', icon: Users },
     { name: '경영지원', href: '/business', icon: Briefcase },
     { name: '보안/계정관리', href: '/security', icon: Lock },

@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
                     // Vercel Blob에 저장
                     const imageBuffer = Buffer.from(result.imageBase64, 'base64');
                     const blob = await put(
-                        `fitting-results/${product.originProductNo}.png`,
+                        `fitting-results/${product.originProductNo}.jpg`,
                         imageBuffer,
                         { access: 'public', contentType: result.mimeType, addRandomSuffix: false, allowOverwrite: true }
                     );
