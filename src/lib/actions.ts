@@ -818,7 +818,12 @@ export async function getDashboardTasks() {
             await db.query(`INSERT INTO dashboard_tasks (id, content) VALUES ($1, '스마트스토어 카테고리 매핑 확인 필요'), ($2, '반품 목록 엑셀 정리')`, [id1, id2]);
         }
 
-        const res = await db.query(`SELECT * FROM dashboard_tasks ORDER BY is_completed ASC, created_at DESC LIMIT 20`);
+        const res = await db.query(`
+            SELECT * FROM dashboard_tasks 
+            WHERE content NOT LIKE '%출근' AND content NOT LIKE '%퇴근'
+            ORDER BY is_completed ASC, created_at DESC 
+            LIMIT 20
+        `);
         return res.rows;
     } catch (e) {
         console.error("Get tasks failed", e);

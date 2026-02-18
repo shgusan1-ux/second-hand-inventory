@@ -173,6 +173,11 @@ export async function logAction(action: string, targetType?: string, targetId?: 
         // 2. Dashboard Notification (Auto Task)
         // Filter actions that should appear on dashboard
         if (['CREATE', 'UPDATE', 'DELETE', 'BULK', 'REGISTER', 'CHANGE', 'CHECK', 'ADD', 'APPROVE'].some(prefix => action.startsWith(prefix))) {
+            // Exclude attendance logs from dashboard news
+            if (action === 'CHECK_IN' || action === 'CHECK_OUT') {
+                return;
+            }
+
             const taskId = Math.random().toString(36).substring(2, 10);
             const koDetails = translateDetails(action, details, targetId);
             const content = `[${userName}] ${koDetails}`;

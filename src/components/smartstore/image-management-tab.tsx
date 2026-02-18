@@ -36,6 +36,8 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filterType, setFilterType] = useState<'ALL' | 'NO_IMAGE' | 'NO_BADGE'>('ALL');
   const [logs, setLogs] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const itemsPerPage = viewMode === 'grid' ? 60 : 50;
   const [isMounted, setIsMounted] = useState(false);
 
   const addLog = (msg: string) => {
@@ -53,7 +55,13 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   // Update local state when prop changes
   useEffect(() => {
     setProducts(initialProducts);
+    setPage(1); // Reset page on refresh/update
   }, [initialProducts]);
+
+  // Reset page on filter/search change
+  useEffect(() => {
+    setPage(1);
+  }, [filterType, searchTerm, viewMode]);
 
   const filtered = useMemo(() => {
     let result = products;
@@ -63,8 +71,9 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
     } else if (filterType === 'NO_BADGE') {
       result = result.filter(p => {
         const hasGrade = !!(p.classification?.visionGrade || (p as any).descriptionGrade);
+        const hasAIBadge = !!p.classification?.hasBadge;
         const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
-        return hasGrade && p.thumbnailUrl && !isBadgeSynced;
+        return hasGrade && p.thumbnailUrl && !isBadgeSynced && !hasAIBadge;
       });
     }
 
@@ -86,9 +95,15 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   const noImageCount = products.filter(p => !p.thumbnailUrl).length;
   const noBadgeCount = products.filter(p => {
     const hasGrade = !!(p.classification?.visionGrade || (p as any).descriptionGrade);
+    const hasAIBadge = !!p.classification?.hasBadge;
     const isBadgeSynced = p.thumbnailUrl?.includes('/thumbnails/generated/') || p.thumbnailUrl?.includes('vercel-storage.com');
-    return hasGrade && p.thumbnailUrl && !isBadgeSynced;
+    return hasGrade && p.thumbnailUrl && !isBadgeSynced && !hasAIBadge;
   }).length;
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedProducts = useMemo(() => {
+    return filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  }, [filtered, page, itemsPerPage]);
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -333,7 +348,7 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
       {/* 이미지 그리드 */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
-          {filtered.slice(0, 120).map(p => {
+          {paginatedProducts.map(p => {
             const imgUrl = getImageUrl(p);
             const imgCount = getImageCount(p);
             const isSelected = selectedIds.includes(p.originProductNo);
@@ -434,7 +449,7 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 100).map(p => (
+              {paginatedProducts.map(p => (
                 <tr key={p.originProductNo} className={`border-b hover:bg-slate-50 cursor-pointer ${selectedIds.includes(p.originProductNo) ? 'bg-blue-50/50' : ''}`} onClick={() => setSelectedProduct(p)}>
                   <td className="p-3 text-center" onClick={(e) => toggleSelect(p.originProductNo, e)}>
                     <input
@@ -462,6 +477,61 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap justify-center items-center gap-2 mt-8 pt-6 border-t border-slate-100">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <div className="flex gap-1">
+            {Array.from({ length: Math.min(10, totalPages) }, (_, i) => {
+              let pageNum = i + 1;
+              if (totalPages > 10) {
+                if (page > 6) {
+                  pageNum = page - 5 + i;
+                  if (pageNum > totalPages) pageNum = totalPages - (9 - i);
+                }
+              }
+              if (pageNum <= 0 || pageNum > totalPages) return null;
+
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${page === pageNum
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            }).filter(Boolean)}
+          </div>
+
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <div className="w-full text-center mt-2 text-xs text-slate-400 font-medium font-mono">
+            {page} / {totalPages} (Total {filtered.length})
+          </div>
         </div>
       )}
 

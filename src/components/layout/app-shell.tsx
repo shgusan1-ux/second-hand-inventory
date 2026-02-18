@@ -7,7 +7,7 @@ import { MobileHeader } from './mobile-header';
 export function AppShell({ children, user }: { children: React.ReactNode, user: any }) {
     const pathname = usePathname();
     // Standalone pages that don't need the sidebar/header
-    const isStandalone = pathname === '/smartstore/vision-analyzer';
+    const isStandalone = pathname === '/smartstore/vision-analyzer' || pathname === '/smartstore/fitting-editor';
 
     if (isStandalone) {
         return <>{children}</>;

@@ -56,7 +56,6 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const [modelUploadName, setModelUploadName] = useState('');
     // previewProduct 제거 - 새창 에디터로 대체
     const [genderFilter, setGenderFilter] = useState<'ALL' | 'MAN' | 'WOMAN' | 'KIDS'>('ALL');
-    const [visionFilter, setVisionFilter] = useState<'ALL' | 'NO_BADGE' | 'HAS_BADGE'>('NO_BADGE'); // 기본값을 '뱃지 없음'으로 설정하여 사용자 편의성 증대
     const [sortByAI, setSortByAI] = useState(false);
     const [aiRanking, setAiRanking] = useState<Map<string, { score: number; reasons: string[] }>>(new Map());
     const logRef = useRef<HTMLDivElement>(null);
@@ -104,12 +103,6 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
             result = result.filter(p => extractGender(p.name) === genderFilter);
         }
 
-        if (visionFilter === 'NO_BADGE') {
-            result = result.filter(p => !p.classification?.hasBadge);
-        } else if (visionFilter === 'HAS_BADGE') {
-            result = result.filter(p => !!p.classification?.hasBadge);
-        }
-
         if (sortByAI && aiRanking.size > 0) {
             result.sort((a, b) => {
                 const aScore = aiRanking.get(a.originProductNo)?.score || 0;
@@ -119,7 +112,7 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
         }
 
         return result;
-    }, [products, searchTerm, genderFilter, visionFilter, sortByAI, aiRanking]);
+    }, [products, searchTerm, genderFilter, sortByAI, aiRanking]);
 
     // 성별별 통계
     const genderStats = useMemo(() => {
@@ -395,18 +388,6 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                                 }`}
                         >
                             {g === 'ALL' ? '성별 전체' : g}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex gap-1">
-                    {(['ALL', 'NO_BADGE', 'HAS_BADGE'] as const).map(v => (
-                        <button
-                            key={v}
-                            onClick={() => setVisionFilter(v)}
-                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${visionFilter === v ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-50'
-                                }`}
-                        >
-                            {v === 'ALL' ? '뱃지 전체' : v === 'NO_BADGE' ? '뱃지 없음' : '뱃지 있음'}
                         </button>
                     ))}
                 </div>
