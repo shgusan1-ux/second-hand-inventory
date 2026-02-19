@@ -19,15 +19,20 @@ export default function StatsCharts() {
     const fetchStats = async () => {
         try {
             setLoading(true);
+            setError(null);
             const res = await fetch('/api/naver/stats');
             const result = await res.json();
             if (result.success) {
                 setStats(result.data);
+                // If no channels, it's a fallback state
+                if (result.data.channels.length === 0) {
+                    setError('조회된 스마트스토어 채널이 없습니다. API 연동 설정을 확인해주세요.');
+                }
             } else {
-                setError(result.message || '데이터를 가져오지 못했습니다.');
+                setError(result.error || result.message || '데이터를 가져오지 못했습니다.');
             }
         } catch (err: any) {
-            setError('API 연결 중 오류가 발생했습니다.');
+            setError('API 연결 중 오류가 발생했습니다: ' + err.message);
         } finally {
             setLoading(false);
         }
@@ -136,8 +141,8 @@ export default function StatsCharts() {
                         <CardDescription>최근 30일간의 주문 상태별 비중</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                        <div className="h-[300px] w-full min-h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
                                         data={categoryData}
@@ -154,7 +159,7 @@ export default function StatsCharts() {
                                         ))}
                                     </Pie>
                                     <Tooltip />
-                                    <Legend />
+                                    <Legend verticalAlign="bottom" height={36} />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
@@ -167,14 +172,14 @@ export default function StatsCharts() {
                         <CardDescription>재고 흐름 히스토그램 (예시 데이터)</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                        <div className="h-[300px] w-full min-h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={monthlySales}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="name" />
                                     <YAxis />
                                     <Tooltip />
-                                    <Legend />
+                                    <Legend verticalAlign="bottom" height={36} />
                                     <Bar dataKey="in" name="입고" fill="#8884d8" />
                                     <Bar dataKey="out" name="판매" fill="#82ca9d" />
                                 </BarChart>
@@ -216,8 +221,8 @@ export default function StatsCharts() {
                             <CardDescription>시스템 내부 데이터 집계</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                            <div className="h-[300px] w-full min-h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={dailyRegistration}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis dataKey="name" />

@@ -55,12 +55,17 @@ export async function getOrdersSummary(days: number = 7) {
  * 모든 통계를 한꺼번에 가져오는 헬퍼 함수
  */
 export async function getAllNaverStats(date?: string) {
-    const channels = await getNaverChannels();
+    const channels = await getNaverChannels().catch((e) => {
+        console.error('[NaverStats] Failed to fetch channels:', e.message);
+        return [];
+    });
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    const ordersSummary = await getOrdersSummary(30).catch(() => null);
+    const ordersSummary = await getOrdersSummary(30).catch((e) => {
+        console.error('[NaverStats] Failed to fetch orders summary:', e.message);
+        return null;
+    });
 
-    // 채널이 여러 개일 수 있으므로 첫 번째 채널을 사용하거나 루프를 돌림
     const channel = channels[0];
     if (!channel) {
         return {

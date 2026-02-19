@@ -69,6 +69,7 @@ function auditIssueLabel(code: string): string {
     IMAGE_BROKEN: '엑박',
     IMAGE_DUPLICATE: '이미지중복',
     NAME_MISMATCH: '명칭불일치',
+    NAME_TYPO: '명칭오타',
     IMAGE_MISMATCH: '이미지불일치',
     NO_DETAIL: '상세없음',
     NO_GRADE: '등급없음',

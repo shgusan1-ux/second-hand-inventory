@@ -208,28 +208,9 @@ export async function POST(request: Request) {
                             const plainText = detailContent.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
                             detailContentLength = plainText.length;
 
-                            // 4. 상품명 불일치 체크
-                            if (detailName && p.name && detailName !== p.name) {
-                                const listingBrand = extractBrandFromName(p.name);
-                                const detailBrand = extractBrandFromName(detailName);
-                                if (listingBrand && detailBrand && listingBrand.toLowerCase() !== detailBrand.toLowerCase()) {
-                                    issues.push('NAME_MISMATCH');
-                                }
-                            }
-
-                            // 5. 상세내용에서 상품명 키워드 매칭 체크
-                            if (plainText.length > 0) {
-                                const brandFromName = extractBrandFromName(p.name);
-                                if (brandFromName && brandFromName.length >= 3) {
-                                    const brandInContent = plainText.toLowerCase().includes(brandFromName.toLowerCase());
-                                    const brandInDetailName = detailName.toLowerCase().includes(brandFromName.toLowerCase());
-                                    if (!brandInContent && !brandInDetailName) {
-                                        if (!issues.includes('NAME_MISMATCH')) {
-                                            issues.push('NAME_MISMATCH');
-                                        }
-                                    }
-                                }
-                            }
+                            // 4. 상품명 체크 (불일치 + 오타)
+                            const nameIssues = checkNameIssues(p.name, detailName, plainText);
+                            issues.push(...nameIssues);
 
                             // 6. 대표이미지 불일치 체크
                             if (p.thumbnail_url && detailImageUrl) {
@@ -391,19 +372,9 @@ export async function PUT(request: Request) {
             const plainText = detailContent.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
             detailContentLength = plainText.length;
 
-            // 상품명 불일치
-            if (detailName && p.name) {
-                const listingBrand = extractBrandFromName(p.name);
-                const detailBrand = extractBrandFromName(detailName);
-                if (listingBrand && detailBrand && listingBrand.toLowerCase() !== detailBrand.toLowerCase()) {
-                    issues.push('NAME_MISMATCH');
-                }
-                if (listingBrand && listingBrand.length >= 3 && plainText.length > 0) {
-                    if (!plainText.toLowerCase().includes(listingBrand.toLowerCase()) && !detailName.toLowerCase().includes(listingBrand.toLowerCase())) {
-                        if (!issues.includes('NAME_MISMATCH')) issues.push('NAME_MISMATCH');
-                    }
-                }
-            }
+            // 상품명 체크 (불일치 + 오타)
+            const nameIssues = checkNameIssues(p.name, detailName, plainText);
+            issues.push(...nameIssues);
 
             // 대표이미지 불일치
             if (p.thumbnail_url && detailImageUrl) {

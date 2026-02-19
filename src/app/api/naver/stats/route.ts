@@ -14,7 +14,7 @@ export async function GET(request: Request) {
         return NextResponse.json({
             success: false,
             error: error.message,
-            message: '데이터를 가져오는 도중 오류가 발생했습니다. 권한 설정을 확인해주세요.'
+            message: '스마트스토어 데이터를 연동하는 중 오류가 발생했습니다.'
         }, { status: 500 });
     }
 }
