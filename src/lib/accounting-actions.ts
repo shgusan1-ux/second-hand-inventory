@@ -235,3 +235,17 @@ export async function saveFixedCost(data: any) {
         return { success: false, error: e.message };
     }
 }
+
+export async function toggleAccountingPermission(targetUserId: string, canView: boolean) {
+    const session = await getSession();
+    if (!session || !['대표자', '경영지원'].includes(session.job_title)) return { success: false, error: 'Unauthorized' };
+
+    try {
+        await db.query('UPDATE users SET can_view_accounting = $1 WHERE id = $2', [canView, targetUserId]);
+        await logAction('UPDATE_PERMISSIONS', 'user', targetUserId, `Accounting view permission ${canView ? 'granted' : 'revoked'}`);
+        revalidatePath('/members');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

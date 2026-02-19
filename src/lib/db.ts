@@ -35,6 +35,8 @@ async function initTables() {
         password_hint TEXT,
         security_memo TEXT,
         can_view_accounting BOOLEAN DEFAULT FALSE,
+        allowed_locations TEXT, -- JSON [{lat, lon, name, radius}]
+        attendance_score INTEGER DEFAULT 100,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -217,6 +219,9 @@ async function initTables() {
             check_out TEXT,
             correction_status TEXT,
             correction_data TEXT,
+            late_reason TEXT,
+            check_in_location TEXT, -- JSON {lat, lon, name}
+            score_impact INTEGER DEFAULT 0,
             note TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

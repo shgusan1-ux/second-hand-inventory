@@ -121,29 +121,92 @@ export async function getTodayAttendance(userId: string) {
     }
 }
 
-export async function checkIn() {
+// Helper: Haversine distance in meters
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) *
+        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+}
+
+export async function checkIn(locationData?: { lat: number; lon: number }, lateReason?: string) {
     const session = await getSession();
-    if (!session) return { success: false, error: 'Login required' };
+    if (!session) return { success: false, error: '로그인이 필요합니다.' };
 
     const dateStr = getKSTDate();
-    const now = getKSTISO();
+    const nowISO = getKSTISO();
+    const nowTime = new Date(nowISO);
+
+    // 1. 위치 검증 (관리자 설정이 있을 경우)
+    const userRes = await db.query('SELECT allowed_locations, attendance_score FROM users WHERE id = $1', [session.id]);
+    const userData = userRes.rows[0];
+
+    if (userData?.allowed_locations) {
+        if (!locationData) return { success: false, error: '위치 정보가 필요합니다.' };
+
+        const allowed = JSON.parse(userData.allowed_locations); // Array of {lat, lon, name, radius}
+        let isInRange = false;
+        let matchedLocation = '';
+
+        for (const loc of allowed) {
+            const dist = getDistance(locationData.lat, locationData.lon, loc.lat, loc.lon);
+            if (dist <= (loc.radius || 100)) { // 기본 100m
+                isInRange = true;
+                matchedLocation = loc.name;
+                break;
+            }
+        }
+
+        if (!isInRange) {
+            return { success: false, error: '지정된 장소에서만 출근이 가능합니다.' };
+        }
+    }
+
+    // 2. 지각 처리 및 점수 차감
+    let scoreImpact = 0;
+    const isLate = nowTime.getHours() >= 9 && nowTime.getMinutes() > 0; // 09:00 기준
+
+    if (isLate) {
+        if (!lateReason) return { success: false, error: '지각 사유를 입력해주세요.', needsReason: true };
+        scoreImpact = -5;
+    }
 
     // Check if exists
     const existing = await getTodayAttendance(session.id);
-    if (existing) return { success: false, error: 'Already checked in' };
+    if (existing) return { success: false, error: '이미 출근 처리되었습니다.' };
 
     const id = Math.random().toString(36).substring(2, 12);
     try {
         await db.query(`
-            INSERT INTO attendance_logs (id, user_id, work_date, check_in)
-            VALUES ($1, $2, $3, $4)
-        `, [id, session.id, dateStr, now]);
+            INSERT INTO attendance_logs (id, user_id, work_date, check_in, late_reason, check_in_location, score_impact)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+            id,
+            session.id,
+            dateStr,
+            nowISO,
+            lateReason || null,
+            locationData ? JSON.stringify(locationData) : null,
+            scoreImpact
+        ]);
 
-        await logAction('CHECK_IN', 'attendance', id, '출근');
+        if (scoreImpact !== 0) {
+            await db.query('UPDATE users SET attendance_score = attendance_score + $1 WHERE id = $2', [scoreImpact, session.id]);
+        }
+
+        await logAction('CHECK_IN', 'attendance', id, isLate ? `지각 출근: ${lateReason}` : '정상 출근');
         revalidatePath('/');
         return { success: true };
-    } catch (e) {
-        return { success: false, error: 'Check-in failed' };
+    } catch (e: any) {
+        return { success: false, error: '출근 처리 실패: ' + e.message };
     }
 }
 
@@ -308,7 +371,7 @@ export async function getUsersWithPermissions() {
     if (!session) return [];
 
     // Fetch users
-    const usersRes = await db.query('SELECT id, username, name, job_title, email, created_at, role FROM users ORDER BY name ASC');
+    const usersRes = await db.query('SELECT id, username, name, job_title, email, created_at, role, attendance_score, allowed_locations FROM users ORDER BY name ASC');
     const users = usersRes.rows;
 
     // Fetch permissions
@@ -356,4 +419,26 @@ export async function getAllTodayAttendance() {
         console.error("Failed to fetch all today attendance:", e);
         return [];
     }
+}
+
+// --- User Settings ---
+
+export async function updateUserLocations(targetUserId: string, locations: { lat: number; lon: number; name: string; radius?: number }[]) {
+    if (!(await isAuthorized())) return { success: false, error: '권한이 없습니다.' };
+
+    try {
+        await db.query('UPDATE users SET allowed_locations = $1 WHERE id = $2', [JSON.stringify(locations.slice(0, 2)), targetUserId]);
+        await logAction('UPDATE_LOCATIONS', 'user', targetUserId, `출근 가능 지역 설정: ${locations.map(l => l.name).join(', ')}`);
+        revalidatePath('/members');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function resetAttendanceScore(targetUserId: string) {
+    if (!(await isAuthorized())) return { success: false, error: '권한이 없습니다.' };
+    await db.query('UPDATE users SET attendance_score = 100 WHERE id = $1', [targetUserId]);
+    revalidatePath('/members');
+    return { success: true };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ProductAnalysisDetail } from './product-analysis-detail';
@@ -67,6 +67,7 @@ interface ProductManagementTabProps {
 function auditIssueLabel(code: string): string {
   const labels: Record<string, string> = {
     IMAGE_BROKEN: '엑박',
+    IMAGE_DUPLICATE: '이미지중복',
     NAME_MISMATCH: '명칭불일치',
     IMAGE_MISMATCH: '이미지불일치',
     NO_DETAIL: '상세없음',
@@ -143,6 +144,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [auditSubFilter, setAuditSubFilter] = useState<string>('ALL');
+  const scanAbortRef = useRef<AbortController | null>(null);
 
   // 카테고리 네비게이션
   const [stageFilter, setStageFilter] = useState<string>('ALL');
@@ -957,57 +959,140 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
     setCurrentPage(1);
   };
 
-  // 딥 스캔 실행
+  // 딥 스캔 실행 (배치 자동 연속)
   const startAuditScan = async () => {
     if (scanning) return;
+    const abortController = new AbortController();
+    scanAbortRef.current = abortController;
     setScanning(true);
     setScanProgress({ current: 0, total: 0, message: '스캔 시작...' });
 
+    const newResults = new Map<string, string[]>();
+    let currentOffset = 0;
+    let hasMore = true;
+
     try {
-      const res = await fetch('/api/smartstore/products/audit', { method: 'POST' });
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('스트림 읽기 실패');
+      while (hasMore && !abortController.signal.aborted) {
+        const res = await fetch(`/api/smartstore/products/audit?offset=${currentOffset}`, {
+          method: 'POST',
+          signal: abortController.signal,
+        });
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('스트림 읽기 실패');
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const newResults = new Map<string, string[]>();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done || abortController.signal.aborted) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === 'start') {
-              setScanProgress({ current: 0, total: event.total, message: '스캔 중...' });
-            } else if (event.type === 'progress') {
-              setScanProgress({ current: event.current, total: event.total, message: event.message });
-              if (event.issues?.length > 0) {
-                newResults.set(event.productNo, event.issues);
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === 'start') {
+                setScanProgress({ current: currentOffset, total: event.total, message: `배치 ${Math.floor(currentOffset / 150) + 1} 스캔 중...` });
+              } else if (event.type === 'progress') {
+                setScanProgress({ current: event.current, total: event.total, message: event.message });
+                if (event.issues?.length > 0) {
+                  newResults.set(event.productNo, event.issues);
+                }
+                // 실시간 업데이트 (캐시 항목은 10건마다, 신규는 매번)
+                if (!event.skipped || event.current % 10 === 0) {
+                  setAuditResults(new Map(newResults));
+                }
+              } else if (event.type === 'complete') {
+                hasMore = event.hasMore === true;
+                currentOffset = event.nextOffset || currentOffset;
+                setScanProgress({ current: event.hasMore ? currentOffset : event.total, total: event.total, message: event.message });
+                if (!event.hasMore) {
+                  toast.success(event.message);
+                }
+              } else if (event.type === 'error') {
+                toast.error(event.message);
+                hasMore = false;
               }
-            } else if (event.type === 'complete') {
-              setScanProgress({ current: event.total, total: event.total, message: event.message });
-              toast.success(event.message);
-            } else if (event.type === 'error') {
-              toast.error(event.message);
-            }
-          } catch { /* JSON parse error */ }
+            } catch { /* JSON parse error */ }
+          }
         }
       }
 
-      setAuditResults(newResults);
+      setAuditResults(new Map(newResults));
+      if (abortController.signal.aborted) {
+        toast.success(`스캔 중단됨 (${newResults.size}개 문제 발견)`);
+      }
     } catch (err: any) {
-      toast.error(`스캔 실패: ${err.message}`);
+      if (err.name !== 'AbortError') {
+        toast.error(`스캔 실패: ${err.message}`);
+      }
     } finally {
+      scanAbortRef.current = null;
       setScanning(false);
       setTimeout(() => setScanProgress(null), 3000);
     }
+  };
+
+  const stopAuditScan = () => {
+    scanAbortRef.current?.abort();
+  };
+
+  // 개별 상품 재확인
+  const recheckProduct = async (productNo: string) => {
+    const loadingId = toast.loading(`${productNo} 재확인 중...`);
+    try {
+      const res = await fetch('/api/smartstore/products/audit', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productNo }),
+      });
+      const data = await res.json();
+      toast.dismiss(loadingId);
+
+      if (data.success) {
+        setAuditResults(prev => {
+          const next = new Map(prev);
+          if (data.issues.length > 0) {
+            next.set(productNo, data.issues);
+            toast.error(`${productNo}: 아직 ${data.issues.length}건 문제 (${data.issues.map((i: string) => auditIssueLabel(i)).join(', ')})`);
+          } else {
+            next.delete(productNo);
+            toast.success(`${productNo}: 문제 없음! 정상 확인됨`);
+          }
+          return next;
+        });
+      } else {
+        toast.error(`재확인 실패: ${data.error}`);
+      }
+    } catch (err: any) {
+      toast.dismiss(loadingId);
+      toast.error(`재확인 오류: ${err.message}`);
+    }
+  };
+
+  // 검수 결과 엑셀 다운로드
+  const downloadAuditExcel = () => {
+    if (auditResults.size === 0) return;
+    const rows: string[][] = [['상품코드', '상품명', '검수내용']];
+    for (const [productNo, issues] of auditResults) {
+      const product = products.find(p => p.originProductNo === productNo);
+      const name = product?.name || '';
+      const issueText = issues.map(i => auditIssueLabel(i)).join(', ');
+      rows.push([productNo, name, issueText]);
+    }
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `검수결과_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSearchChange = (val: string) => {
@@ -1400,7 +1485,20 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   </button>
                 )}
                 {scanning && (
-                  <span className="text-xs text-red-600 font-medium animate-pulse">스캔 중...</span>
+                  <button
+                    onClick={stopAuditScan}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-slate-700 text-white hover:bg-slate-900 active:scale-95 transition-all"
+                  >
+                    스캔 중단
+                  </button>
+                )}
+                {auditResults.size > 0 && !scanning && (
+                  <button
+                    onClick={downloadAuditExcel}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 active:scale-95 transition-all"
+                  >
+                    엑셀 다운로드
+                  </button>
                 )}
               </div>
             </div>
@@ -1796,18 +1894,25 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                             <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
                           )}
                         </div>
-                        {auditResults.has(p.originProductNo) && (
-                          <div className="flex gap-0.5 shrink-0">
-                            {auditResults.get(p.originProductNo)!.slice(0, 2).map(issue => (
+                        {(auditResults.has(p.originProductNo) || stageFilter === 'AUDIT') && (
+                          <div className="flex gap-0.5 shrink-0 items-center">
+                            {auditResults.get(p.originProductNo)?.slice(0, 2).map(issue => (
                               <span key={issue} className="px-1 py-0.5 bg-red-100 text-red-600 text-[8px] font-bold rounded whitespace-nowrap">
                                 {auditIssueLabel(issue)}
                               </span>
                             ))}
-                            {auditResults.get(p.originProductNo)!.length > 2 && (
+                            {(auditResults.get(p.originProductNo)?.length || 0) > 2 && (
                               <span className="px-1 py-0.5 bg-red-100 text-red-600 text-[8px] font-bold rounded">
                                 +{auditResults.get(p.originProductNo)!.length - 2}
                               </span>
                             )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); recheckProduct(p.originProductNo); }}
+                              className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[8px] font-bold rounded hover:bg-blue-200 transition-colors whitespace-nowrap"
+                              title="이 상품을 재확인합니다"
+                            >
+                              재확인
+                            </button>
                           </div>
                         )}
                       </div>

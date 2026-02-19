@@ -108,6 +108,10 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
         }
     };
 
+    const [lateReason, setLateReason] = useState('');
+    const [isLateModalOpen, setIsLateModalOpen] = useState(false);
+    const [pendingLocation, setPendingLocation] = useState<{ lat: number, lon: number } | null>(null);
+
     const handleClockClick = async () => {
         if (!userId) {
             toast.error('로그인이 필요합니다.');
@@ -115,17 +119,42 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
         }
 
         if (status === 'none' || status === 'checked_out') {
-            if (!confirm('출근 하시겠습니까?')) return;
+            // 위치 정보 가져오기 시도
+            const prevStatus = status;
+            setStatus('loading');
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const loc = { lat: position.coords.latitude, lon: position.coords.longitude };
+                    setPendingLocation(loc);
+                    setStatus(prevStatus);
 
-            const res = await checkIn();
-            if (res.success) {
-                toast.success('출근 완료! 오늘도 화이팅하세요.');
-                setStatus('checked_in');
-                setCheckInTime(new Date());
-                loadStatus();
-            } else {
-                toast.error(res.error || '출근 실패');
-            }
+                    // 지각 여부 판단 (09:00 이후)
+                    const now = new Date();
+                    if (now.getHours() >= 9 && now.getMinutes() > 0) {
+                        setIsLateModalOpen(true);
+                    } else {
+                        if (!confirm('출근 하시겠습니까?')) {
+                            setPendingLocation(null);
+                            return;
+                        }
+                        await performCheckIn(loc);
+                    }
+                },
+                async (err) => {
+                    setStatus(prevStatus);
+                    console.error('Geolocation error:', err);
+                    // 위치 정보 실패 시에도 진행 (서버에서 allowed_locations 유무에 따라 필터링함)
+                    if (confirm('위치 정보를 가져올 수 없습니다. 계속하시겠습니까?\n(지정 위치 출근이 설정된 경우 실패할 수 있습니다.)')) {
+                        const now = new Date();
+                        if (now.getHours() >= 9 && now.getMinutes() > 0) {
+                            setIsLateModalOpen(true);
+                        } else {
+                            await performCheckIn();
+                        }
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
         } else if (status === 'checked_in') {
             if (!confirm('퇴근 하시겠습니까?')) return;
 
@@ -136,6 +165,21 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
             } else {
                 toast.error(res.error || '퇴근 실패');
             }
+        }
+    };
+
+    const performCheckIn = async (loc?: { lat: number, lon: number }, reason?: string) => {
+        const res = await checkIn(loc, reason);
+        if (res.success) {
+            toast.success('출근 완료! 오늘도 화이팅하세요.');
+            setStatus('checked_in');
+            setCheckInTime(new Date());
+            loadStatus();
+            setPendingLocation(null);
+            setLateReason('');
+            setIsLateModalOpen(false);
+        } else {
+            toast.error(res.error || '출근 실패');
         }
     };
 
@@ -242,7 +286,7 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                             <Input
                                 type="date"
                                 value={correctionData.date}
-                                onChange={e => setCorrectionData({...correctionData, date: e.target.value})}
+                                onChange={e => setCorrectionData({ ...correctionData, date: e.target.value })}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -251,7 +295,7 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                                 <Input
                                     type="time"
                                     value={correctionData.checkIn}
-                                    onChange={e => setCorrectionData({...correctionData, checkIn: e.target.value})}
+                                    onChange={e => setCorrectionData({ ...correctionData, checkIn: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -259,7 +303,7 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                                 <Input
                                     type="time"
                                     value={correctionData.checkOut}
-                                    onChange={e => setCorrectionData({...correctionData, checkOut: e.target.value})}
+                                    onChange={e => setCorrectionData({ ...correctionData, checkOut: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -268,13 +312,50 @@ export function AttendanceClockWidget({ userId }: AttendanceClockWidgetProps) {
                             <Input
                                 placeholder="예: 출근 버튼 누르는 것을 깜빡함"
                                 value={correctionData.reason}
-                                onChange={e => setCorrectionData({...correctionData, reason: e.target.value})}
+                                onChange={e => setCorrectionData({ ...correctionData, reason: e.target.value })}
                             />
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCorrectionOpen(false)}>취소</Button>
                         <Button onClick={handleCorrectionSubmit}>요청하기</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Late Reason Modal */}
+            <Dialog open={isLateModalOpen} onOpenChange={setIsLateModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-amber-600">
+                            <AlertCircle className="w-5 h-5" />
+                            지각 사유 입력
+                        </DialogTitle>
+                        <DialogDescription>
+                            09:00 이후 출근입니다. 지각 사유를 입력해주세요.
+                            (근태 점수가 5점 차감됩니다.)
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Label>지각 사유</Label>
+                        <Input
+                            placeholder="예: 교통 정체, 병원 방문 등"
+                            value={lateReason}
+                            onChange={e => setLateReason(e.target.value)}
+                            className="mt-2"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => {
+                            setIsLateModalOpen(false);
+                            setPendingLocation(null);
+                        }}>취소</Button>
+                        <Button
+                            onClick={() => performCheckIn(pendingLocation || undefined, lateReason)}
+                            disabled={!lateReason.trim()}
+                        >
+                            출근 완료
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
