@@ -900,11 +900,14 @@ export async function getInventoryForExport(searchParams: any) {
     const excludeCode = searchParams.excludeCode || '';
     const startDate = searchParams.startDate || '';
     const endDate = searchParams.endDate || '';
+    const updatedStart = searchParams.updatedStart || '';
+    const updatedEnd = searchParams.updatedEnd || '';
     const statusParam = searchParams.status || '';
     const categoriesParam = searchParams.category || searchParams.categories || '';
     const conditionsParam = searchParams.conditions || '';
     const sizesParam = searchParams.sizes || '';
     const smartstoreParam = searchParams.smartstore || 'all';
+    const aiParam = searchParams.ai || '';
 
     let sqlConditions: string[] = [];
     const params: any[] = [];
@@ -927,25 +930,9 @@ export async function getInventoryForExport(searchParams: any) {
         const cats = categoriesParam.split(',').map((s: string) => s.trim()).filter(Boolean);
         if (cats.length > 0) {
             const placeholders = cats.map(() => `$${paramIndex++}`);
-            // Filter by ID or Name
-            sqlConditions.push(`(p.category IN (${placeholders.join(', ')}) OR c.name IN (${placeholders.join(', ')}))`);
-            // We push the same values twice for the OR condition? 
-            // Postgres DOES NOT support named parameters easily here with pg library without tricks.
-            // Let's stick to simple ID match for filter, but user might want name match.
-            // Actually, usually category filter is IDs. Let's assume IDs.
-            // params.push(...cats); -> mismatched param count if we double placeholders.
-            // Let's just do p.category check for safe filtering. The UI usually passes IDs.
-            // Wait, previous code was id IN ... 
-            // Let's keep it simple: p.category IN ...
-            // If the UI passes names, this might break.
-            // But typical filter involves IDs.
-            // Revert: sqlConditions.push(`p.category IN (${placeholders.join(', ')})`);
-            // params.push(...cats);
+            sqlConditions.push(`p.category IN (${placeholders.join(', ')})`);
+            params.push(...cats);
         }
-        // Refined:
-        const placeholders = cats.map(() => `$${paramIndex++}`);
-        sqlConditions.push(`p.category IN (${placeholders.join(', ')})`);
-        params.push(...cats);
     }
 
     // Conditions
@@ -1016,6 +1003,18 @@ export async function getInventoryForExport(searchParams: any) {
         paramIndex++;
     }
 
+    // Updated At Date Range
+    if (updatedStart) {
+        sqlConditions.push(`p.updated_at >= $${paramIndex}`);
+        params.push(`${updatedStart} 00:00:00`);
+        paramIndex++;
+    }
+    if (updatedEnd) {
+        sqlConditions.push(`p.updated_at <= $${paramIndex}`);
+        params.push(`${updatedEnd} 23:59:59`);
+        paramIndex++;
+    }
+
     // 스마트스토어 필터
     let naverJoin = '';
     if (smartstoreParam !== 'all') {
@@ -1025,6 +1024,13 @@ export async function getInventoryForExport(searchParams: any) {
         } else if (smartstoreParam === 'registered') {
             sqlConditions.push('np.seller_management_code IS NOT NULL');
         }
+    }
+
+    // AI 작업 필터 (ai_completed 컬럼)
+    if (aiParam === 'done') {
+        sqlConditions.push(`p.ai_completed = 1`);
+    } else if (aiParam === 'undone') {
+        sqlConditions.push(`(p.ai_completed IS NULL OR p.ai_completed = 0)`);
     }
 
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';

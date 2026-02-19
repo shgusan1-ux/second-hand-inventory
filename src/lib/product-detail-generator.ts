@@ -5,8 +5,7 @@ export function generateProductDetailHTML(product: any): string {
 
   const measurements = parseMeasurements(product);
   const rawMdComment = product.md_comment || generateMDComment(product);
-  // 줄바꿈을 <br>로 변환하여 HTML에서 포맷 유지
-  const mdComment = rawMdComment.replace(/\n/g, '<br>');
+  const mdComment = formatMDComment(rawMdComment);
   const gradeInfo = getGradeInfo(product.condition || 'A급');
   const fabric = product.fabric || '케어라벨 미부착으로 확인불가';
 
@@ -19,11 +18,17 @@ export function generateProductDetailHTML(product: any): string {
     <table align="center" border="0" cellpadding="0" cellspacing="0" style="width:100%; max-width:860px; border-collapse:separate; border-spacing:0;">
       <tbody>
         <tr>
-          <td style="background:#F8F7F2; border:1px solid #EAE8DF; border-radius:16px; padding:35px 16px; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.10);">
-            <div style="font-size:18px; font-weight:900; margin:0 0 14px; color:#1A4D3E; letter-spacing:0.2px;">
-              <span style="font-size:22px; vertical-align:middle;">👕</span> <span style="vertical-align:middle;">MD's Pick</span>
+          <td style="background:linear-gradient(180deg, #FDFCF8 0%, #F5F3EC 100%); border:1px solid #D4C9A8; border-radius:16px; padding:45px 30px 40px; text-align:center; box-shadow:0 12px 35px rgba(0,0,0,0.08);">
+            <div style="margin:0 0 8px;">
+              <span style="display:inline-block; width:60px; height:1px; background:#1A4D3E; vertical-align:middle;"></span>
+              <span style="display:inline-block; margin:0 12px; font-size:11px; color:#8B7E6A; letter-spacing:4px; text-transform:uppercase; vertical-align:middle; font-weight:600;">Curated Selection</span>
+              <span style="display:inline-block; width:60px; height:1px; background:#1A4D3E; vertical-align:middle;"></span>
             </div>
-            <div style="text-align:center; margin:0 auto; font-size:15px; color:#555; line-height:1.9;">
+            <div style="font-size:24px; font-weight:900; margin:0 0 6px; color:#1A4D3E; letter-spacing:1.5px; font-family:Georgia,'Times New Roman',serif;">
+              MD's Pick
+            </div>
+            <div style="width:40px; height:2px; background:#1A4D3E; margin:12px auto 28px;"></div>
+            <div style="text-align:left; margin:0 auto; max-width:680px; font-size:14.5px; color:#4A4A4A; line-height:2.0;">
               ${mdComment}
             </div>
           </td>
@@ -37,7 +42,7 @@ export function generateProductDetailHTML(product: any): string {
     <div style="display:inline-block; text-align:left; width:100%; max-width:520px;">
       <ul style="list-style:none; padding:0; font-size:14px; line-height:2.0; margin:0;">
         <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">BRAND</strong> <b>${product.brand || '-'}</b></li>
-        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${formatSizeWithGender(product.size, product.category_classification)}</li>
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${formatSizeWithGender(product.size, product.name)}</li>
         <li><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">FABRIC</strong> ${fabric}</li>
       </ul>
     </div>
@@ -71,10 +76,9 @@ export function generateProductDetailHTML(product: any): string {
         const vertImage = imageUrls.find((url: string) => url.toLowerCase().includes('vert.jpg'));
         if (vertImage) detailImages.push(vertImage);
       } else {
-        // Rule 1: 모든 이미지 URL을 각각 개별 <img> 태그로 변환하여 나열
-        // Rule 2: 요약 및 생략 금지 - 모든 이미지를 하나도 누락 없이 출력
-        // Rule 3: 입력 개수 = 출력 개수 (구조적 매칭)
-        detailImages = imageUrls;
+        // Rule 1: 대표이미지(1번)은 상단에 이미 표시되므로 DETAIL VIEW에서는 2번부터 출력
+        // Rule 2: 요약 및 생략 금지 - 2번 이후 이미지를 하나도 누락 없이 출력
+        detailImages = imageUrls.length > 1 ? imageUrls.slice(1) : imageUrls;
       }
 
       // Rule 5: 태그 형식 유지 - 정확한 형식으로 한 줄에 하나씩 출력
@@ -144,11 +148,45 @@ function generateMDComment(product: any): string {
   return comments[index];
 }
 
-function formatSizeWithGender(size: string | undefined, classification: string | undefined): string {
+// MD 코멘트의 [제목] 패턴을 헤리티지 스타일 서브헤딩으로 변환
+function formatMDComment(raw: string): string {
+    // 한글 섹션 제목 → 영어로 통일 (기존 저장된 한글 제목도 변환)
+    let text = raw;
+    text = text.replace(/\[브랜드\s*헤리티지\]/g, '[Brand Heritage]');
+    text = text.replace(/\[디테일\s*가이드\]/g, '[Detail Guide]');
+    text = text.replace(/\[아카이브\s*밸류\]/g, '[Archive Value]');
+    text = text.replace(/\[컬렉터\s*코멘트\]/g, "[Collector's Comment]");
+
+    // [제목] 패턴을 스타일링된 소제목으로 변환
+    // Collector's Comment는 필기체(cursive) 스타일 적용
+    let html = text.replace(/\[([^\]]+)\]/g, (_match, title) => {
+        const isCollectorComment = /collector/i.test(title) || /컬렉터\s*코멘트/.test(title);
+        if (isCollectorComment) {
+            // Collector's Comment: 필기체 스타일 제목 + 이탤릭 본문
+            return `</p><div style="margin:32px 0 10px; text-align:center;"><span style="display:inline-block; font-size:15px; font-weight:400; color:#1A4D3E; letter-spacing:1px; font-family:'Palatino Linotype','Book Antiqua','Georgia',cursive; font-style:italic; border-bottom:1px solid #D4C9A8; padding-bottom:4px;">${title}</span></div><p style="margin:0; font-size:15px; color:#5A5A5A; line-height:2.0; font-family:'Palatino Linotype','Book Antiqua','Georgia',cursive; font-style:italic; text-align:center;">`;
+        }
+        return `</p><div style="margin:28px 0 10px; text-align:center;"><span style="display:inline-block; font-size:13px; font-weight:800; color:#1A4D3E; letter-spacing:2.5px; text-transform:uppercase; font-family:Georgia,'Times New Roman',serif; border-bottom:2px solid #D4C9A8; padding-bottom:4px;">${title}</span></div><p style="margin:0; font-size:14.5px; color:#4A4A4A; line-height:2.0;">`;
+    });
+    // 줄바꿈 처리
+    html = html.replace(/\n/g, '<br>');
+    // 첫 번째 빈 </p> 제거
+    html = html.replace(/^<\/p>/, '');
+    // 마지막에 <p> 닫기 보정
+    if (!html.endsWith('</p>')) html += '</p>';
+    return html;
+}
+
+function formatSizeWithGender(size: string | undefined, productName: string | undefined): string {
     if (!size) return '-';
-    if (!classification || classification === '악세사리' || classification === '기타') return size;
-    // MAN, WOMAN, KIDS → prefix (예: WOMAN-M, MAN-L, KIDS-110)
-    return `${classification}-${size}`;
+    // 상품명에서 성별 추출 (예: "BURBERRY 코트 MAN-XL" → MAN)
+    const genderMatch = (productName || '').match(/(MAN|WOMAN|KIDS|UNISEX)-\S+$/);
+    if (genderMatch) {
+        const gender = genderMatch[1] === 'UNISEX' ? 'UNISEX' : genderMatch[1];
+        // 이미 성별 prefix가 포함된 사이즈면 그대로 반환
+        if (size.startsWith(gender)) return size;
+        return `${gender}-${size}`;
+    }
+    return size;
 }
 
 function getGradeInfo(condition: string): string {

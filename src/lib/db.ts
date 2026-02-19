@@ -365,6 +365,19 @@ function getTursoClient() {
   return tursoClient;
 }
 
+function convertParams(text: string, params: any[]): { sql: string; args: any[] } {
+  const newParams: any[] = [];
+  const tursoSql = text.replace(/\$(\d+)/g, (match, number) => {
+    const idx = parseInt(number, 10) - 1;
+    if (idx >= 0 && idx < params.length) {
+      newParams.push(params[idx]);
+      return '?';
+    }
+    return match;
+  });
+  return { sql: tursoSql, args: newParams };
+}
+
 export const db = {
   query: async <T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> => {
     const client = getTursoClient();
@@ -373,22 +386,10 @@ export const db = {
       await initPromise;
     }
 
-    const newParams: any[] = [];
-    const tursoSql = text.replace(/\$(\d+)/g, (match, number) => {
-      const idx = parseInt(number, 10) - 1;
-      if (idx >= 0 && idx < params.length) {
-        newParams.push(params[idx]);
-        return '?';
-      }
-      return match;
-    });
+    const { sql, args } = convertParams(text, params);
 
     try {
-      const result = await client.execute({
-        sql: tursoSql,
-        args: newParams
-      });
-
+      const result = await client.execute({ sql, args });
       const plainRows = JSON.parse(JSON.stringify(result.rows));
 
       return {
@@ -397,6 +398,24 @@ export const db = {
       };
     } catch (e) {
       console.error("Turso DB Error:", e);
+      throw e;
+    }
+  },
+
+  // 여러 쿼리를 한 번에 Turso에 전송 (네트워크 1회 왕복)
+  batch: async (statements: Array<{ sql: string; params: any[] }>): Promise<void> => {
+    const client = getTursoClient();
+
+    if (initPromise) {
+      await initPromise;
+    }
+
+    const tursoStatements = statements.map(({ sql, params }) => convertParams(sql, params));
+
+    try {
+      await client.batch(tursoStatements, 'write');
+    } catch (e) {
+      console.error("Turso Batch Error:", e);
       throw e;
     }
   },

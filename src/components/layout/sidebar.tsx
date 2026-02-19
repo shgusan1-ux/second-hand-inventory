@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { AttendanceClockWidget } from './attendance-clock-widget';
 import { ChatWidget } from './chat-widget';
-import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield } from 'lucide-react';
+import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Database } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ const salesHub = [
     { name: '대시보드', href: '/', icon: LayoutDashboard },
     { name: '스마트스토어 관리', href: '/smartstore', icon: ShoppingBag },
     { name: '통합 재고 관리', href: '/inventory', icon: Package },
+    { name: '공급사 원본DB', href: '/admin/supplier', icon: Database, newWindow: true },
     { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
     { name: '통계/분석', href: '/statistics', icon: BarChart3 },
 ];
@@ -49,12 +50,13 @@ export function Sidebar({ user }: { user?: any }) {
                 {/* 1. Sales Hub */}
                 <div className="pb-2">
                     <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Service Hub (판매 사이트)</div>
-                    {salesHub.map((item) => {
+                    {salesHub.map((item: any) => {
                         const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
                         return (
                             <Link
                                 key={item.name}
                                 href={item.href}
+                                target={item.newWindow ? '_blank' : undefined}
                                 className={cn(
                                     'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
                                     isActive

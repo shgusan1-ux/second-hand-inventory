@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef, useDeferredValue } from 'react';
 import { toast, Toaster } from 'sonner';
 import { generateProductDetailHTML } from '@/lib/product-detail-generator';
-import { processImageWithBadge } from '@/lib/image-processor';
+import { processImageWithBadge, preloadBackgroundRemoval } from '@/lib/image-processor';
 
 interface ProductData {
     id: string;
@@ -43,6 +43,7 @@ interface CategoryItem {
     id: string;
     name: string;
     sort_order: number;
+    classification?: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -52,6 +53,9 @@ interface AIResult {
     suggestedBrand: string;
     suggestedSize: string;
     suggestedFabric: string;
+    suggestedCategory: string;
+    suggestedGender: string;
+    suggestedConsumerPrice: number;
     grade: string;
     gradeReason: string;
     suggestedPrice: number;
@@ -74,13 +78,16 @@ export default function ProductEditorPage() {
     const [formKey, setFormKey] = useState(0);
     const [isBadgeProcessing, setIsBadgeProcessing] = useState(false);
     const [badgePreview, setBadgePreview] = useState<string | null>(null);
+    const [originalImage0, setOriginalImage0] = useState<string | null>(null); // 뱃지 적용 전 원본 이미지 백업
     const [isMDGenerating, setIsMDGenerating] = useState(false);
     const [mdGeneratedText, setMdGeneratedText] = useState<string | null>(null);
     const [supplierData, setSupplierData] = useState<Map<string, any>>(new Map());
     const [isSupplierLoading, setIsSupplierLoading] = useState(false);
+    const [selectedGender, setSelectedGender] = useState<string>(''); // 대분류: MAN/WOMAN/KIDS/UNISEX
 
     // cleanup: 디바운스 타이머 해제
     useEffect(() => {
+        preloadBackgroundRemoval(); // WASM 모델 사전 로드
         return () => { if (flushTimerRef.current) clearTimeout(flushTimerRef.current); };
     }, []);
 
@@ -272,6 +279,10 @@ export default function ProductEditorPage() {
                     images: JSON.stringify(draft.images),
                 } : p));
                 toast.success(`${draft.name} 저장 완료`);
+                // 1개 상품이면 저장 후 창 닫기 (여러 개면 계속 작업)
+                if (products.length === 1) {
+                    setTimeout(() => window.close(), 800);
+                }
             } else {
                 const data = await res.json();
                 setSaveStatuses(prev => new Map(prev).set(id, 'error'));
@@ -428,7 +439,10 @@ export default function ProductEditorPage() {
         if (aiResult.suggestedFabric) updates.fabric = aiResult.suggestedFabric;
         if (aiResult.grade) updates.condition = aiResult.grade;
         if (aiResult.suggestedPrice) updates.price_sell = aiResult.suggestedPrice;
+        if (aiResult.suggestedConsumerPrice) updates.price_consumer = aiResult.suggestedConsumerPrice;
         if (aiResult.mdDescription) updates.md_comment = aiResult.mdDescription;
+        // 성별 대분류 자동 설정
+        if (aiResult.suggestedGender) setSelectedGender(aiResult.suggestedGender);
 
         setDrafts(prev => {
             const next = new Map(prev);
@@ -469,6 +483,30 @@ export default function ProductEditorPage() {
         toast.success('AI 추천값 전체 적용 완료');
     };
 
+    // 이미지 위치 교환
+    const swapImages = (fromIdx: number, toIdx: number) => {
+        if (!selectedId) return;
+        const product = products.find(p => p.id === selectedId);
+        if (!product) return;
+        const draft = getCurrentDraft(product);
+        const newImages = [...draft.images];
+        while (newImages.length < 5) newImages.push('');
+        [newImages[fromIdx], newImages[toIdx]] = [newImages[toIdx], newImages[fromIdx]];
+        updateDraft(selectedId, 'images', newImages);
+        setFormKey(k => k + 1);
+    };
+
+    // 이미지 삭제
+    const removeImage = (idx: number) => {
+        if (!selectedId) return;
+        const product = products.find(p => p.id === selectedId);
+        if (!product) return;
+        const draft = getCurrentDraft(product);
+        const newImages = draft.images.filter((_, i) => i !== idx);
+        updateDraft(selectedId, 'images', newImages);
+        setFormKey(k => k + 1);
+    };
+
     // 피팅 이미지를 상품 이미지 1번(상세 첫번째)에 추가
     const addFittingToImages = () => {
         if (!fittingImage || !selectedId) return;
@@ -483,7 +521,7 @@ export default function ProductEditorPage() {
     };
 
     // 뱃지 썸네일 생성 (배경제거 + 등급 뱃지 합성)
-    const handleBadgeGenerate = async () => {
+    const handleBadgeGenerate = async (quickMode = false) => {
         if (!selectedProduct || isBadgeProcessing) return;
         setIsBadgeProcessing(true);
         setBadgePreview(null);
@@ -498,10 +536,10 @@ export default function ProductEditorPage() {
             }
 
             const grade = (draft.condition || selectedProduct.condition || 'B').replace('급', '');
-            toast.info(`뱃지 생성 중... (등급: ${grade})`);
+            toast.info(quickMode ? `빠른 뱃지 생성 중... (등급: ${grade})` : `뱃지 생성 중... (등급: ${grade})`);
 
-            // 클라이언트에서 배경제거 + 뱃지 합성
-            const blob = await processImageWithBadge({ imageUrl, grade });
+            // 클라이언트에서 뱃지 합성 (quickMode: 배경제거 건너뜀)
+            const blob = await processImageWithBadge({ imageUrl, grade, quickMode });
 
             // Vercel Blob에 업로드
             const formData = new FormData();
@@ -535,18 +573,57 @@ export default function ProductEditorPage() {
         if (!product) return;
         const draft = getCurrentDraft(product);
         const newImages = [...draft.images];
+        // 원본 이미지 백업 (취소용)
+        setOriginalImage0(newImages[0] || product.image_url || '');
         newImages[0] = badgePreview;
         updateDraft(selectedId, 'images', newImages);
         setFormKey(k => k + 1);
         toast.success('대표이미지에 뱃지 적용됨');
     };
 
+    // 뱃지 적용 취소 (원본 복원)
+    const undoBadgeApply = () => {
+        if (!originalImage0 || !selectedId) return;
+        const product = products.find(p => p.id === selectedId);
+        if (!product) return;
+        const draft = getCurrentDraft(product);
+        const newImages = [...draft.images];
+        newImages[0] = originalImage0;
+        updateDraft(selectedId, 'images', newImages);
+        setOriginalImage0(null);
+        setFormKey(k => k + 1);
+        toast.info('대표이미지 원본 복원됨');
+    };
+
+    // 공급사 실측 데이터를 상품에 병합하는 헬퍼
+    const mergeSupplierMeasurements = useCallback((product: any): any => {
+        const supplier = supplierData.get(product.id);
+        if (!supplier) return product;
+        // 공급사 실측 데이터가 있으면 product 필드에 병합 (기존 값 우선)
+        return {
+            ...product,
+            shoulder: product.shoulder || supplier.shoulder,
+            chest: product.chest || supplier.chest,
+            waist: product.waist || supplier.waist,
+            sleeve: product.sleeve || supplier.arm_length,
+            length: product.length || supplier.length1,
+            hem: product.hem || supplier.hem,
+            rise: product.rise || supplier.rise,
+            thigh: product.thigh || supplier.thigh,
+            inseam: product.inseam || supplier.length2,
+            hip: product.hip || supplier.hip,
+            // 원단 정보도 빈 경우 채움
+            fabric: product.fabric || (supplier.fabric1 ? `${supplier.fabric1}${supplier.fabric2 ? ', ' + supplier.fabric2 : ''}` : product.fabric),
+            size: product.size || supplier.recommended_size,
+        };
+    }, [supplierData]);
+
     // 미리보기 HTML
     const currentDraft = selectedProduct ? getCurrentDraft(selectedProduct) : null;
     const originalHTML = useMemo(() => {
         if (!selectedProduct) return '';
-        return generateProductDetailHTML(selectedProduct);
-    }, [selectedProduct]);
+        return generateProductDetailHTML(mergeSupplierMeasurements(selectedProduct));
+    }, [selectedProduct, mergeSupplierMeasurements]);
 
     // 성능 최적화: useDeferredValue로 미리보기 HTML 지연 렌더링
     const deferredDrafts = useDeferredValue(drafts);
@@ -554,14 +631,14 @@ export default function ProductEditorPage() {
         if (!selectedProduct || !selectedId) return '';
         const draft = deferredDrafts.get(selectedId) || (currentDraft ? currentDraft : null);
         if (!draft) return '';
-        const previewProduct = {
+        const previewProduct = mergeSupplierMeasurements({
             ...selectedProduct,
             ...draft,
             image_url: draft.images.join(', '),
-        };
+        });
         return generateProductDetailHTML(previewProduct);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedProduct, selectedId, deferredDrafts]);
+    }, [selectedProduct, selectedId, deferredDrafts, mergeSupplierMeasurements]);
 
     const saveStatus = selectedId ? (saveStatuses.get(selectedId) || 'idle') : 'idle';
 
@@ -609,7 +686,7 @@ export default function ProductEditorPage() {
         setIsBadgeProcessing(true);
         try {
             const grade = condition.replace('급', '') || 'B';
-            const blob = await processImageWithBadge({ imageUrl, grade });
+            const blob = await processImageWithBadge({ imageUrl, grade, quickMode: true });
             // 생성 도중 다른 요청이 시작되었으면 결과 무시
             if (badgeGenerationId.current !== currentGenId) return;
             const formData = new FormData();
@@ -642,7 +719,20 @@ export default function ProductEditorPage() {
         setFittingImage(null);
         setAiResult(null);
         setBadgePreview(null);
+        setOriginalImage0(null);
         setMdGeneratedText(null);
+        setSelectedGender('');
+        // 공급사 데이터에서 성별 자동 감지
+        if (selectedId) {
+            const supplier = supplierData.get(selectedId);
+            if (supplier?.gender) {
+                const g = supplier.gender.toUpperCase();
+                if (['MAN', 'WOMAN', 'KIDS', 'UNISEX'].includes(g)) setSelectedGender(g);
+                else if (g === '남성' || g === '남자') setSelectedGender('MAN');
+                else if (g === '여성' || g === '여자') setSelectedGender('WOMAN');
+                else if (g === '키즈' || g === '아동') setSelectedGender('KIDS');
+            }
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId]);
 
@@ -775,6 +865,47 @@ export default function ProductEditorPage() {
                                         </div>
                                     </div>
 
+                                    {/* 공급사 원본 데이터 */}
+                                    {currentSupplier && (
+                                        <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
+                                            <h3 className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-2">공급사 원본 데이터</h3>
+                                            <div className="space-y-1.5 text-xs">
+                                                <div className="flex justify-between"><span className="text-slate-500">코드</span><span className="text-orange-300 font-mono">{currentSupplier.product_code}</span></div>
+                                                <div className="flex justify-between"><span className="text-slate-500">카테고리</span><span className="text-white">{currentSupplier.category1} {currentSupplier.category2}</span></div>
+                                                {currentSupplier.gender && <div className="flex justify-between"><span className="text-slate-500">성별</span><span className="text-yellow-300 font-bold">{currentSupplier.gender}</span></div>}
+                                                <div className="flex justify-between"><span className="text-slate-500">라벨사이즈</span><span className="text-white font-bold">{currentSupplier.labeled_size || '-'}</span></div>
+                                                {currentSupplier.recommended_size && currentSupplier.recommended_size !== currentSupplier.labeled_size && (
+                                                    <div className="flex justify-between"><span className="text-slate-500">권장체형</span><span className="text-slate-400">{currentSupplier.recommended_size}</span></div>
+                                                )}
+                                                <div className="flex justify-between"><span className="text-slate-500">소재</span><span className="text-white">{currentSupplier.fabric1}{currentSupplier.fabric2 ? `, ${currentSupplier.fabric2}` : ''}</span></div>
+                                                <div className="flex justify-between"><span className="text-slate-500">계절/색상</span><span className="text-white">{currentSupplier.season} / {currentSupplier.color}</span></div>
+                                                {currentSupplier.price && <div className="flex justify-between"><span className="text-slate-500">공급가</span><span className="text-white">{Number(currentSupplier.price).toLocaleString()}원</span></div>}
+                                            </div>
+                                            {/* 실측 사이즈 */}
+                                            {(currentSupplier.length1 || currentSupplier.chest || currentSupplier.shoulder) && (
+                                                <div className="mt-2 pt-2 border-t border-orange-500/10">
+                                                    <p className="text-[9px] text-orange-400/60 mb-1">SIZE GUIDE 자동 적용됨</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {currentSupplier.shoulder && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">어깨 {currentSupplier.shoulder}</span>}
+                                                        {currentSupplier.chest && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">가슴 {currentSupplier.chest}</span>}
+                                                        {currentSupplier.waist && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">허리 {currentSupplier.waist}</span>}
+                                                        {currentSupplier.length1 && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">총장 {currentSupplier.length1}</span>}
+                                                        {currentSupplier.arm_length && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">소매 {currentSupplier.arm_length}</span>}
+                                                        {currentSupplier.thigh && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">허벅지 {currentSupplier.thigh}</span>}
+                                                        {currentSupplier.rise && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">밑위 {currentSupplier.rise}</span>}
+                                                        {currentSupplier.hem && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">밑단 {currentSupplier.hem}</span>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {isSupplierLoading && (
+                                        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-3 flex items-center gap-2">
+                                            <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
+                                            <span className="text-[10px] text-slate-500">공급사 데이터 조회 중...</span>
+                                        </div>
+                                    )}
+
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
                                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">현재 상세페이지</h3>
                                         <div className="bg-white rounded-lg p-3 max-h-[400px] overflow-y-auto">
@@ -793,222 +924,8 @@ export default function ProductEditorPage() {
                         <div className="col-span-5 space-y-3 max-h-[calc(100vh-140px)] overflow-y-auto">
                             {selectedProduct && currentDraft ? (
                                 <>
-                                    {/* 썸네일 이미지 확인 */}
-                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">이미지 확인</h3>
-                                        <div className="flex gap-2">
-                                            {/* 뱃지 썸네일 (대표) */}
-                                            <div className="flex-shrink-0">
-                                                <p className="text-[9px] text-orange-400 font-bold mb-1 text-center">뱃지 썸네일</p>
-                                                <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-800 border-2 border-orange-500/50 relative">
-                                                    {isBadgeProcessing ? (
-                                                        <div className="w-full h-full flex items-center justify-center">
-                                                            <div className="w-5 h-5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
-                                                        </div>
-                                                    ) : badgePreview ? (
-                                                        <img src={badgePreview} alt="Badge" className="w-full h-full object-contain" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-slate-600 text-[9px] text-center px-1">
-                                                            뱃지 생성<br/>버튼 클릭
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {badgePreview && (
-                                                    <button onClick={applyBadgeToImages} className="mt-1 w-full px-1 py-0.5 bg-orange-600 text-white text-[9px] font-bold rounded hover:bg-orange-700 transition-colors">
-                                                        대표 적용
-                                                    </button>
-                                                )}
-                                            </div>
-                                            {/* 상품 이미지 1~5 */}
-                                            <div className="flex-1">
-                                                <p className="text-[9px] text-slate-500 font-bold mb-1">상품 이미지 (1~5)</p>
-                                                <div className="flex gap-1.5">
-                                                    {[0, 1, 2, 3, 4].map(i => (
-                                                        <div key={i} className={`w-[60px] h-[60px] rounded-lg overflow-hidden bg-slate-800 border flex-shrink-0 ${i === 0 ? 'border-emerald-500/50' : 'border-white/10'}`}>
-                                                            {currentDraft.images[i] ? (
-                                                                <img src={currentDraft.images[i]} alt={`img-${i+1}`} className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <div className="w-full h-full flex items-center justify-center text-slate-700 text-[10px]">{i + 1}</div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {/* 뱃지 재생성 버튼 */}
-                                        <div className="flex items-center gap-2 mt-2">
-                                            <button onClick={handleBadgeGenerate} disabled={isBadgeProcessing} className="px-3 py-1 bg-orange-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center gap-1">
-                                                {isBadgeProcessing ? '생성 중...' : '뱃지 재생성'}
-                                            </button>
-                                            <span className="text-[10px] text-slate-600">등급/이미지 설정 후 클릭하세요</span>
-                                        </div>
-                                    </div>
-
-                                    {/* 저장 버튼 */}
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">편집</h3>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleTempSave(selectedId!)} className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors">
-                                                임시저장
-                                            </button>
-                                            <button onClick={() => handleSave(selectedId!)} disabled={saveStatus === 'saving'} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                                                {saveStatus === 'saving' ? '저장 중...' : '저장'}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* 편집 폼 */}
-                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 space-y-3" key={`${selectedId}-${formKey}`}>
-                                        {/* 상품명 + AI 추천 */}
-                                        <div className="space-y-1">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-[10px] text-slate-500 uppercase font-bold">상품명</label>
-                                                {aiResult?.suggestedName && (
-                                                    <button onClick={() => applyAI('name', aiResult.suggestedName)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1">
-                                                        AI: {aiResult.suggestedName.substring(0, 25)}{aiResult.suggestedName.length > 25 ? '...' : ''} [적용]
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.name} onChange={e => updateDraftDebounced(selectedId!, 'name', e.target.value)} />
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {/* 브랜드 + AI 추천 */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">브랜드</label>
-                                                    {aiResult?.suggestedBrand && (
-                                                        <button onClick={() => applyAI('brand', aiResult.suggestedBrand)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                            AI: {aiResult.suggestedBrand} [적용]
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.brand} onChange={e => updateDraftDebounced(selectedId!, 'brand', e.target.value)} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] text-slate-500 uppercase font-bold">카테고리</label>
-                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.category} onChange={e => updateDraft(selectedId!, 'category', e.target.value)}>
-                                                    <option value="">선택</option>
-                                                    {categories.map(cat => (
-                                                        <option key={cat.id} value={cat.name}>{cat.name} ({cat.sort_order})</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {/* 등급 + AI 추천 */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">등급</label>
-                                                    {aiResult?.grade && (
-                                                        <button onClick={() => applyAI('condition', aiResult.grade)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                            AI: {aiResult.grade} [적용]
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.condition} onChange={e => handleConditionChange(e.target.value)}>
-                                                    <option value="">선택</option>
-                                                    <option value="S급">S급</option>
-                                                    <option value="A급">A급</option>
-                                                    <option value="B급">B급</option>
-                                                    <option value="V">V (빈티지)</option>
-                                                </select>
-                                            </div>
-                                            {/* 사이즈 + AI 추천 */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">사이즈</label>
-                                                    {aiResult?.suggestedSize && (
-                                                        <button onClick={() => applyAI('size', aiResult.suggestedSize)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                            AI: {aiResult.suggestedSize} [적용]
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.size} onChange={e => updateDraftDebounced(selectedId!, 'size', e.target.value)} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] text-slate-500 uppercase font-bold">상태</label>
-                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.status} onChange={e => updateDraft(selectedId!, 'status', e.target.value)}>
-                                                    <option value="판매중">판매중</option>
-                                                    <option value="판매완료">판매완료</option>
-                                                    <option value="판매대기">판매대기</option>
-                                                    <option value="수정중">수정중</option>
-                                                    <option value="폐기">폐기</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] text-slate-500 uppercase font-bold">소비자가</label>
-                                                <input type="number" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.price_consumer} onChange={e => updateDraftDebounced(selectedId!, 'price_consumer', Number(e.target.value))} />
-                                            </div>
-                                            {/* 판매가 + AI 추천 */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">판매가</label>
-                                                    {aiResult?.suggestedPrice && (
-                                                        <button onClick={() => applyAI('price_sell', aiResult.suggestedPrice)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                            AI: {aiResult.suggestedPrice.toLocaleString()}원 [적용]
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <input type="number" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.price_sell} onChange={e => updateDraftDebounced(selectedId!, 'price_sell', Number(e.target.value))} />
-                                            </div>
-                                        </div>
-
-                                        {/* 원단 + AI 추천 */}
-                                        <div className="space-y-1">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-[10px] text-slate-500 uppercase font-bold">원단</label>
-                                                {aiResult?.suggestedFabric && (
-                                                    <button onClick={() => applyAI('fabric', aiResult.suggestedFabric)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                        AI: {aiResult.suggestedFabric} [적용]
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.fabric} onChange={e => updateDraftDebounced(selectedId!, 'fabric', e.target.value)} />
-                                        </div>
-
-                                        {/* 이미지 URLs */}
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 uppercase font-bold">이미지 URL (최대 5개)</label>
-                                            {[0, 1, 2, 3, 4].map(i => (
-                                                <input key={i} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white mb-1" placeholder={`이미지 ${i + 1}`}
-                                                    defaultValue={currentDraft.images[i] || ''}
-                                                    onChange={e => {
-                                                        if (!selectedId) return;
-                                                        const val = e.target.value;
-                                                        // 이미지 URL은 pending ref에 직접 저장 (디바운스)
-                                                        const existing = pendingDraftRef.current.get(selectedId) || {};
-                                                        const product = products.find(p => p.id === selectedId);
-                                                        if (!product) return;
-                                                        const currentImages = [...(
-                                                            (existing.images as string[]) ||
-                                                            drafts.get(selectedId)?.images ||
-                                                            parseImages(product)
-                                                        )];
-                                                        while (currentImages.length <= i) currentImages.push('');
-                                                        currentImages[i] = val;
-                                                        existing.images = currentImages;
-                                                        pendingDraftRef.current.set(selectedId, existing);
-                                                        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
-                                                        flushTimerRef.current = setTimeout(flushPendingDrafts, 300);
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
-
-                                        {/* MD 코멘트 */}
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 uppercase font-bold">MD 코멘트</label>
-                                            <textarea className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white min-h-[80px]" defaultValue={currentDraft.md_comment} onChange={e => updateDraftDebounced(selectedId!, 'md_comment', e.target.value)} placeholder="아래 'MD 소개글 AI 생성' 섹션에서 자동 생성 후 삽입할 수 있습니다." />
-                                        </div>
-                                    </div>
-
-                                    {/* AI 상품분석 */}
-                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
+                                    {/* AI 상품분석 (최상단) */}
+                                    <div className="bg-slate-900/50 border border-cyan-500/30 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">AI 상품분석</h3>
                                             <div className="flex gap-2">
@@ -1075,6 +992,30 @@ export default function ProductEditorPage() {
                                                             <button onClick={() => applyAI('fabric', aiResult.suggestedFabric)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
                                                         </div>
                                                     )}
+                                                    {aiResult.suggestedCategory && (
+                                                        <div className="bg-slate-800/50 rounded-lg p-2">
+                                                            <span className="text-slate-500">카테고리</span>
+                                                            <p className="text-white">{aiResult.suggestedCategory}</p>
+                                                            <button onClick={() => {
+                                                                const matched = categories.find(c => c.name === aiResult.suggestedCategory);
+                                                                if (matched) applyAI('category', matched.name);
+                                                                else toast.error(`카테고리 "${aiResult.suggestedCategory}"를 목록에서 찾을 수 없습니다`);
+                                                            }} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
+                                                        </div>
+                                                    )}
+                                                    {aiResult.suggestedGender && (
+                                                        <div className="bg-slate-800/50 rounded-lg p-2">
+                                                            <span className="text-slate-500">성별</span>
+                                                            <p className="text-white font-bold">{aiResult.suggestedGender}</p>
+                                                        </div>
+                                                    )}
+                                                    {aiResult.suggestedConsumerPrice > 0 && (
+                                                        <div className="bg-slate-800/50 rounded-lg p-2">
+                                                            <span className="text-slate-500">소비자가 (새제품 70%)</span>
+                                                            <p className="text-white">{aiResult.suggestedConsumerPrice.toLocaleString()}원</p>
+                                                            <button onClick={() => applyAI('price_consumer', aiResult.suggestedConsumerPrice)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ) : (
@@ -1084,26 +1025,214 @@ export default function ProductEditorPage() {
                                         )}
                                     </div>
 
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">편집</h3>
+
+                                    {/* 편집 폼 */}
+                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 space-y-3" key={`${selectedId}-${formKey}`}>
+                                        {/* 상품명 + AI 추천 */}
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] text-slate-500 uppercase font-bold">상품명</label>
+                                                {aiResult?.suggestedName && (
+                                                    <button onClick={() => applyAI('name', aiResult.suggestedName)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1">
+                                                        AI: {aiResult.suggestedName.substring(0, 25)}{aiResult.suggestedName.length > 25 ? '...' : ''} [적용]
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.name} onChange={e => updateDraftDebounced(selectedId!, 'name', e.target.value)} />
+                                        </div>
+
+                                        {/* 브랜드 */}
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] text-slate-500 uppercase font-bold">브랜드</label>
+                                                {aiResult?.suggestedBrand && (
+                                                    <button onClick={() => applyAI('brand', aiResult.suggestedBrand)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                        AI: {aiResult.suggestedBrand} [적용]
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.brand} onChange={e => updateDraftDebounced(selectedId!, 'brand', e.target.value)} />
+                                        </div>
+
+                                        {/* 성별(대분류) → 카테고리(소분류) */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">성별 (대분류)</label>
+                                                    {aiResult?.suggestedGender && selectedGender !== aiResult.suggestedGender && (
+                                                        <button onClick={() => setSelectedGender(aiResult.suggestedGender)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                            AI: {aiResult.suggestedGender} [적용]
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    {['MAN', 'WOMAN', 'KIDS', 'UNISEX'].map(g => (
+                                                        <button
+                                                            key={g}
+                                                            type="button"
+                                                            onClick={() => setSelectedGender(selectedGender === g ? '' : g)}
+                                                            className={`flex-1 px-1 py-2 text-[10px] font-bold rounded-lg border transition-all ${selectedGender === g
+                                                                ? g === 'MAN' ? 'bg-blue-600 border-blue-500 text-white'
+                                                                    : g === 'WOMAN' ? 'bg-pink-600 border-pink-500 text-white'
+                                                                        : g === 'KIDS' ? 'bg-yellow-600 border-yellow-500 text-white'
+                                                                            : 'bg-emerald-600 border-emerald-500 text-white'
+                                                                : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
+                                                            }`}
+                                                        >
+                                                            {g}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-slate-500 uppercase font-bold">
+                                                    카테고리 {selectedGender && selectedGender !== 'UNISEX' ? `(${selectedGender})` : ''}
+                                                </label>
+                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.category} onChange={e => updateDraft(selectedId!, 'category', e.target.value)}>
+                                                    <option value="">선택</option>
+                                                    {(selectedGender && selectedGender !== 'UNISEX'
+                                                        ? categories.filter(cat => cat.classification === selectedGender)
+                                                        : categories
+                                                    ).map(cat => (
+                                                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {/* 등급 + AI 추천 */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">등급</label>
+                                                    {aiResult?.grade && (
+                                                        <button onClick={() => applyAI('condition', aiResult.grade)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                            AI: {aiResult.grade} [적용]
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.condition} onChange={e => handleConditionChange(e.target.value)}>
+                                                    <option value="">선택</option>
+                                                    <option value="S급">S급</option>
+                                                    <option value="A급">A급</option>
+                                                    <option value="B급">B급</option>
+                                                    <option value="V">V (빈티지)</option>
+                                                </select>
+                                            </div>
+                                            {/* 사이즈 + AI 추천 */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">사이즈</label>
+                                                    {aiResult?.suggestedSize && (
+                                                        <button onClick={() => applyAI('size', aiResult.suggestedSize)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                            AI: {aiResult.suggestedSize} [적용]
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.size} onChange={e => updateDraftDebounced(selectedId!, 'size', e.target.value)} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-slate-500 uppercase font-bold">상태</label>
+                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.status} onChange={e => updateDraft(selectedId!, 'status', e.target.value)}>
+                                                    <option value="판매중">판매중</option>
+                                                    <option value="판매완료">판매완료</option>
+                                                    <option value="판매대기">판매대기</option>
+                                                    <option value="수정중">수정중</option>
+                                                    <option value="폐기">폐기</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">소비자가</label>
+                                                    {aiResult?.suggestedConsumerPrice > 0 && (
+                                                        <button onClick={() => applyAI('price_consumer', aiResult.suggestedConsumerPrice)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                            AI: {aiResult.suggestedConsumerPrice.toLocaleString()}원 [적용]
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input type="number" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.price_consumer} onChange={e => updateDraftDebounced(selectedId!, 'price_consumer', Number(e.target.value))} />
+                                            </div>
+                                            {/* 판매가 + AI 추천 */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[10px] text-slate-500 uppercase font-bold">판매가</label>
+                                                    {aiResult?.suggestedPrice && (
+                                                        <button onClick={() => applyAI('price_sell', aiResult.suggestedPrice)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                            AI: {aiResult.suggestedPrice.toLocaleString()}원 [적용]
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input type="number" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.price_sell} onChange={e => updateDraftDebounced(selectedId!, 'price_sell', Number(e.target.value))} />
+                                            </div>
+                                        </div>
+
+                                        {/* 원단 + AI 추천 */}
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] text-slate-500 uppercase font-bold">원단</label>
+                                                {aiResult?.suggestedFabric && (
+                                                    <button onClick={() => applyAI('fabric', aiResult.suggestedFabric)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
+                                                        AI: {aiResult.suggestedFabric} [적용]
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.fabric} onChange={e => updateDraftDebounced(selectedId!, 'fabric', e.target.value)} />
+                                        </div>
+
+                                        {/* 이미지 URLs */}
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-500 uppercase font-bold">이미지 URL (최대 5개)</label>
+                                            {[0, 1, 2, 3, 4].map(i => (
+                                                <input key={i} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white mb-1" placeholder={`이미지 ${i + 1}`}
+                                                    defaultValue={currentDraft.images[i] || ''}
+                                                    onChange={e => {
+                                                        if (!selectedId) return;
+                                                        const val = e.target.value;
+                                                        // 이미지 URL은 pending ref에 직접 저장 (디바운스)
+                                                        const existing = pendingDraftRef.current.get(selectedId) || {};
+                                                        const product = products.find(p => p.id === selectedId);
+                                                        if (!product) return;
+                                                        const currentImages = [...(
+                                                            (existing.images as string[]) ||
+                                                            drafts.get(selectedId)?.images ||
+                                                            parseImages(product)
+                                                        )];
+                                                        while (currentImages.length <= i) currentImages.push('');
+                                                        currentImages[i] = val;
+                                                        existing.images = currentImages;
+                                                        pendingDraftRef.current.set(selectedId, existing);
+                                                        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+                                                        flushTimerRef.current = setTimeout(flushPendingDrafts, 300);
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {/* MD 코멘트는 MD 소개글 AI 생성 섹션에서 자동 삽입됨 */}
+                                    </div>
+
                                     {/* MD 소개글 AI 생성 */}
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest">MD 소개글 AI 생성</h3>
-                                            <div className="flex gap-2">
-                                                {mdGeneratedText && (
-                                                    <button onClick={insertMDComment} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                        MD 코멘트에 삽입
-                                                    </button>
-                                                )}
-                                                <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5">
-                                                    {isMDGenerating ? (
-                                                        <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
-                                                    ) : 'MD 소개글 생성'}
-                                                </button>
-                                            </div>
+                                            <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5">
+                                                {isMDGenerating ? (
+                                                    <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
+                                                ) : 'MD 소개글 생성'}
+                                            </button>
                                         </div>
                                         {mdGeneratedText ? (
-                                            <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
-                                                <p className="text-[11px] text-slate-300 leading-relaxed max-h-[200px] overflow-y-auto whitespace-pre-wrap">{mdGeneratedText.replace(/<[^>]*>/g, '')}</p>
+                                            <div className="space-y-2">
+                                                <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
+                                                    <p className="text-[11px] text-slate-300 leading-relaxed max-h-[200px] overflow-y-auto whitespace-pre-wrap">{mdGeneratedText.replace(/<[^>]*>/g, '')}</p>
+                                                </div>
+                                                <button onClick={insertMDComment} className="w-full px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
+                                                    MD 코멘트에 삽입
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="bg-slate-800 rounded-lg h-16 flex items-center justify-center text-slate-600 text-xs">
@@ -1146,6 +1275,86 @@ export default function ProductEditorPage() {
                                         <div className="bg-white rounded-lg p-3 max-h-[400px] overflow-y-auto">
                                             <div dangerouslySetInnerHTML={{ __html: newHTML }} className="text-black text-xs" />
                                         </div>
+                                    </div>
+
+                                    {/* 이미지 확인 + 뱃지 (하단) */}
+                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
+                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">이미지 확인</h3>
+                                        <div className="flex gap-2">
+                                            {/* 뱃지 썸네일 (대표) */}
+                                            <div className="flex-shrink-0">
+                                                <p className="text-[9px] text-orange-400 font-bold mb-1 text-center">뱃지 썸네일</p>
+                                                <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-800 border-2 border-orange-500/50 relative">
+                                                    {isBadgeProcessing ? (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            <div className="w-5 h-5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                                                        </div>
+                                                    ) : badgePreview ? (
+                                                        <img src={badgePreview} alt="Badge" className="w-full h-full object-contain" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-600 text-[9px] text-center px-1">
+                                                            뱃지 생성<br/>버튼 클릭
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {badgePreview && (
+                                                    <button onClick={applyBadgeToImages} className="mt-1 w-full px-1 py-0.5 bg-orange-600 text-white text-[9px] font-bold rounded hover:bg-orange-700 transition-colors">
+                                                        대표 적용
+                                                    </button>
+                                                )}
+                                                {originalImage0 && (
+                                                    <button onClick={undoBadgeApply} className="mt-1 w-full px-1 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded hover:bg-red-700 transition-colors">
+                                                        적용 취소
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* 상품 이미지 1~5 (이동/삭제 가능) */}
+                                            <div className="flex-1">
+                                                <p className="text-[9px] text-slate-500 font-bold mb-1">상품 이미지 (1~5) — 클릭: 이동/삭제</p>
+                                                <div className="flex gap-1.5">
+                                                    {[0, 1, 2, 3, 4].map(i => (
+                                                        <div key={i} className="flex flex-col items-center gap-0.5">
+                                                            <div className={`w-[60px] h-[60px] rounded-lg overflow-hidden bg-slate-800 border flex-shrink-0 relative group ${i === 0 ? 'border-emerald-500/50' : 'border-white/10'}`}>
+                                                                {currentDraft.images[i] ? (
+                                                                    <>
+                                                                        <img src={currentDraft.images[i]} alt={`img-${i+1}`} className="w-full h-full object-cover" />
+                                                                        <button onClick={() => removeImage(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-[8px] rounded-bl opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">✕</button>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center text-slate-700 text-[10px]">{i + 1}</div>
+                                                                )}
+                                                            </div>
+                                                            {currentDraft.images[i] && (
+                                                                <div className="flex gap-0.5">
+                                                                    {i > 0 && <button onClick={() => swapImages(i, i - 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="왼쪽으로">◀</button>}
+                                                                    {i < 4 && currentDraft.images[i + 1] && <button onClick={() => swapImages(i, i + 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="오른쪽으로">▶</button>}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* 뱃지 재생성 버튼 */}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <button onClick={() => handleBadgeGenerate(true)} disabled={isBadgeProcessing} className="px-3 py-1 bg-sky-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors flex items-center gap-1">
+                                                {isBadgeProcessing ? '생성 중...' : '빠른 뱃지'}
+                                            </button>
+                                            <button onClick={() => handleBadgeGenerate(false)} disabled={isBadgeProcessing} className="px-3 py-1 bg-orange-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center gap-1">
+                                                {isBadgeProcessing ? '생성 중...' : '배경제거+뱃지'}
+                                            </button>
+                                            <span className="text-[10px] text-slate-600">빠른 뱃지: 즉시 / 배경제거: 30초~</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 저장 버튼 (하단 고정) */}
+                                    <div className="flex items-center justify-end gap-2 pt-2 pb-4 sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent">
+                                        <button onClick={() => handleTempSave(selectedId!)} className="px-5 py-2.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors">
+                                            임시저장
+                                        </button>
+                                        <button onClick={() => handleSave(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                                            {saveStatus === 'saving' ? '저장 중...' : '저장'}
+                                        </button>
                                     </div>
                                 </>
                             ) : (

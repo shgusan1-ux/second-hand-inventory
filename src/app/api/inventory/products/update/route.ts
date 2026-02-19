@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         // sold_at은 판매완료 시에만 설정, 그 외엔 NULL로 리셋
         const sold_at_clause = status === '판매완료' ? `sold_at='${new Date().toISOString()}'` : 'sold_at=NULL';
 
-        const finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), ${sold_at_clause} WHERE id=$14`;
+        const finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), ${sold_at_clause}, updated_at=CURRENT_TIMESTAMP, ai_completed=1 WHERE id=$14`;
 
         await db.query(finalQuery, finalParams);
 

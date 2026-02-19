@@ -353,13 +353,15 @@ export function InventoryTable({
                                     <td className="p-3 align-middle font-medium max-w-[200px]" title={product.name}>
                                         <div className="flex items-center gap-2">
                                             <span className="truncate">
-                                                {isEditable ? (
-                                                    <button onClick={() => setEditingProduct(product)} className="hover:underline text-left">
-                                                        {product.name}
-                                                    </button>
-                                                ) : (
-                                                    product.name
-                                                )}
+                                                <button onClick={() => {
+                                                    sessionStorage.setItem('product-editor-data', JSON.stringify([product]));
+                                                    if (categories.length > 0) {
+                                                        sessionStorage.setItem('product-editor-categories', JSON.stringify(categories));
+                                                    }
+                                                    window.open('/inventory/product-editor', '_blank');
+                                                }} className="hover:underline text-left text-violet-700 hover:text-violet-900 font-medium cursor-pointer">
+                                                    {product.name}
+                                                </button>
                                             </span>
                                             <Button
                                                 size="sm"

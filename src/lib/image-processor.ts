@@ -1,43 +1,80 @@
 // @imgly/background-removal은 WASM/ONNX 기반 — SSR에서 초기화 에러 방지를 위해 동적 import
 // import { removeBackground } from "@imgly/background-removal";
 
+// 모듈 캐시: 한 번 import하면 재사용
+let _bgRemovalModule: any = null;
+let _preloadPromise: Promise<any> | null = null;
+
+/**
+ * 페이지 로드 시 사전 호출하여 WASM 모듈을 미리 로드
+ */
+export function preloadBackgroundRemoval(): void {
+    if (_bgRemovalModule || _preloadPromise) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    console.log('[Processor] 배경제거 모델 사전 로드 시작...');
+    _preloadPromise = import("@imgly/background-removal").then(mod => {
+        _bgRemovalModule = mod;
+        console.log('[Processor] 배경제거 모듈 로드 완료 (WASM ready)');
+        return mod;
+    }).catch(err => {
+        console.warn('[Processor] 사전 로드 실패 (사용 시 재시도):', err);
+        _preloadPromise = null;
+    });
+}
+
+async function getBgRemovalModule() {
+    if (_bgRemovalModule) return _bgRemovalModule;
+    if (_preloadPromise) return await _preloadPromise;
+    _bgRemovalModule = await import("@imgly/background-removal");
+    return _bgRemovalModule;
+}
+
 interface ProcessOptions {
     imageUrl: string;
     grade: string; // S, A, B, V
+    quickMode?: boolean; // true = 배경제거 없이 뱃지만 합성 (빠름)
 }
 
-export async function processImageWithBadge({ imageUrl, grade }: ProcessOptions): Promise<Blob> {
-    // 1. Remove background (Client-side AI)
-    // Use Proxy to avoid CORS issues with simple-image fetching inside library
-    // Use absolute URL for proxy to prevent imgly from prepending publicPath (if that happens)
+export async function processImageWithBadge({ imageUrl, grade, quickMode = false }: ProcessOptions): Promise<Blob> {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const proxiedUrl = `${origin}/api/proxy/image?url=${encodeURIComponent(imageUrl)}`;
-    console.log('Starting background removal for:', proxiedUrl);
 
-    // Note: @imgly/background-removal fetches the image internally.
     try {
-        console.log(`[Processor] Requesting background removal...`);
-        console.log(`[Processor] Model Path: ${origin}/models-proxy/ (isnet_quint8)`);
+        let imgBitmap: ImageBitmap;
 
-        // 동적 import — 실제 사용 시에만 WASM/ONNX 모듈 로드
-        const { removeBackground } = await import("@imgly/background-removal");
+        if (quickMode) {
+            // 빠른 모드: 배경제거 없이 원본 이미지에 뱃지만 합성
+            console.log('[Processor] 빠른 모드: 배경제거 건너뜀');
+            const img = await loadImage(imageUrl);
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.naturalWidth;
+            tempCanvas.height = img.naturalHeight;
+            const tempCtx = tempCanvas.getContext('2d')!;
+            tempCtx.drawImage(img, 0, 0);
+            imgBitmap = await createImageBitmap(tempCanvas);
+        } else {
+            // 풀 모드: 배경제거 + 뱃지 합성
+            const proxiedUrl = `${origin}/api/proxy/image?url=${encodeURIComponent(imageUrl)}`;
+            console.log('Starting background removal for:', proxiedUrl);
+            console.log(`[Processor] Requesting background removal...`);
+            console.log(`[Processor] Model Path: ${origin}/models-proxy/ (isnet_quint8)`);
 
-        const blob = await removeBackground(proxiedUrl, {
-            // Next.js rewrite가 /models-proxy/ → staticimgly.com으로 프록시 (CORS 우회)
-            publicPath: `${origin}/models-proxy/`,
-            model: 'isnet_quint8', // 44MB (fp16: 88MB, full: 176MB) - 충분한 품질, 빠른 다운로드
-            debug: true,
-            progress: (key, current, total) => {
-                console.log(`[Processor] Progress (${key}): ${Math.round(current / total * 100)}%`);
-            }
-        });
-        console.log(`[Processor] Background removed! Blob size: ${blob.size} bytes`);
+            const { removeBackground } = await getBgRemovalModule();
 
-        // 2. Load cleaned image
-        const imgBitmap = await createImageBitmap(blob);
+            const blob = await removeBackground(proxiedUrl, {
+                publicPath: `${origin}/models-proxy/`,
+                model: 'isnet_quint8',
+                debug: true,
+                progress: (key: string, current: number, total: number) => {
+                    console.log(`[Processor] Progress (${key}): ${Math.round(current / total * 100)}%`);
+                }
+            });
+            console.log(`[Processor] Background removed! Blob size: ${blob.size} bytes`);
+            imgBitmap = await createImageBitmap(blob);
+        }
+
         console.log(`[Processor] Image bitmap created: ${imgBitmap.width}x${imgBitmap.height}`);
 
-        // 3. Setup Canvas (1024x1024 standsart)
+        // 3. Setup Canvas (1024x1024)
         const canvas = document.createElement('canvas');
         canvas.width = 1024;
         canvas.height = 1024;

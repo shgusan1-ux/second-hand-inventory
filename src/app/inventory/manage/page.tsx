@@ -22,6 +22,9 @@ export default async function InventoryManagePage({
         page?: string;
         field?: string;
         smartstore?: string;
+        ai?: string;
+        updatedStart?: string;
+        updatedEnd?: string;
     }>;
 }) {
     const resolvedParams = await searchParams;
@@ -30,6 +33,8 @@ export default async function InventoryManagePage({
     const excludeCode = resolvedParams.excludeCode || '';
     const startDate = resolvedParams.startDate || '';
     const endDate = resolvedParams.endDate || '';
+    const updatedStart = resolvedParams.updatedStart || '';
+    const updatedEnd = resolvedParams.updatedEnd || '';
     const statusParam = resolvedParams.status || '';
     const categoriesParam = resolvedParams.category || resolvedParams.categories || '';
     const conditionsParam = resolvedParams.conditions || '';
@@ -152,6 +157,27 @@ export default async function InventoryManagePage({
         sqlConditions.push('np.seller_management_code IS NULL');
     } else if (smartstoreParam === 'registered') {
         sqlConditions.push('np.seller_management_code IS NOT NULL');
+    }
+
+    // Updated At Date Range
+    if (updatedStart) {
+        sqlConditions.push(`p.updated_at >= $${paramIndex}`);
+        params.push(`${updatedStart} 00:00:00`);
+        paramIndex++;
+    }
+
+    if (updatedEnd) {
+        sqlConditions.push(`p.updated_at <= $${paramIndex}`);
+        params.push(`${updatedEnd} 23:59:59`);
+        paramIndex++;
+    }
+
+    // AI 작업 필터 (ai_completed 컬럼)
+    const aiParam = resolvedParams.ai || '';
+    if (aiParam === 'done') {
+        sqlConditions.push(`p.ai_completed = 1`);
+    } else if (aiParam === 'undone') {
+        sqlConditions.push(`(p.ai_completed IS NULL OR p.ai_completed = 0)`);
     }
 
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';

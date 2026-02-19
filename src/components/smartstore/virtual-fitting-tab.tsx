@@ -65,6 +65,8 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const [showBulkSearch, setShowBulkSearch] = useState(false);
     const [bulkText, setBulkText] = useState('');
     const [bulkCodes, setBulkCodes] = useState<Set<string>>(new Set());
+    const [pageSize, setPageSize] = useState(50);
+    const [currentPage, setCurrentPage] = useState(1);
     const logRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,6 +139,16 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
 
         return result;
     }, [products, searchTerm, genderFilter, unfittedOnly, fittingResults, sortByAI, aiRanking, bulkCodes]);
+
+    // 필터 변경 시 페이지 1로 리셋
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, genderFilter, unfittedOnly, sortByAI, bulkCodes]);
+
+    // 페이지네이션 계산
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const paged = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filtered.slice(start, start + pageSize);
+    }, [filtered, currentPage, pageSize]);
 
     // 성별별 통계
     const genderStats = useMemo(() => {
@@ -493,9 +505,37 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
 
             {/* 진행률은 새창 에디터에서 표시 */}
 
+            {/* 페이지네이션 컨트롤 */}
+            <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 px-4 py-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">표시:</span>
+                    {[10, 50, 100, 300, 500].map(size => (
+                        <button
+                            key={size}
+                            onClick={() => { setPageSize(size); setCurrentPage(1); }}
+                            className={`px-2 py-1 text-xs rounded font-medium transition-colors ${pageSize === size ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                            {size}개
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">
+                        {filtered.length}개 중 {Math.min((currentPage - 1) * pageSize + 1, filtered.length)}-{Math.min(currentPage * pageSize, filtered.length)}
+                    </span>
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1} className="px-2 py-1 text-xs bg-slate-100 rounded hover:bg-slate-200 disabled:opacity-40">
+                        ◀ 이전
+                    </button>
+                    <span className="text-xs font-medium text-slate-700">{currentPage} / {totalPages}</span>
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="px-2 py-1 text-xs bg-slate-100 rounded hover:bg-slate-200 disabled:opacity-40">
+                        다음 ▶
+                    </button>
+                </div>
+            </div>
+
             {/* 상품 그리드 */}
             <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                {filtered.map(product => {
+                {paged.map(product => {
                     const isSelected = selectedIds.has(product.originProductNo);
                     const gender = extractGender(product.name);
                     const resultUrl = fittingResults.get(product.originProductNo);

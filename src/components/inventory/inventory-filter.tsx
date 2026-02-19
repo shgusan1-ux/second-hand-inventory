@@ -35,6 +35,8 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     const [selectedSizes, setSelectedSizes] = useState<string[]>(searchParams.get('sizes')?.split(',').filter(Boolean) || []);
     const [selectedBrand, setSelectedBrand] = useState(searchParams.get('brand') || 'all');
     const [smartstoreFilter, setSmartstoreFilter] = useState(searchParams.get('smartstore') || 'all');
+    const [aiFilter, setAiFilter] = useState(searchParams.get('ai') || 'all');
+    const [dateType, setDateType] = useState(searchParams.get('dateType') || 'created'); // created or updated
 
     const handleSearch = () => { // Trigger search
         // Smart Parsing for Glued Codes
@@ -66,8 +68,13 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             if (query) params.q = query;
             if (searchField && searchField !== 'all') params.field = searchField;
             if (excludeCode) params.excludeCode = excludeCode;
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
+            if (dateType === 'updated') {
+                if (startDate) params.updatedStart = startDate;
+                if (endDate) params.updatedEnd = endDate;
+            } else {
+                if (startDate) params.startDate = startDate;
+                if (endDate) params.endDate = endDate;
+            }
             if (limit) params.limit = limit;
             if (selectedStatuses.length > 0) params.status = selectedStatuses.join(',');
             if (selectedCategories.length > 0) params.categories = selectedCategories.join(',');
@@ -75,6 +82,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             if (selectedSizes.length > 0) params.sizes = selectedSizes.join(',');
             if (selectedBrand && selectedBrand !== 'all') params.brand = selectedBrand;
             if (smartstoreFilter && smartstoreFilter !== 'all') params.smartstore = smartstoreFilter;
+            if (aiFilter && aiFilter !== 'all') params.ai = aiFilter;
 
             onFilterSearch(params);
             return;
@@ -83,11 +91,15 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         const params = new URLSearchParams();
         if (query) params.set('q', query);
         if (searchField && searchField !== 'all') params.set('field', searchField);
-        // Exclude excludeCode from URL if it's too long, but for now we rely on onFilterSearch
         if (excludeCode) params.set('excludeCode', excludeCode);
 
-        if (startDate) params.set('startDate', startDate);
-        if (endDate) params.set('endDate', endDate);
+        if (dateType === 'updated') {
+            if (startDate) params.set('updatedStart', startDate);
+            if (endDate) params.set('updatedEnd', endDate);
+        } else {
+            if (startDate) params.set('startDate', startDate);
+            if (endDate) params.set('endDate', endDate);
+        }
         if (limit) params.set('limit', limit);
         if (selectedStatuses.length > 0) params.set('status', selectedStatuses.join(','));
         if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
@@ -95,6 +107,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         if (selectedSizes.length > 0) params.set('sizes', selectedSizes.join(','));
         if (selectedBrand && selectedBrand !== 'all') params.set('brand', selectedBrand);
         if (smartstoreFilter && smartstoreFilter !== 'all') params.set('smartstore', smartstoreFilter);
+        if (aiFilter && aiFilter !== 'all') params.set('ai', aiFilter);
 
         params.set('page', '1');
         router.push(`/inventory/manage?${params.toString()}`);
@@ -165,6 +178,8 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         setSelectedConditions([]);
         setSelectedSizes([]);
         setSmartstoreFilter('all');
+        setAiFilter('all');
+        setDateType('created');
 
         if (onReset) {
             onReset();
@@ -273,6 +288,20 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </Select>
                     </div>
 
+                    {/* AI Work */}
+                    <div className="w-full sm:w-[120px]">
+                        <Select value={aiFilter} onValueChange={setAiFilter}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="AI작업" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">AI 전체</SelectItem>
+                                <SelectItem value="done">AI 완료</SelectItem>
+                                <SelectItem value="undone">AI 미완료</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     {/* Category */}
                     <div className="w-full sm:w-[120px]">
                         <Select value={selectedCategories.join(',')} onValueChange={(val) => setSelectedCategories(val ? [val] : [])}>
@@ -319,8 +348,12 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </Select>
                     </div>
 
-                    {/* Date Presets */}
-                    <div className="flex gap-1 border-l pl-2 ml-2">
+                    {/* Date Type + Presets */}
+                    <div className="flex gap-1 border-l pl-2 ml-2 items-center">
+                        <div className="flex bg-slate-200 rounded-md p-0.5 mr-1">
+                            <button onClick={() => setDateType('created')} className={`h-7 px-2 text-[10px] font-bold rounded ${dateType === 'created' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>등록일</button>
+                            <button onClick={() => setDateType('updated')} className={`h-7 px-2 text-[10px] font-bold rounded ${dateType === 'updated' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>수정일</button>
+                        </div>
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('all')} className="h-9 text-xs px-2 text-slate-500">전체</Button>
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('today')} className="h-9 text-xs px-2 text-slate-500">오늘</Button>
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('yesterday')} className="h-9 text-xs px-2 text-slate-500">어제</Button>

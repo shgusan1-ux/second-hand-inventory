@@ -37,8 +37,8 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1400px] h-[95vh] md:h-[90vh] p-0 flex flex-col overflow-hidden">
-        <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+      <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1400px] h-[95vh] md:h-[90vh] p-0 !gap-0 [display:flex] flex-col overflow-hidden [&>button]:z-50">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
           {/* Left Panel - Product Info & Controls */}
           <div className="w-full lg:w-[320px] lg:border-r bg-slate-50 flex flex-col min-h-0">
             <DialogHeader className="p-4 border-b bg-white">
@@ -123,7 +123,7 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
           </div>
 
           {/* Right Panel - HTML Preview/Code */}
-          <div className="flex-1 flex flex-col bg-white">
+          <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold text-slate-900">상세페이지 미리보기</h3>
               <div className="flex gap-2">

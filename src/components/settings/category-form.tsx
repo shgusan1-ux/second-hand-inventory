@@ -176,14 +176,24 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
         document.body.removeChild(link);
     };
 
-    // Search state
+    // Search & Tab state
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState<string>('ALL');
 
-    const filteredCategories = categories.filter(cat =>
-        cat.name.includes(searchTerm) ||
-        cat.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cat.classification?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // 탭별 카테고리 수 계산
+    const tabCounts = CLASSIFICATIONS.reduce((acc, cls) => {
+        acc[cls] = categories.filter(c => c.classification === cls).length;
+        return acc;
+    }, {} as Record<string, number>);
+
+    const filteredCategories = categories.filter(cat => {
+        const matchesTab = activeTab === 'ALL' || cat.classification === activeTab;
+        const matchesSearch = !searchTerm ||
+            cat.name.includes(searchTerm) ||
+            cat.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            cat.classification?.toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesTab && matchesSearch;
+    });
 
     return (
         <div className="space-y-4">
@@ -210,6 +220,34 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
 
             {mode === 'single' ? (
                 <>
+                    {/* 대분류 탭 */}
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => setActiveTab('ALL')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${activeTab === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            전체 ({categories.length})
+                        </button>
+                        {CLASSIFICATIONS.map(cls => (
+                            <button
+                                key={cls}
+                                onClick={() => setActiveTab(cls)}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${activeTab === cls
+                                    ? cls === 'MAN' ? 'bg-blue-500 text-white shadow-sm'
+                                        : cls === 'WOMAN' ? 'bg-pink-500 text-white shadow-sm'
+                                            : cls === 'KIDS' ? 'bg-yellow-500 text-white shadow-sm'
+                                                : 'bg-slate-600 text-white shadow-sm'
+                                    : cls === 'MAN' ? 'text-blue-600 hover:bg-blue-50'
+                                        : cls === 'WOMAN' ? 'text-pink-600 hover:bg-pink-50'
+                                            : cls === 'KIDS' ? 'text-yellow-600 hover:bg-yellow-50'
+                                                : 'text-slate-500 hover:bg-slate-200'
+                                }`}
+                            >
+                                {cls} ({tabCounts[cls] || 0})
+                            </button>
+                        ))}
+                    </div>
+
                     <div className="relative mb-2">
                         <Input
                             placeholder="카테고리 검색 (이름 또는 코드)..."
@@ -221,7 +259,7 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
                     </div>
 
                     <form action={async (formData) => { await addCategory(formData); }} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <select name="classification" className="h-9 rounded-md border border-slate-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        <select name="classification" defaultValue={activeTab !== 'ALL' ? activeTab : 'MAN'} key={activeTab} className="h-9 rounded-md border border-slate-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
                             {CLASSIFICATIONS.map(c => (
                                 <option key={c} value={c}>{c}</option>
                             ))}

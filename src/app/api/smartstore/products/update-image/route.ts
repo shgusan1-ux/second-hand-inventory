@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getNaverToken, getProductDetail, updateProduct } from '@/lib/naver/client';
 import { db } from '@/lib/db';
 import { ensureDbInitialized } from '@/lib/db-init';
+import sharp from 'sharp';
 
 // EC2 프록시를 경유해야 함 (네이버 API는 등록된 고정 IP에서만 요청 허용)
 const PROXY_URL = (process.env.NEXT_PUBLIC_PROXY_URL || process.env.SMARTSTORE_PROXY_URL || 'http://15.164.216.212:3001').trim();
@@ -82,9 +83,21 @@ export async function POST(request: NextRequest) {
             throw new Error(`이미지 다운로드 실패: ${imgRes.status} ${imgRes.statusText}`);
         }
         const arrayBuffer = await imgRes.arrayBuffer();
-        const imageBuffer = Buffer.from(arrayBuffer);
-        const imageUint8Array = new Uint8Array(arrayBuffer);
-        log(`[2/7] 이미지 다운로드 완료: ${imageBuffer.length} bytes`);
+        const rawBuffer = Buffer.from(arrayBuffer);
+        log(`[2/7] 이미지 다운로드 완료: ${rawBuffer.length} bytes`);
+
+        // JPEG로 확실히 변환 (Gemini가 PNG/WebP를 반환할 수 있음 → 네이버는 JPEG만 안정적)
+        let imageBuffer: Buffer;
+        try {
+            imageBuffer = await sharp(rawBuffer)
+                .flatten({ background: { r: 255, g: 255, b: 255 } })
+                .jpeg({ quality: 95 })
+                .toBuffer();
+            log(`[2/7] JPEG 변환 완료: ${rawBuffer.length} → ${imageBuffer.length} bytes`);
+        } catch {
+            imageBuffer = rawBuffer;
+            log(`[2/7] JPEG 변환 스킵 (원본 사용)`);
+        }
 
         // 3. 네이버 이미지 호스팅에 업로드 (EC2 프록시 경유) → 네이버 CDN URL
         log(`[3/7] 네이버 CDN 업로드 중 (프록시: ${PROXY_URL})...`);

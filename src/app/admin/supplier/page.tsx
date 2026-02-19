@@ -15,8 +15,7 @@ interface SupplierStats {
 interface UploadResult {
     success: boolean;
     total: number;
-    inserted: number;
-    updated: number;
+    processed: number;
     errors: number;
 }
 
@@ -57,36 +56,67 @@ export default function SupplierDataPage() {
         }
 
         setIsUploading(true);
-        setUploadProgress(10);
+        setUploadProgress(5);
         setUploadResult(null);
 
         try {
+            // 1단계: 파일 업로드 + 파싱
             const formData = new FormData();
             formData.append('file', file);
+            toast.info('엑셀 파싱 중...');
 
-            setUploadProgress(30);
-
-            const res = await fetch('/api/admin/supplier/upload', {
+            const parseRes = await fetch('/api/admin/supplier/upload', {
                 method: 'POST',
                 body: formData,
             });
+            const parseData = await parseRes.json();
 
-            setUploadProgress(90);
-
-            const data = await res.json();
-
-            if (data.success) {
-                setUploadResult(data);
-                toast.success(`업로드 완료: ${data.inserted}개 신규, ${data.updated}개 업데이트`);
-                fetchStats();
-            } else {
-                toast.error(`업로드 실패: ${data.error}`);
+            if (!parseData.success) {
+                toast.error(`파싱 실패: ${parseData.error}`);
+                return;
             }
+
+            setUploadProgress(15);
+            toast.info(`${parseData.parsed}개 상품 파싱 완료. DB 저장 시작...`);
+
+            // 2단계: 50개씩 청크로 나누어 DB 저장
+            const CHUNK_SIZE = 50;
+            const allRows: any[][] = parseData.rows;
+            let totalProcessed = 0;
+            let totalErrors = 0;
+
+            for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
+                const chunk = allRows.slice(i, i + CHUNK_SIZE);
+                const progress = 15 + Math.floor((i / allRows.length) * 80);
+                setUploadProgress(progress);
+
+                try {
+                    const res = await fetch('/api/admin/supplier/upload', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chunk }),
+                    });
+                    const result = await res.json();
+                    totalProcessed += result.processed || 0;
+                    totalErrors += result.errors || 0;
+                } catch {
+                    totalErrors += chunk.length;
+                }
+            }
+
+            setUploadProgress(100);
+            setUploadResult({
+                success: true,
+                total: parseData.total,
+                processed: totalProcessed,
+                errors: totalErrors,
+            });
+            toast.success(`업로드 완료: ${totalProcessed}개 처리`);
+            fetchStats();
         } catch (err: any) {
             toast.error(`업로드 오류: ${err.message}`);
         } finally {
             setIsUploading(false);
-            setUploadProgress(100);
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
@@ -216,9 +246,8 @@ export default function SupplierDataPage() {
                                 <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                                     <p className="text-sm font-bold text-emerald-400 mb-1">업로드 완료</p>
                                     <div className="text-xs text-slate-300 space-y-0.5">
-                                        <p>총 {uploadResult.total}개 처리</p>
-                                        <p>신규 등록: <span className="text-emerald-400 font-bold">{uploadResult.inserted}</span>개</p>
-                                        <p>업데이트: <span className="text-blue-400 font-bold">{uploadResult.updated}</span>개</p>
+                                        <p>총 {uploadResult.total}개 중</p>
+                                        <p>처리 완료: <span className="text-emerald-400 font-bold">{uploadResult.processed}</span>개</p>
                                         {uploadResult.errors > 0 && (
                                             <p>오류: <span className="text-red-400 font-bold">{uploadResult.errors}</span>개</p>
                                         )}

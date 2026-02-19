@@ -23,6 +23,7 @@ export interface AIAnalysisResult {
     gradeReason: string;
     suggestedPrice: number;
     priceReason: string;
+    suggestedConsumerPrice: number;
     mdDescription: string;
     keywords: string[];
     confidence: number;
@@ -31,6 +32,8 @@ export interface AIAnalysisResult {
     suggestedBrand: string;
     suggestedSize: string;
     suggestedFabric: string;
+    suggestedCategory: string;
+    suggestedGender: string;
 }
 
 /**
@@ -45,25 +48,31 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
     suggestedBrand: string;
     suggestedSize: string;
     suggestedFabric: string;
+    suggestedCategory: string;
+    suggestedGender: string;
+    suggestedConsumerPrice: number;
 }> {
     try {
         const prompt = `
-당신은 중고 의류 전문 감정사입니다. 
+당신은 중고 의류 전문 감정사입니다.
 이미지를 정밀하게 분석하여 다음 정보를 JSON 형식으로 추출해주세요.
 
 입력된 상품명 참고: ${currentName}
 
 추출 항목:
-1. grade: 상태 등급 
+1. grade: 상태 등급
    - S급 (새상품급): 사용감 없음, 오염/손상 없음
    - A급 (사용감 적음): 미세한 사용감, 상태 양호
    - B급 (사용감 있음): 눈에 띄는 사용감, 오염/손상 존재
 2. reason: 등급 판정 근거 (구체적)
 3. confidence: 신뢰도 (0-100)
-4. suggestedName: 상품명 (브랜드 + 카테고리 + 특징 조합하여 간결하게, 예: "나이키 스우시 후드티")
+4. suggestedName: 상품명 (반드시 "영문브랜드 한글브랜드 특징 카테고리종류 성별-사이즈" 형식, 예: "NIKE 나이키 스우시 로고 후드티 MAN-L", "BURBERRY 버버리 노바체크 머플러 WOMAN-FREE"). 성별은 MAN/WOMAN/KIDS/UNISEX 중 하나, 사이즈는 라벨 표기 기준.
 5. suggestedBrand: 브랜드명 (로고나 텍스트로 식별, 식별 불가시 "Generic" 또는 공란)
 6. suggestedSize: 사이즈 (라벨에 적힌 표기 "M", "95", "100" 등, 식별 불가시 공란)
 7. suggestedFabric: 원단/소재 (라벨 텍스트 또는 재질감 추정, 예: "면 100%", "폴리에스터 혼방")
+8. suggestedCategory: 카테고리 (다음 중 하나: 코트, 자켓, 패딩, 점퍼, 셔츠, 블라우스, 니트, 맨투맨, 후드티, 티셔츠, 원피스, 스커트, 바지, 청바지, 가방, 지갑, 모자, 신발, 머플러, 넥타이, 벨트, 악세서리, 기타)
+9. suggestedGender: 성별 판별 (MAN / WOMAN / KIDS / UNISEX 중 하나. 옷의 디자인, 핏, 라벨 표기 등으로 판별)
+10. suggestedConsumerPrice: 소비자가 추천 (새제품 정가의 약 70% 가격을 추천. 브랜드와 카테고리를 고려하여 이 상품이 새것일 때의 정상판매가를 추정하고, 그것의 70%를 원 단위로 반올림하여 제시. 예: 새제품 정가 100,000원이면 소비자가 70,000원)
 
 다음 JSON 형식으로만 답변하세요:
 {
@@ -73,7 +82,10 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
   "suggestedName": "...",
   "suggestedBrand": "...",
   "suggestedSize": "...",
-  "suggestedFabric": "..."
+  "suggestedFabric": "...",
+  "suggestedCategory": "...",
+  "suggestedGender": "MAN",
+  "suggestedConsumerPrice": 70000
 }
 `;
 
@@ -113,7 +125,10 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
             suggestedName: result.suggestedName || currentName,
             suggestedBrand: result.suggestedBrand || '',
             suggestedSize: result.suggestedSize || '',
-            suggestedFabric: result.suggestedFabric || ''
+            suggestedFabric: result.suggestedFabric || '',
+            suggestedCategory: result.suggestedCategory || '',
+            suggestedGender: result.suggestedGender || '',
+            suggestedConsumerPrice: result.suggestedConsumerPrice || 0,
         };
     } catch (error) {
         console.error('Image analysis error:', error);
@@ -124,7 +139,10 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
             suggestedName: currentName,
             suggestedBrand: '',
             suggestedSize: '',
-            suggestedFabric: ''
+            suggestedFabric: '',
+            suggestedCategory: '',
+            suggestedGender: '',
+            suggestedConsumerPrice: 0,
         };
     }
 }
@@ -256,18 +274,18 @@ export async function generateMDDescription(product: {
 4. 마크다운 기호(###, **, --- 등)도 사용하지 마세요.
 5. 자연스러운 한국어로, 격조 있지만 읽기 쉬운 톤으로 작성하세요.
 
-# 출력 구조
+# 출력 구조 (섹션 제목은 반드시 아래 영어 그대로 사용)
 
-[브랜드 헤리티지]
+[Brand Heritage]
 (브랜드의 역사, 패션사 내 위상, 이 라인/컬렉션의 의미)
 
-[디테일 가이드]
+[Detail Guide]
 (이미지에서 확인되는 소재감, 봉제 방식, 디테일 포인트, 에이징 상태)
 
-[아카이브 밸류]
+[Archive Value]
 (이 상품의 투자 가치, 희소성, 컬렉터 관점에서의 매력)
 
-[컬렉터 코멘트]
+[Collector's Comment]
 (감성적인 한 줄 평)`;
 
         // 이미지 Vision 분석 (이미지 직접 확인)
@@ -322,6 +340,11 @@ export async function generateMDDescription(product: {
         description = description.replace(/^###\s*\*?\*?(.+?)\*?\*?\s*$/gm, '[$1]');
         // ** 볼드 마크다운 제거
         description = description.replace(/\*\*(.+?)\*\*/g, '$1');
+        // AI가 자체적으로 생성하는 영문 제목/아카이브명 제거 (예: "OBEY Archive: Box Logo Hoodie - Grey Marl")
+        // [섹션제목] 앞에 나오는 영문 제목 줄 제거
+        description = description.replace(/^[A-Z][A-Za-z\s&':\-–—,.]+(Archive|Collection|Edition|Series|Line)[^\n]*\n*/gm, '');
+        // 첫 줄이 [섹션] 전에 있는 영문 only 줄 제거
+        description = description.replace(/^[A-Z][A-Za-z0-9\s\-–—:,'".()&]+\n(?=\[)/gm, '');
 
         return description;
     } catch (error) {
@@ -445,11 +468,15 @@ export async function analyzeProductComplete(product: {
         keywords: extractKeywords(imageAnalysisResult.suggestedName || product.name),
         confidence: imageAnalysisResult.confidence,
 
+        suggestedConsumerPrice: imageAnalysisResult.suggestedConsumerPrice,
+
         // New columns
         suggestedName: imageAnalysisResult.suggestedName,
         suggestedBrand: imageAnalysisResult.suggestedBrand,
         suggestedSize: imageAnalysisResult.suggestedSize,
-        suggestedFabric: imageAnalysisResult.suggestedFabric
+        suggestedFabric: imageAnalysisResult.suggestedFabric,
+        suggestedCategory: imageAnalysisResult.suggestedCategory,
+        suggestedGender: imageAnalysisResult.suggestedGender,
     };
 }
 

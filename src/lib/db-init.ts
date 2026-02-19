@@ -226,6 +226,8 @@ export async function initDatabase() {
       'ALTER TABLE products ADD COLUMN master_reg_date TIMESTAMP',
       'ALTER TABLE products ADD COLUMN sold_at TIMESTAMP',
       'ALTER TABLE products ADD COLUMN md_comment TEXT',
+      'ALTER TABLE products ADD COLUMN updated_at TIMESTAMP',
+      'ALTER TABLE products ADD COLUMN ai_completed INTEGER DEFAULT 0',
     ];
     for (const sql of productMigrations) {
       try { await db.query(sql); } catch (e) { /* Column likely exists */ }
