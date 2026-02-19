@@ -904,6 +904,7 @@ export async function getInventoryForExport(searchParams: any) {
     const categoriesParam = searchParams.category || searchParams.categories || '';
     const conditionsParam = searchParams.conditions || '';
     const sizesParam = searchParams.sizes || '';
+    const smartstoreParam = searchParams.smartstore || 'all';
 
     let sqlConditions: string[] = [];
     const params: any[] = [];
@@ -1015,15 +1016,28 @@ export async function getInventoryForExport(searchParams: any) {
         paramIndex++;
     }
 
+    // 스마트스토어 필터
+    let naverJoin = '';
+    if (smartstoreParam !== 'all') {
+        naverJoin = 'LEFT JOIN naver_products np ON p.id = np.seller_management_code';
+        if (smartstoreParam === 'unregistered') {
+            sqlConditions.push('np.seller_management_code IS NULL');
+        } else if (smartstoreParam === 'registered') {
+            sqlConditions.push('np.seller_management_code IS NOT NULL');
+        }
+    }
+
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';
 
     try {
         // Updated Query with JOIN
         const sql = `
-            SELECT p.*, c.name as category_name, c.classification as category_classification 
-            FROM products p 
+            SELECT p.*, c.name as category_name, c.classification as category_classification
+            ${naverJoin ? ', np.origin_product_no as smartstore_no, np.status_type as smartstore_status, np.sale_price as smartstore_price' : ''}
+            FROM products p
             LEFT JOIN categories c ON p.category = c.id
-            ${whereClause} 
+            ${naverJoin}
+            ${whereClause}
             ORDER BY p.created_at DESC
         `;
         const result = await db.query(sql, params);

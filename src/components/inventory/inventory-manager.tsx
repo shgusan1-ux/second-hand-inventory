@@ -22,6 +22,7 @@ interface InventoryManagerProps {
     currentPage: number;
     categories: any[];
     brands?: string[];
+    smartstoreStats?: { total: number; registered: number; unregistered: number };
 }
 
 export function InventoryManager({
@@ -30,7 +31,8 @@ export function InventoryManager({
     initialLimit,
     currentPage,
     categories,
-    brands = []
+    brands = [],
+    smartstoreStats
 }: InventoryManagerProps) {
     const [products, setProducts] = useState(initialProducts);
     const [totalCount, setTotalCount] = useState(initialTotalCount);
@@ -254,6 +256,20 @@ export function InventoryManager({
                     </Dialog>
                 </div>
             </div>
+
+            {smartstoreStats && (
+                <div className="flex gap-3 text-xs">
+                    <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 font-medium">
+                        전체 재고 <span className="font-bold text-slate-900">{smartstoreStats.total.toLocaleString()}</span>
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-green-50 text-green-700 font-medium border border-green-200">
+                        스마트스토어 등록상품 <span className="font-bold">{smartstoreStats.registered.toLocaleString()}</span>
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 font-medium border border-orange-200">
+                        스마트스토어 미등록 상품 <span className="font-bold">{smartstoreStats.unregistered.toLocaleString()}</span>
+                    </span>
+                </div>
+            )}
 
             <InventoryFilter
                 brands={brands}

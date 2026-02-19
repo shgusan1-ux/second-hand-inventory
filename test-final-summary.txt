@@ -1,0 +1,15 @@
+TURSO_URL: Not Set
+NAVER_CLIENT_ID: Set
+PROXY_URL: Set
+
+--- Testing Orders Summary (Final Logic) ---
+Summary Result: {
+  "totalCount": 5,
+  "allOrdersCount": 7,
+  "totalAmount": 0,
+  "statusCounts": {
+    "RETURNED": 2,
+    "PURCHASE_DECIDED": 3,
+    "PAYED": 2
+  }
+}

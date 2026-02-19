@@ -215,10 +215,10 @@ export function ProductEditDialog({ open, onClose, product, categories }: Produc
 
     return (
         <Dialog open={open} onOpenChange={(val: boolean) => !val && onClose()}>
-            <DialogContent className="max-w-[95vw] w-[1600px] h-[90vh] p-0 overflow-hidden">
-                <div className="flex h-full overflow-hidden">
+            <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1600px] h-[95vh] md:h-[90vh] p-0 overflow-hidden flex flex-col">
+                <div className="flex flex-col lg:flex-row h-full overflow-hidden">
                     {/* Left Panel - Edit Form */}
-                    <div className="w-[700px] border-r bg-white flex flex-col">
+                    <div className="w-full lg:w-[700px] lg:border-r bg-white flex flex-col min-h-0">
                         <DialogHeader className="p-6 border-b">
                             <div className="flex items-center justify-between">
                                 <DialogTitle>상품 정보 수정: {product.name}</DialogTitle>

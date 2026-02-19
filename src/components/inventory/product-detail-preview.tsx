@@ -37,10 +37,10 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] p-0">
-        <div className="flex h-full">
+      <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1400px] h-[95vh] md:h-[90vh] p-0 flex flex-col overflow-hidden">
+        <div className="flex flex-col lg:flex-row h-full overflow-hidden">
           {/* Left Panel - Product Info & Controls */}
-          <div className="w-[320px] border-r bg-slate-50 flex flex-col">
+          <div className="w-full lg:w-[320px] lg:border-r bg-slate-50 flex flex-col min-h-0">
             <DialogHeader className="p-4 border-b bg-white">
               <DialogTitle className="text-sm">상품 정보</DialogTitle>
             </DialogHeader>

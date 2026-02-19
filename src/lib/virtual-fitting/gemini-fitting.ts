@@ -162,7 +162,7 @@ RULE 4 — MINIMAL COORDINATION: Keep other items extremely simple and subdued.
 [PHOTO SPECIFICATIONS]
 1. SQUARE 1:1 aspect ratio
 2. PURE WHITE (#FFFFFF) infinite studio background — no shadows, no floor line, no props
-3. FULL BODY: head to toe with 15-20% white margin on all sides
+3. FULL BODY: head to toe with exactly 10% white margin on all sides. The person should fill most of the frame
 4. Soft diffused studio lighting, minimal shadows
 5. Model looking STRAIGHT at camera, eye-level
 6. EXACT color, pattern, texture, details of the product from Image 2 — do not alter

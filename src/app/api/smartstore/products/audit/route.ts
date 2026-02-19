@@ -31,12 +31,13 @@ export async function GET() {
 }
 
 // POST: SSE 딥 스캔 (배치 처리)
-// Query params: offset (default 0)
+// Query params: offset (default 0), force (캐시 무시)
 export async function POST(request: Request) {
     await ensureDbInitialized();
 
     const url = new URL(request.url);
     const offset = parseInt(url.searchParams.get('offset') || '0');
+    const force = url.searchParams.get('force') === 'true';
 
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
@@ -125,17 +126,19 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // 최근 30분 이내 스캔된 상품 로드 (건너뛰기용)
-                const { rows: recentAudits } = await db.query(
-                    `SELECT origin_product_no, issues FROM product_audit
-                     WHERE checked_at > datetime('now', '-30 minutes')
-                     AND origin_product_no != '__dup_cache__'`
-                );
+                // 최근 30분 이내 스캔된 상품 로드 (건너뛰기용) - force 모드에서는 캐시 무시
                 const recentMap = new Map<string, string[]>();
-                for (const r of recentAudits) {
-                    try {
-                        recentMap.set(r.origin_product_no, typeof r.issues === 'string' ? JSON.parse(r.issues) : r.issues);
-                    } catch { /* skip */ }
+                if (!force) {
+                    const { rows: recentAudits } = await db.query(
+                        `SELECT origin_product_no, issues FROM product_audit
+                         WHERE checked_at > datetime('now', '-30 minutes')
+                         AND origin_product_no != '__dup_cache__'`
+                    );
+                    for (const r of recentAudits) {
+                        try {
+                            recentMap.set(r.origin_product_no, typeof r.issues === 'string' ? JSON.parse(r.issues) : r.issues);
+                        } catch { /* skip */ }
+                    }
                 }
 
                 send({ type: 'start', total: totalAll, batchSize: products.length, offset, hasMore, skippable: recentMap.size });
@@ -177,7 +180,7 @@ export async function POST(request: Request) {
 
                     try {
                         // 1. 기본 체크 (DB 데이터 기반)
-                        if (!p.thumbnail_url) {
+                        if (!p.thumbnail_url || !p.thumbnail_url.trim()) {
                             issues.push('NO_THUMBNAIL');
                         }
                         if (!p.sale_price || p.sale_price <= 0) {
@@ -193,8 +196,17 @@ export async function POST(request: Request) {
                             }
                         }
 
-                        // 3. 네이버 상세페이지 조회
-                        const detail = await getProductDetail(tokenData.access_token, parseInt(pid));
+                        // 3. 네이버 상세페이지 조회 + 이미지 접근성 체크 (병렬)
+                        const [detail, thumbAccessible] = await Promise.all([
+                            getProductDetail(tokenData.access_token, parseInt(pid)),
+                            p.thumbnail_url ? checkImageAccessible(p.thumbnail_url) : Promise.resolve(true),
+                        ]);
+
+                        // 3-1. 썸네일 이미지 엑박 체크
+                        if (p.thumbnail_url && !thumbAccessible) {
+                            issues.push('IMAGE_BROKEN');
+                        }
+
                         const op = detail.originProduct;
 
                         let detailName = '';
@@ -204,6 +216,10 @@ export async function POST(request: Request) {
                         if (op) {
                             detailName = op.name || '';
                             detailImageUrl = op.images?.representativeImage?.url || '';
+                            const allDetailImages = [
+                                detailImageUrl,
+                                ...(op.images?.optionalImages?.map((img: any) => img.url) || [])
+                            ].filter(Boolean);
                             const detailContent = op.detailContent || '';
                             const plainText = detailContent.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
                             detailContentLength = plainText.length;
@@ -212,12 +228,34 @@ export async function POST(request: Request) {
                             const nameIssues = checkNameIssues(p.name, detailName, plainText);
                             issues.push(...nameIssues);
 
-                            // 6. 대표이미지 불일치 체크
+                            // 5. 대표이미지 불일치 체크 (리스팅 썸네일 vs API 대표이미지)
                             if (p.thumbnail_url && detailImageUrl) {
-                                const thumbBase = normalizeImageUrl(p.thumbnail_url);
-                                const detailBase = normalizeImageUrl(detailImageUrl);
-                                if (thumbBase && detailBase && thumbBase !== detailBase) {
-                                    issues.push('IMAGE_MISMATCH');
+                                const thumbPath = normalizeImageUrl(p.thumbnail_url);
+                                const detailPath = normalizeImageUrl(detailImageUrl);
+                                if (thumbPath && detailPath && thumbPath !== detailPath) {
+                                    // 추가 이미지에도 없으면 완전 불일치
+                                    const inOptional = allDetailImages.some(
+                                        img => normalizeImageUrl(img) === thumbPath
+                                    );
+                                    if (!inOptional) {
+                                        issues.push('IMAGE_MISMATCH');
+                                    }
+                                }
+                            }
+
+                            // 6. 상세 대표이미지 엑박 체크
+                            if (detailImageUrl && !issues.includes('IMAGE_BROKEN')) {
+                                const detailImgOk = await checkImageAccessible(detailImageUrl);
+                                if (!detailImgOk) {
+                                    issues.push('IMAGE_BROKEN');
+                                }
+                            }
+
+                            // 6-1. 상세 HTML 내 빈 이미지 src 체크 (<img src=""> 또는 공백)
+                            const emptyImgMatch = detailContent.match(/<img[^>]*\ssrc\s*=\s*["'](\s*)["']/gi);
+                            if (emptyImgMatch && emptyImgMatch.length > 0) {
+                                if (!issues.includes('IMAGE_BROKEN')) {
+                                    issues.push('IMAGE_BROKEN');
                                 }
                             }
 
@@ -234,9 +272,6 @@ export async function POST(request: Request) {
                         } else {
                             issues.push('NO_DETAIL');
                         }
-
-                        // NOTE: HEAD 이미지 체크는 벌크 스캔에서 제거 (타임아웃 원인)
-                        // 개별 재확인(PUT)에서만 수행
 
                         // DB 저장 (upsert)
                         await db.query(
@@ -395,14 +430,10 @@ export async function PUT(request: Request) {
             issues.push('NO_DETAIL');
         }
 
-        // 이미지 접근 체크 (개별 재확인에서만)
+        // 이미지 접근 체크
         if (p.thumbnail_url) {
-            try {
-                const imgRes = await fetch(p.thumbnail_url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-                if (!imgRes.ok) issues.push('IMAGE_BROKEN');
-            } catch {
-                issues.push('IMAGE_BROKEN');
-            }
+            const ok = await checkImageAccessible(p.thumbnail_url);
+            if (!ok) issues.push('IMAGE_BROKEN');
         }
 
         // DB 저장
@@ -551,14 +582,58 @@ function checkNameIssues(listingName: string, detailName: string, plainText: str
     return issues;
 }
 
-// 이미지 URL 정규화 (쿼리 파라미터 제거, 도메인 차이 무시)
+// 이미지 URL 정규화 (쿼리 파라미터 제거, 전체 경로 비교)
 function normalizeImageUrl(url: string): string {
     try {
         const u = new URL(url);
-        // 경로의 마지막 부분만 비교 (파일명)
-        const path = u.pathname;
-        return path.split('/').pop() || path;
+        // 전체 pathname 비교 (도메인 차이만 무시)
+        return u.pathname;
     } catch {
         return url;
+    }
+}
+
+// 이미지 접근 가능 여부 체크 (실제 데이터 일부를 받아서 검증)
+async function checkImageAccessible(url: string): Promise<boolean> {
+    try {
+        // GET으로 실제 이미지 데이터를 받아 검증 (HEAD는 CDN에서 부정확할 수 있음)
+        const res = await fetch(url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(3000),
+            redirect: 'follow',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Range': 'bytes=0-1023', // 첫 1KB만 요청
+            },
+        });
+
+        // HTTP 에러
+        if (!res.ok && res.status !== 206) return false;
+
+        // Content-Type이 이미지가 아니면 엑박 (HTML 에러페이지 등)
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.startsWith('image/')) return false;
+
+        // Content-Length가 너무 작으면 깨진 이미지 (빈 파일 등)
+        const contentLength = parseInt(res.headers.get('content-length') || '0');
+        if (contentLength > 0 && contentLength < 100) return false;
+
+        // 실제 바이트를 읽어서 이미지 매직바이트 확인
+        const reader = res.body?.getReader();
+        if (!reader) return false;
+        const { value } = await reader.read();
+        reader.cancel();
+
+        if (!value || value.length < 4) return false;
+
+        // 매직바이트 검증: JPEG(FF D8 FF), PNG(89 50 4E 47), GIF(47 49 46), WebP(52 49 46 46)
+        const isJpeg = value[0] === 0xFF && value[1] === 0xD8 && value[2] === 0xFF;
+        const isPng = value[0] === 0x89 && value[1] === 0x50 && value[2] === 0x4E && value[3] === 0x47;
+        const isGif = value[0] === 0x47 && value[1] === 0x49 && value[2] === 0x46;
+        const isWebp = value[0] === 0x52 && value[1] === 0x49 && value[2] === 0x46 && value[3] === 0x46;
+
+        return isJpeg || isPng || isGif || isWebp;
+    } catch {
+        return false;
     }
 }

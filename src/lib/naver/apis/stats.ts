@@ -1,5 +1,5 @@
 import { naverRequest } from '../client';
-import { getNaverOrders } from './orders';
+import { getNaverOrders, getNaverOrderList } from './orders';
 
 export async function getNaverChannels() {
     return naverRequest('/v1/seller/channels');
@@ -30,22 +30,52 @@ export async function getHourlySalesPerformance(channelNo: string | number, date
 
 /**
  * 주문 데이터를 기반으로 한 간단한 요약 통계
+ * Uses Search API for better accuracy over 30 days
  */
-export async function getOrdersSummary(days: number = 7) {
-    const startDateTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const orders = await getNaverOrders({ startDateTime });
+export async function getOrdersSummary(days: number = 30) {
+    // const startDateTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    // const orders = await getNaverOrders({ startDateTime });
 
-    // 간단한 집계 logic
-    const contents = orders.contents || [];
+    // Use List Search API
+    const orders = await getNaverOrderList(days);
+
+    // Search API typically returns a list of orders (or changed statuses)
+    // We need to handle potential different structures: `content` (from search) or `lastChangeStatuses` (from last-changed)
+    const contents = orders?.data?.content || orders?.data?.lastChangeStatuses || orders?.content || [];
+
+    // Filter for valid sales to calculate amount
+    // Valid statuses: PAYMENT_COMPLETED, PREPARING_PRODUCT, SHIPPING, DELIVERY_COMPLETED, DECIDED_TO_PURCHASE
+    // Naver Search API returns status codes which might differ slightly (e.g. PAYED vs PAYMENT_COMPLETED)
+    // Exclude: WAITING_FOR_PAYMENT, CANCELLED, RETURNED, EXCHANGED (unless exchange completed?)
+    const validStatuses = [
+        'PAYMENT_COMPLETED', 'PAYED',
+        'PREPARING_PRODUCT', 'PRODUCT_PREPARING',
+        'SHIPPING', 'IN_DELIVERY',
+        'DELIVERY_COMPLETED', 'DELIVERY_DONE',
+        'PURCHASE_DECIDED', 'DECIDED', 'CONFIRM_OVER'
+    ];
+
+    // Note: The object key for status might vary depending on endpoint. 
+    // last-changed-statuses returns `productOrderStatus`
+    // product-orders (search) returns `productOrderStatus`
+
+    const validOrders = contents.filter((o: any) => validStatuses.includes(o.productOrderStatus));
+
     const summary = {
-        totalCount: contents.length,
-        totalAmount: contents.reduce((acc: number, curr: any) => acc + (curr.payAmount || 0), 0),
+        totalCount: validOrders.length, // Count only valid sales? Or all orders? Usually "Sales" implies valid.
+        // Let's keep totalCount as "All interaction count" or "Order Count" but totalAmount as "Sales Amount"
+        // Actually, user probably wants "Orders Placed" (including cancels initially) vs "Revenue".
+        // Let's count ALL for 'totalCount' but 'totalAmount' only for valid.
+        allOrdersCount: contents.length,
+        totalAmount: validOrders.reduce((acc: number, curr: any) => acc + (curr.totalPaymentAmount || curr.payAmount || 0), 0),
         statusCounts: {} as Record<string, number>,
     };
 
     contents.forEach((order: any) => {
         const status = order.productOrderStatus;
-        summary.statusCounts[status] = (summary.statusCounts[status] || 0) + 1;
+        if (status) {
+            summary.statusCounts[status] = (summary.statusCounts[status] || 0) + 1;
+        }
     });
 
     return summary;

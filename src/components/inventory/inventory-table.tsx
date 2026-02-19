@@ -187,24 +187,25 @@ export function InventoryTable({
                     </span>
                     <div className="flex gap-2">
                         {isEditable && (
-                            <>
-                                <Button size="sm" variant="destructive" onClick={handleBulkDelete} className="h-8 text-xs font-semibold hover:bg-red-600 transition-colors">
-                                    선택 삭제
-                                </Button>
-                                <Button size="sm" variant="secondary" onClick={() => setBulkEditOpen(true)} className="h-8 text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-colors">
-                                    <Edit className="w-3 h-3 mr-2" />
-                                    일괄 수정
-                                </Button>
-                                <BulkAiUpdateDialog selectedIds={selectedIds} onSuccess={() => {
-                                    setSelectedIds([]);
-                                    if (isBulkMode) {
-                                        // For bulk mode, ideally we should refresh parent state.
-                                    } else {
-                                        router.refresh();
-                                    }
-                                }} />
-                            </>
+                            <Button size="sm" variant="destructive" onClick={handleBulkDelete} className="h-8 text-xs font-semibold hover:bg-red-600 transition-colors">
+                                선택 삭제
+                            </Button>
                         )}
+                        <Button size="sm" variant="secondary" onClick={() => {
+                            if (selectedIds.length > 50) {
+                                toast.error('상품 에디터는 최대 50개까지 선택할 수 있습니다.');
+                                return;
+                            }
+                            const selectedProducts = products.filter((p: any) => selectedIds.includes(p.id));
+                            sessionStorage.setItem('product-editor-data', JSON.stringify(selectedProducts));
+                            if (categories.length > 0) {
+                                sessionStorage.setItem('product-editor-categories', JSON.stringify(categories));
+                            }
+                            window.open('/inventory/product-editor', '_blank');
+                        }} className="h-8 text-xs font-semibold hover:bg-violet-500 hover:text-white transition-colors">
+                            <Edit className="w-3 h-3 mr-2" />
+                            상품 에디터
+                        </Button>
                         <Button size="sm" variant="secondary" onClick={() => handleDownloadExcel('selected')} className="h-8 text-xs font-semibold hover:bg-blue-500 hover:text-white transition-colors">
                             <Download className="w-3 h-3 mr-2" />
                             선택 엑셀
@@ -288,6 +289,7 @@ export function InventoryTable({
                                     상태 <SortIcon col="status" />
                                 </div>
                             </th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-center">스토어</th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right">
                                 {isEditable ? '관리' : '스마트스토어'}
                             </th>
@@ -295,7 +297,7 @@ export function InventoryTable({
                     </thead>
                     <tbody className="[&_tr:last-child]:border-0 divide-y">
                         {products.length === 0 ? (
-                            <tr><td colSpan={12} className="p-10 text-center text-slate-500">검색 조건에 맞는 상품이 없습니다.</td></tr>
+                            <tr><td colSpan={13} className="p-10 text-center text-slate-500">검색 조건에 맞는 상품이 없습니다.</td></tr>
                         ) : (
                             products.map((product) => (
                                 <tr key={product.id} className={`transition-colors hover:bg-slate-50 ${selectedIds.includes(product.id) ? 'bg-emerald-50/50' : ''}`}>
@@ -454,9 +456,30 @@ export function InventoryTable({
                                             {product.status}
                                         </span>
                                     </td>
+                                    <td className="p-3 align-middle text-center">
+                                        {product.smartstore_no ? (
+                                            <a
+                                                href={`https://smartstore.naver.com/brownstreet/products/${product.smartstore_no}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                title={`스마트스토어 #${product.smartstore_no}`}
+                                            >
+                                                <Badge variant="outline" className={`text-[10px] cursor-pointer ${
+                                                    product.smartstore_status === 'SALE' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
+                                                    product.smartstore_status === 'OUTOFSTOCK' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' :
+                                                    'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                                }`}>
+                                                    {product.smartstore_status === 'SALE' ? '판매중' :
+                                                     product.smartstore_status === 'OUTOFSTOCK' ? '품절' :
+                                                     product.smartstore_status === 'SUSPENSION' ? '중지' : '대기'}
+                                                </Badge>
+                                            </a>
+                                        ) : (
+                                            <span className="text-[10px] text-slate-400">미등록</span>
+                                        )}
+                                    </td>
                                     <td className="p-3 align-middle text-right">
                                         <div className="flex justify-end gap-2">
-                                            {/* SmartStoreButton removed */}
                                             {isEditable && (
                                                 <>
                                                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="수정">

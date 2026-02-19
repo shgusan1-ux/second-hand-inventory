@@ -9,9 +9,11 @@
  * 5. 가상 피팅 - 나노바나나 스타일
  */
 
-// Gemini API 설정 (Google AI) - 3.0 Pro 고정
+// Gemini API 설정
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// MD코멘트 전용 고품질 모델 (Gemini 2.5 Flash)
+const GEMINI_MD_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent';
 
 // Replicate API 설정 (가상 피팅용)
 const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';
@@ -230,37 +232,80 @@ export async function generateMDDescription(product: {
     imageUrl?: string;
 }): Promise<string> {
     try {
-        const prompt = `
-당신은 중고 의류 쇼핑몰의 전문 MD입니다.
-다음 상품에 대한 매력적인 상품 소개를 작성해주세요.
+        const prompt = `# 역할 정의
+당신은 세계 최고의 중고 의류 패션 큐레이터 **'MD 소개'**입니다. 단순히 옷을 파는 것이 아니라, 옷에 담긴 역사적 가치를 발굴하여 컬렉터들에게 전달하는 아카이브 전문가이자 자산 가치 평가사입니다.
 
-상품명: ${product.name}
-브랜드: ${product.brand}
-카테고리: ${product.category}
-등급: ${product.condition}
-사이즈: ${product.size || '미기재'}
-소재/원단: ${product.fabric || '상세설명 참조'}
+# 핵심 미션
+1. **브랜드 헤리티지 우선**: 모든 설명은 브랜드의 역사적 기원, 패션사 내 위상, 특정 라인의 희소성부터 서술합니다.
+2. **SEO 최적화 명칭**: 기존 상품명을 분석하여 컬렉터가 선호하는 키워드(Archive, 90s-00s, Deadstock, Technical, Sartorial 등)를 조합한 품격 있는 이름으로 재정의합니다.
+3. **지능적 시세 제안 (Archive Value)**: 브랜드의 현재 위상과 소재를 분석하여 '아카이브 밸류'라는 용어를 사용하여 투자 가치를 설득합니다.
+4. **디테일 Deep Dive**: 소재의 에이징, 봉제 방식, 특정 연식의 디테일 등 전문가적 팁을 포함합니다.
 
-요구사항:
-1. 3-5문장으로 간결하게
-2. 브랜드의 특징과 가치 강조
-3. 소재의 장점과 상품의 활용도 설명
-4. 구매 욕구를 자극하는 표현 사용
-5. 이모지 적절히 활용
-6. HTML 태그 사용 (p, strong, br 등)
+# 분석할 상품 정보
+- 상품명: ${product.name}
+- 브랜드: ${product.brand}
+- 카테고리: ${product.category}
+- 등급: ${product.condition}
+- 사이즈: ${product.size || '미기재'}
+- 소재/원단: ${product.fabric || '이미지에서 확인'}
 
-예시 톤:
-"✨ ${product.brand}의 시그니처 아이템! 
-<strong>빈티지 감성</strong>과 실용성을 모두 갖춘 이 제품은..."
-`;
+# 출력 규칙
+1. 반드시 이미지를 직접 분석하여 실제 보이는 디테일(색상, 패턴, 소재감, 봉제, 라벨, 버튼, 지퍼 등)을 묘사하세요.
+2. 아래 구조를 따르되, 각 항목은 2~3문장으로 작성하세요.
+3. HTML 태그 없이 순수 텍스트로만 작성하세요.
+4. 마크다운 기호(###, **, --- 등)도 사용하지 마세요.
+5. 자연스러운 한국어로, 격조 있지만 읽기 쉬운 톤으로 작성하세요.
 
-        const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+# 출력 구조
+
+[브랜드 헤리티지]
+(브랜드의 역사, 패션사 내 위상, 이 라인/컬렉션의 의미)
+
+[디테일 가이드]
+(이미지에서 확인되는 소재감, 봉제 방식, 디테일 포인트, 에이징 상태)
+
+[아카이브 밸류]
+(이 상품의 투자 가치, 희소성, 컬렉터 관점에서의 매력)
+
+[컬렉터 코멘트]
+(감성적인 한 줄 평)`;
+
+        // 이미지 Vision 분석 (이미지 직접 확인)
+        const parts: any[] = [{ text: prompt }];
+        if (product.imageUrl) {
+            try {
+                const imageBase64 = await fetchImageAsBase64(product.imageUrl);
+                const mimeType = product.imageUrl.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+                parts.push({
+                    inline_data: {
+                        mime_type: mimeType,
+                        data: imageBase64
+                    }
+                });
+            } catch (imgErr) {
+                console.warn('MD소개글: 이미지 로드 실패, 텍스트만으로 생성', imgErr);
+            }
+        }
+
+        // MD코멘트는 고품질 모델 사용 (Gemini 2.5 Flash), 실패 시 2.0 Flash 폴백
+        let response = await fetch(`${GEMINI_MD_URL}?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
+                contents: [{ parts }]
             })
         });
+
+        if (!response.ok) {
+            console.warn('Gemini 2.5 Flash 실패, 2.0 Flash로 폴백');
+            response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts }]
+                })
+            });
+        }
 
         const data = await response.json();
 
@@ -270,14 +315,18 @@ export async function generateMDDescription(product: {
 
         let description = data.candidates[0].content.parts[0].text.trim();
 
-        // Markdown 제거
-        description = description.replace(/```html\n?|\n?```/g, '');
+        // Markdown/HTML/코드블록 잔여물 제거
+        description = description.replace(/```[a-z]*\n?|\n?```/g, '');
+        description = description.replace(/^---$/gm, '');
+        // ### 마크다운 헤더 → 대괄호 섹션 형태로 정리
+        description = description.replace(/^###\s*\*?\*?(.+?)\*?\*?\s*$/gm, '[$1]');
+        // ** 볼드 마크다운 제거
+        description = description.replace(/\*\*(.+?)\*\*/g, '$1');
 
         return description;
     } catch (error) {
         console.error('MD description generation error:', error);
-        return `<p><strong>${product.brand}</strong>의 ${product.category} 상품입니다.</p>
-<p>등급: ${product.condition} - 상태 양호한 제품입니다.</p>`;
+        return `${product.brand}의 ${product.category} 상품입니다. ${product.condition} 등급으로 상태가 양호합니다. 실물 사진을 확인해주세요.`;
     }
 }
 

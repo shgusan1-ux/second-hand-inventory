@@ -269,12 +269,13 @@ export default function FittingEditorPage() {
         }
     };
 
-    // 네이버 동기화
-    const syncSingleToNaver = async (product: ProductData) => {
+    // 네이버 동기화 (mode: replace=대표이미지 교체, append=추가이미지로 넣기)
+    const syncSingleToNaver = async (product: ProductData, mode: 'replace' | 'append' = 'replace') => {
         const result = results.get(product.originProductNo);
         if (!result) return;
 
-        addLog(`${product.originProductNo} 네이버 동기화 시작...`);
+        const modeLabel = mode === 'append' ? '추가이미지로 넣기' : '대표이미지 교체';
+        addLog(`${product.originProductNo} 네이버 동기화 (${modeLabel}) 시작...`);
 
         try {
             const res = await fetch('/api/smartstore/products/update-image', {
@@ -283,6 +284,7 @@ export default function FittingEditorPage() {
                 body: JSON.stringify({
                     originProductNo: product.originProductNo,
                     imageUrl: result.resultUrl,
+                    mode,
                 }),
             });
 
@@ -471,14 +473,24 @@ export default function FittingEditorPage() {
                                                     저장됨
                                                 </span>
                                             )}
-                                            {/* 네이버 동기화 */}
+                                            {/* 네이버 동기화 - 추가이미지로 넣기 (뱃지 유지) */}
+                                            {selectedResult && (
+                                                <button
+                                                    onClick={() => syncSingleToNaver(selectedP, 'append')}
+                                                    disabled={isProcessing}
+                                                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                                >
+                                                    추가이미지로 넣기
+                                                </button>
+                                            )}
+                                            {/* 네이버 동기화 - 대표이미지 교체 */}
                                             {selectedResult && !selectedResult.naverSynced && (
                                                 <button
-                                                    onClick={() => syncSingleToNaver(selectedP)}
+                                                    onClick={() => syncSingleToNaver(selectedP, 'replace')}
                                                     disabled={isProcessing}
                                                     className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                                                 >
-                                                    네이버 동기화
+                                                    대표이미지 교체
                                                 </button>
                                             )}
                                             {/* 다른 코디로 다시하기 */}
@@ -504,7 +516,7 @@ export default function FittingEditorPage() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
                                         <div>
                                             <p className="text-xs text-slate-500 mb-2 text-center font-medium uppercase tracking-wider">원본 이미지</p>
                                             <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/5">

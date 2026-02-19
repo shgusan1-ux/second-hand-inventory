@@ -79,20 +79,20 @@ export function MobileHeader({ user }: { user?: any }) {
     };
 
     return (
-        <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50 overflow-visible">
+        <div className="md:hidden flex flex-col fixed top-0 left-0 right-0 z-50 overflow-x-hidden">
             {/* Header Bar */}
             <div className={cn(
-                "h-14 border-b transition-all duration-300 flex items-center px-3 relative overflow-visible",
+                "h-14 border-b transition-all duration-300 flex items-center px-3 relative overflow-x-hidden",
                 scrolled
                     ? "bg-black/20 backdrop-blur-sm border-white/5"
                     : "bg-black/80 backdrop-blur-md border-slate-700/50"
             )}>
                 {isSearchOpen ? (
-                    <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200 w-full">
+                    <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200 w-full max-w-full">
                         <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} className="text-slate-400 hover:text-white shrink-0">
                             <ArrowLeft className="h-5 w-5" />
                         </Button>
-                        <div className="flex-1 relative">
+                        <div className="flex-1 relative min-w-0">
                             <input
                                 ref={inputRef}
                                 type="text"

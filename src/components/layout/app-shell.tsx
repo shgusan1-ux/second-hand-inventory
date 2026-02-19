@@ -13,7 +13,7 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     // Standalone pages that don't need the sidebar/header
-    const isStandalone = pathname === '/smartstore/vision-analyzer' || pathname === '/smartstore/fitting-editor';
+    const isStandalone = pathname === '/smartstore/vision-analyzer' || pathname === '/smartstore/fitting-editor' || pathname === '/inventory/product-editor' || pathname === '/admin/supplier';
 
     if (isStandalone) {
         return <>{children}</>;
@@ -52,10 +52,13 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
             )}
 
             <main className={cn(
-                "flex-1 overflow-x-hidden p-3 pt-16 md:p-8 md:pt-8 w-full transition-all duration-300",
+                "flex-1 overflow-x-hidden p-3 md:p-8 w-full transition-all duration-300",
+                "pt-16 md:pt-8",
                 isCollapsed ? "md:max-w-full" : ""
             )}>
-                {children}
+                <div className="max-w-full overflow-x-hidden">
+                    {children}
+                </div>
             </main>
         </div>
     );

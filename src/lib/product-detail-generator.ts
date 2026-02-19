@@ -4,7 +4,9 @@ export function generateProductDetailHTML(product: any): string {
   const mainImage = imageUrls[0] || '';
 
   const measurements = parseMeasurements(product);
-  const mdComment = generateMDComment(product);
+  const rawMdComment = product.md_comment || generateMDComment(product);
+  // 줄바꿈을 <br>로 변환하여 HTML에서 포맷 유지
+  const mdComment = rawMdComment.replace(/\n/g, '<br>');
   const gradeInfo = getGradeInfo(product.condition || 'A급');
   const fabric = product.fabric || '케어라벨 미부착으로 확인불가';
 
@@ -35,7 +37,7 @@ export function generateProductDetailHTML(product: any): string {
     <div style="display:inline-block; text-align:left; width:100%; max-width:520px;">
       <ul style="list-style:none; padding:0; font-size:14px; line-height:2.0; margin:0;">
         <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">BRAND</strong> <b>${product.brand || '-'}</b></li>
-        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${product.size || '-'}</li>
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${formatSizeWithGender(product.size, product.category_classification)}</li>
         <li><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">FABRIC</strong> ${fabric}</li>
       </ul>
     </div>
@@ -140,6 +142,13 @@ function generateMDComment(product: any): string {
   // Use product ID or name length for deterministic selection (avoid Math.random for SSR)
   const index = product.id ? (product.id.length % comments.length) : 0;
   return comments[index];
+}
+
+function formatSizeWithGender(size: string | undefined, classification: string | undefined): string {
+    if (!size) return '-';
+    if (!classification || classification === '악세사리' || classification === '기타') return size;
+    // MAN, WOMAN, KIDS → prefix (예: WOMAN-M, MAN-L, KIDS-110)
+    return `${classification}-${size}`;
 }
 
 function getGradeInfo(condition: string): string {

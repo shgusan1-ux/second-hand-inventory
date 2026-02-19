@@ -218,6 +218,19 @@ export async function initDatabase() {
     `);
 
 
+    // products 테이블 마이그레이션 (누락 가능한 컬럼)
+    const productMigrations = [
+      'ALTER TABLE products ADD COLUMN images TEXT DEFAULT \'[]\'',
+      'ALTER TABLE products ADD COLUMN size TEXT',
+      'ALTER TABLE products ADD COLUMN fabric TEXT',
+      'ALTER TABLE products ADD COLUMN master_reg_date TIMESTAMP',
+      'ALTER TABLE products ADD COLUMN sold_at TIMESTAMP',
+      'ALTER TABLE products ADD COLUMN md_comment TEXT',
+    ];
+    for (const sql of productMigrations) {
+      try { await db.query(sql); } catch (e) { /* Column likely exists */ }
+    }
+
     // naver_products에 description_grade 컬럼 추가 (상세페이지 GRADE: S/A/B/V)
     try {
       await db.query(`ALTER TABLE naver_products ADD COLUMN description_grade TEXT`);
@@ -312,6 +325,69 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // 공급사 원본 상품 데이터 (코너로지스)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS supplier_products (
+        product_code TEXT PRIMARY KEY,
+        barcode TEXT,
+        name TEXT,
+        price INTEGER DEFAULT 0,
+        brand TEXT,
+        brand_kr TEXT,
+        condition_status TEXT,
+        labeled_size TEXT,
+        recommended_size TEXT,
+        season TEXT,
+        gender TEXT,
+        category1 TEXT,
+        category2 TEXT,
+        length_type TEXT,
+        sleeve_type TEXT,
+        category_no TEXT,
+        fabric1 TEXT,
+        fabric2 TEXT,
+        fabric_raw TEXT,
+        detail TEXT,
+        style TEXT,
+        color TEXT,
+        defect TEXT DEFAULT 'N',
+        received_at TEXT,
+        processed_at TEXT,
+        stock_status TEXT,
+        return_status TEXT,
+        return_reason TEXT,
+        length1 REAL,
+        chest REAL,
+        length2 REAL,
+        waist REAL,
+        thigh REAL,
+        hem REAL,
+        rise REAL,
+        hip REAL,
+        shoulder REAL,
+        arm_length REAL,
+        acc_height REAL,
+        acc_width REAL,
+        bag_width REAL,
+        bag_depth REAL,
+        bag_height REAL,
+        hat_circumference REAL,
+        hat_depth REAL,
+        hat_brim REAL,
+        shoe_length REAL,
+        shoe_ankle REAL,
+        shoe_width REAL,
+        shoe_heel REAL,
+        image_urls TEXT DEFAULT '[]',
+        logo_image TEXT,
+        label_image TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_supplier_barcode ON supplier_products(barcode)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_supplier_brand ON supplier_products(brand)`);
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS product_audit (

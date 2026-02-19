@@ -961,20 +961,21 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   };
 
   // 딥 스캔 실행 (배치 자동 연속)
-  const startAuditScan = async () => {
+  const startAuditScan = async (force = false) => {
     if (scanning) return;
     const abortController = new AbortController();
     scanAbortRef.current = abortController;
     setScanning(true);
-    setScanProgress({ current: 0, total: 0, message: '스캔 시작...' });
+    setScanProgress({ current: 0, total: 0, message: force ? '전체 재스캔 시작...' : '스캔 시작...' });
 
     const newResults = new Map<string, string[]>();
     let currentOffset = 0;
     let hasMore = true;
+    const forceParam = force ? '&force=true' : '';
 
     try {
       while (hasMore && !abortController.signal.aborted) {
-        const res = await fetch(`/api/smartstore/products/audit?offset=${currentOffset}`, {
+        const res = await fetch(`/api/smartstore/products/audit?offset=${currentOffset}${forceParam}`, {
           method: 'POST',
           signal: abortController.signal,
         });
@@ -1478,12 +1479,20 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   {auditResults.size > 0 ? `${auditResults.size}개 문제 상품 발견` : '스캔 결과 없음'}
                 </span>
                 {auditLoaded && !scanning && (
-                  <button
-                    onClick={startAuditScan}
-                    className="px-4 py-2 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700 active:scale-95 transition-all"
-                  >
-                    딥 스캔 시작
-                  </button>
+                  <>
+                    <button
+                      onClick={() => startAuditScan(false)}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700 active:scale-95 transition-all"
+                    >
+                      딥 스캔
+                    </button>
+                    <button
+                      onClick={() => startAuditScan(true)}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-orange-600 text-white hover:bg-orange-700 active:scale-95 transition-all"
+                    >
+                      전체 재스캔
+                    </button>
+                  </>
                 )}
                 {scanning && (
                   <button

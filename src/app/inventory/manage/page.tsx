@@ -21,6 +21,7 @@ export default async function InventoryManagePage({
         limit?: string;
         page?: string;
         field?: string;
+        smartstore?: string;
     }>;
 }) {
     const resolvedParams = await searchParams;
@@ -33,6 +34,7 @@ export default async function InventoryManagePage({
     const categoriesParam = resolvedParams.category || resolvedParams.categories || '';
     const conditionsParam = resolvedParams.conditions || '';
     const sizesParam = resolvedParams.sizes || '';
+    const smartstoreParam = resolvedParams.smartstore || 'all';
 
     // Pagination
     const page = parseInt(resolvedParams.page || '1', 10);
@@ -144,30 +146,60 @@ export default async function InventoryManagePage({
         paramIndex++;
     }
 
+    // 스마트스토어 필터
+    const naverJoin = 'LEFT JOIN naver_products np ON p.id = np.seller_management_code';
+    if (smartstoreParam === 'unregistered') {
+        sqlConditions.push('np.seller_management_code IS NULL');
+    } else if (smartstoreParam === 'registered') {
+        sqlConditions.push('np.seller_management_code IS NOT NULL');
+    }
+
     const whereClause = sqlConditions.length > 0 ? `WHERE ${sqlConditions.join(' AND ')}` : '';
 
-    // 1. Fetch Total Count
+    // 1. Fetch Total Count + SmartStore Stats
     let result;
     let totalCount = 0;
     let products = [];
+    let smartstoreStats = { total: 0, registered: 0, unregistered: 0 };
 
     try {
         const countSql = `
-            SELECT COUNT(*) as count 
+            SELECT COUNT(*) as count
             FROM products p
             LEFT JOIN categories c ON p.category = c.id
+            ${naverJoin}
             ${whereClause}
         `;
         const countResult = await db.query(countSql, params);
         totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
 
+        // 스마트스토어 통계 (폐기 제외)
+        const statsSql = `
+            SELECT
+                COUNT(*) as total,
+                COUNT(np.seller_management_code) as registered
+            FROM products p
+            LEFT JOIN naver_products np ON p.id = np.seller_management_code
+            WHERE p.status != '폐기'
+        `;
+        const statsResult = await db.query(statsSql, []);
+        const st = statsResult.rows[0];
+        smartstoreStats = {
+            total: parseInt(st?.total || '0'),
+            registered: parseInt(st?.registered || '0'),
+            unregistered: parseInt(st?.total || '0') - parseInt(st?.registered || '0'),
+        };
+
         // 2. Fetch Data
         const dataSql = `
-            SELECT p.*, c.name as category_name, c.classification as category_classification 
+            SELECT p.*, c.name as category_name, c.classification as category_classification,
+                   np.origin_product_no as smartstore_no, np.status_type as smartstore_status,
+                   np.sale_price as smartstore_price
             FROM products p
             LEFT JOIN categories c ON p.category = c.id
-            ${whereClause} 
-            ORDER BY p.created_at DESC 
+            ${naverJoin}
+            ${whereClause}
+            ORDER BY p.created_at DESC
             LIMIT ${safeLimit} OFFSET ${offset}
         `;
         result = await db.query(dataSql, params);
@@ -190,6 +222,7 @@ export default async function InventoryManagePage({
                     initialLimit={safeLimit}
                     currentPage={page}
                     categories={categories}
+                    smartstoreStats={smartstoreStats}
                 />
             </Suspense>
         </div>

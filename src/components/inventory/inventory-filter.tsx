@@ -34,6 +34,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     const [selectedConditions, setSelectedConditions] = useState<string[]>(searchParams.get('conditions')?.split(',').filter(Boolean) || []);
     const [selectedSizes, setSelectedSizes] = useState<string[]>(searchParams.get('sizes')?.split(',').filter(Boolean) || []);
     const [selectedBrand, setSelectedBrand] = useState(searchParams.get('brand') || 'all');
+    const [smartstoreFilter, setSmartstoreFilter] = useState(searchParams.get('smartstore') || 'all');
 
     const handleSearch = () => { // Trigger search
         // Smart Parsing for Glued Codes
@@ -73,6 +74,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             if (selectedConditions.length > 0) params.conditions = selectedConditions.join(',');
             if (selectedSizes.length > 0) params.sizes = selectedSizes.join(',');
             if (selectedBrand && selectedBrand !== 'all') params.brand = selectedBrand;
+            if (smartstoreFilter && smartstoreFilter !== 'all') params.smartstore = smartstoreFilter;
 
             onFilterSearch(params);
             return;
@@ -92,6 +94,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         if (selectedConditions.length > 0) params.set('conditions', selectedConditions.join(','));
         if (selectedSizes.length > 0) params.set('sizes', selectedSizes.join(','));
         if (selectedBrand && selectedBrand !== 'all') params.set('brand', selectedBrand);
+        if (smartstoreFilter && smartstoreFilter !== 'all') params.set('smartstore', smartstoreFilter);
 
         params.set('page', '1');
         router.push(`/inventory/manage?${params.toString()}`);
@@ -161,6 +164,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         setSelectedCategories([]);
         setSelectedConditions([]);
         setSelectedSizes([]);
+        setSmartstoreFilter('all');
 
         if (onReset) {
             onReset();
@@ -176,7 +180,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     {/* Main Search */}
                     <div className="flex-1 relative flex flex-wrap md:flex-nowrap gap-2 items-center">
                         {/* Search Field Select */}
-                        <div className="w-[120px] shrink-0">
+                        <div className="w-full sm:w-[120px] shrink-0">
                             <Select value={searchField} onValueChange={setSearchField}>
                                 <SelectTrigger className="bg-white">
                                     <SelectValue placeholder="검색 옵션" />
@@ -191,7 +195,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </div>
 
                         {/* Brand Select */}
-                        <div className="w-[150px] shrink-0">
+                        <div className="w-full sm:w-[150px] shrink-0">
                             <Select value={selectedBrand} onValueChange={setSelectedBrand}>
                                 <SelectTrigger className="bg-white">
                                     <SelectValue placeholder="브랜드 전체" />
@@ -239,7 +243,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                 {/* Additional Filters (Row 2) */}
                 <div className="flex flex-wrap gap-2 items-center">
                     {/* Status */}
-                    <div className="w-[120px]">
+                    <div className="w-full sm:w-[120px]">
                         <Select value={selectedStatuses.join(',')} onValueChange={(val) => setSelectedStatuses(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="상태" />
@@ -255,8 +259,22 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         </Select>
                     </div>
 
+                    {/* SmartStore */}
+                    <div className="w-full sm:w-[130px]">
+                        <Select value={smartstoreFilter} onValueChange={setSmartstoreFilter}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="스마트스토어" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">스토어 전체</SelectItem>
+                                <SelectItem value="registered">스토어 등록</SelectItem>
+                                <SelectItem value="unregistered">스토어 미등록</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     {/* Category */}
-                    <div className="w-[120px]">
+                    <div className="w-full sm:w-[120px]">
                         <Select value={selectedCategories.join(',')} onValueChange={(val) => setSelectedCategories(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="카테고리" />

@@ -55,7 +55,11 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { originProductNo, imageUrl } = body;
+        const { originProductNo, imageUrl, mode = 'replace' } = body as {
+            originProductNo: string;
+            imageUrl: string;
+            mode?: 'replace' | 'append'; // replace=대표이미지 교체, append=추가이미지로 넣기
+        };
 
         if (!originProductNo || !imageUrl) {
             return NextResponse.json({ error: 'Missing originProductNo or imageUrl' }, { status: 400 });
@@ -99,19 +103,32 @@ export async function POST(request: NextRequest) {
         }
         log(`[4/7] 상세 정보 로드: ${originProduct.name?.substring(0, 40)}`);
 
-        // 5. 대표이미지를 네이버 CDN URL로 교체
+        // 5. 이미지 업데이트 (모드에 따라 대표이미지 교체 또는 추가이미지 추가)
         if (!originProduct.images) originProduct.images = {};
-        const oldImage = originProduct.images.representativeImage?.url || '(없음)';
-        originProduct.images.representativeImage = { url: naverImageUrl };
-
-        // 5b. 채널 상품 이미지도 있다면 함께 업데이트
         let channelImageUpdated = false;
-        if (channelProduct?.representativeImage) {
-            channelProduct.representativeImage = { url: naverImageUrl };
-            channelImageUpdated = true;
-        }
 
-        log(`[5/7] 이미지 변경: ${oldImage.substring(0, 50)}... → ${naverImageUrl.substring(0, 50)}...`);
+        if (mode === 'append') {
+            // 추가이미지로 넣기 (기존 뱃지/대표이미지 유지)
+            const optionalImages = originProduct.images.optionalImages || [];
+            if (optionalImages.length >= 9) {
+                log(`[5/7] 추가이미지 9장 초과 — 마지막 이미지를 교체합니다`);
+                optionalImages[optionalImages.length - 1] = { url: naverImageUrl };
+            } else {
+                optionalImages.push({ url: naverImageUrl });
+            }
+            originProduct.images.optionalImages = optionalImages;
+            log(`[5/7] 추가이미지로 삽입 (총 ${optionalImages.length}장). 대표이미지 유지`);
+        } else {
+            // 기존 동작: 대표이미지 교체
+            const oldImage = originProduct.images.representativeImage?.url || '(없음)';
+            originProduct.images.representativeImage = { url: naverImageUrl };
+
+            if (channelProduct?.representativeImage) {
+                channelProduct.representativeImage = { url: naverImageUrl };
+                channelImageUpdated = true;
+            }
+            log(`[5/7] 대표이미지 교체: ${oldImage.substring(0, 50)}... → ${naverImageUrl.substring(0, 50)}...`);
+        }
 
         // 6. PUT 전체 데이터 전송
         const payload = {
