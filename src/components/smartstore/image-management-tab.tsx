@@ -39,6 +39,9 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
   const [page, setPage] = useState(1);
   const itemsPerPage = viewMode === 'grid' ? 60 : 50;
   const [isMounted, setIsMounted] = useState(false);
+  const [showBulkSearch, setShowBulkSearch] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkCodes, setBulkCodes] = useState<Set<string>>(new Set());
 
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
@@ -77,12 +80,16 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
       });
     }
 
+    if (bulkCodes.size > 0) {
+      return result.filter(p => bulkCodes.has(p.originProductNo));
+    }
+
     if (!searchTerm) return result;
     return result.filter(p =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.originProductNo.includes(searchTerm)
     );
-  }, [products, searchTerm, filterType]);
+  }, [products, searchTerm, filterType, bulkCodes]);
 
   const getImageUrl = (p: Product): string | null => {
     return p.thumbnailUrl || null;
@@ -325,8 +332,24 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
           placeholder="상품 검색..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={bulkCodes.size > 0}
+          className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
         />
+        {bulkCodes.size > 0 ? (
+          <button
+            onClick={() => { setBulkCodes(new Set()); setBulkText(''); }}
+            className="px-4 py-2 bg-red-500 text-white text-sm font-bold rounded-lg hover:bg-red-600 shrink-0"
+          >
+            대량검색 해제 ({bulkCodes.size}개)
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowBulkSearch(true)}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shrink-0"
+          >
+            대량검색
+          </button>
+        )}
         {selectedIds.length > 0 && (
           <button
             onClick={handleGenerateThumbnails}
@@ -520,6 +543,55 @@ export function ImageManagementTab({ products: initialProducts, onRefresh }: Ima
 
           <div className="w-full text-center mt-2 text-xs text-slate-400 font-medium font-mono">
             {page} / {totalPages} (Total {filtered.length})
+          </div>
+        </div>
+      )}
+
+      {/* 대량검색 모달 */}
+      {showBulkSearch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowBulkSearch(false)}>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg text-slate-800">상품코드 대량 검색</h2>
+              <button onClick={() => setShowBulkSearch(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">상품코드를 붙여넣기 하세요. (줄바꿈, 쉼표, 공백, 탭으로 구분)</p>
+            <textarea
+              value={bulkText}
+              onChange={e => setBulkText(e.target.value)}
+              placeholder={"82945286614\n82945286615\n82945286616\n..."}
+              rows={10}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+              autoFocus
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                {bulkText.trim() ? `${bulkText.trim().split(/[\n,\s\t]+/).filter(Boolean).length}개 코드 감지` : '코드를 입력하세요'}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowBulkSearch(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-200"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => {
+                    const codes = bulkText.trim().split(/[\n,\s\t]+/).map(c => c.trim()).filter(Boolean);
+                    if (codes.length === 0) { alert('상품코드를 입력하세요'); return; }
+                    setBulkCodes(new Set(codes));
+                    setSearchTerm('');
+                    setShowBulkSearch(false);
+                    addLog(`[대량검색] ${codes.length}개 상품코드로 필터링`);
+                  }}
+                  className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700"
+                >
+                  검색 적용
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -60,13 +60,12 @@ interface SyncFailure {
   message: string;
 }
 
-type TabId = 'products' | 'main-new' | 'main-curated' | 'main-archive' | 'categories' | 'inventory' | 'pricing' | 'images' | 'virtual-fitting' | 'automation' | 'naver-status' | 'logs' | 'settings';
+type TabId = 'products' | 'main-new' | 'main-curated' | 'main-archive' | 'categories' | 'inventory' | 'pricing' | 'image-badge' | 'image-fitting' | 'automation' | 'naver-status' | 'logs' | 'settings';
 
 const TOP_TABS = [
   { id: 'products', label: '상품관리', shortLabel: '상품' },
   { id: 'main-display', label: '메인진열관리', shortLabel: '메인진열' },
-  { id: 'images', label: '이미지', shortLabel: '이미지' },
-  { id: 'virtual-fitting', label: '가상피팅', shortLabel: '피팅' },
+  { id: 'image-display', label: '이미지', shortLabel: '이미지' },
   { id: 'naver-status', label: '네이버 현황', shortLabel: '현황' },
   { id: 'logs', label: '전송기록', shortLabel: '기록' },
   { id: 'settings', label: '설정', shortLabel: '설정' },
@@ -76,6 +75,11 @@ const MAIN_DISPLAY_SUB_TABS: { id: TabId; label: string }[] = [
   { id: 'main-new', label: 'NEW' },
   { id: 'main-curated', label: 'CURATED' },
   { id: 'main-archive', label: 'ARCHIVE' },
+];
+
+const IMAGE_SUB_TABS: { id: TabId; label: string }[] = [
+  { id: 'image-badge', label: '뱃지' },
+  { id: 'image-fitting', label: '가상피팅' },
 ];
 
 async function fetchProductsWithProgress(
@@ -723,7 +727,9 @@ export default function SmartstorePage() {
             {TOP_TABS.map(tab => {
               const isActive = tab.id === 'main-display'
                 ? activeTab.startsWith('main-')
-                : activeTab === tab.id;
+                : tab.id === 'image-display'
+                  ? activeTab.startsWith('image-')
+                  : activeTab === tab.id;
 
               return (
                 <button
@@ -731,6 +737,8 @@ export default function SmartstorePage() {
                   onClick={() => {
                     if (tab.id === 'main-display') {
                       setActiveTab('main-new');
+                    } else if (tab.id === 'image-display') {
+                      setActiveTab('image-badge');
                     } else {
                       setActiveTab(tab.id as TabId);
                     }
@@ -765,6 +773,24 @@ export default function SmartstorePage() {
             ))}
           </div>
         )}
+
+        {/* 이미지 중분류 (이미지 탭 활성화 시에만 노출) */}
+        {activeTab.startsWith('image-') && (
+          <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+            {IMAGE_SUB_TABS.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setActiveTab(sub.id)}
+                className={`px-6 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === sub.id
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 탭 콘텐츠 */}
@@ -781,7 +807,7 @@ export default function SmartstorePage() {
         {activeTab === 'main-archive' && (
           <MainDisplayTab products={displayedProducts} forcedCategory="ARCHIVE" onSyncExhibition={syncExhibition} syncingDisplay={syncingDisplay} />
         )}
-        {activeTab === 'images' && (
+        {activeTab === 'image-badge' && (
           <ImageManagementTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'naver-status' && (
@@ -790,7 +816,7 @@ export default function SmartstorePage() {
         {activeTab === 'logs' && (
           <SyncLogsTab />
         )}
-        {activeTab === 'virtual-fitting' && (
+        {activeTab === 'image-fitting' && (
           <VirtualFittingTab products={displayedProducts} onRefresh={handleRefresh} />
         )}
         {activeTab === 'settings' && (

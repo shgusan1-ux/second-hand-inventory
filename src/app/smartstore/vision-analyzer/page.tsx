@@ -266,7 +266,7 @@ export default function VisionAnalyzerPage() {
               </p>
             </div>
             <button
-              onClick={() => window.opener?.setActiveTab('images')}
+              onClick={() => window.opener?.setActiveTab('image-badge')}
               className="text-[10px] font-bold text-amber-500 hover:underline"
             >
               이미지 탭 이동

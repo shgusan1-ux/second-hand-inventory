@@ -313,6 +313,17 @@ export async function initDatabase() {
       )
     `);
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS product_audit (
+        origin_product_no TEXT PRIMARY KEY,
+        issues TEXT NOT NULL DEFAULT '[]',
+        detail_name TEXT,
+        detail_image_url TEXT,
+        detail_content_length INTEGER DEFAULT 0,
+        checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);

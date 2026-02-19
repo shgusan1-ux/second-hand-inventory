@@ -45,7 +45,7 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
 
     const [internalCategory, setInternalCategory] = useState<'NEW' | 'CURATED' | 'ARCHIVE'>('NEW');
     const [currentTemp, setCurrentTemp] = useState<number>(20);
-    const [pageSize, setPageSize] = useState<number>(30);
+    const [pageSize, setPageSize] = useState<number>(15);
     const activeCategory = forcedCategory || internalCategory;
 
     // 실시간 날씨/온도 가져오기
@@ -133,7 +133,7 @@ export function MainDisplayTab({ products, forcedCategory, onSyncExhibition, syn
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     {/* 개수 선택 */}
                     <div className="flex bg-slate-100 p-0.5 sm:p-1 rounded-xl">
-                        {[30, 50, 100].map(size => (
+                        {[15, 30, 50].map(size => (
                             <button
                                 key={size}
                                 onClick={() => setPageSize(size)}

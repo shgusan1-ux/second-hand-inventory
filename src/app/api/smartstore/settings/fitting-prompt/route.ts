@@ -9,46 +9,47 @@ const DEFAULT_CONFIG = {
     // 메인 프롬프트 템플릿 (영어 - Gemini가 영어 지시를 더 잘 따름)
     mainPrompt: `You are a top-tier Korean fashion e-commerce studio photographer.
 
-[INPUT IMAGES]
-- Image 1: Reference model photo (use this person's face, body type, and pose)
-- Image 2: THE PRODUCT clothing to sell (this garment MUST be worn by the model — THIS IS THE MAIN PRODUCT!)
+[INPUT IMAGES — READ CAREFULLY]
+- Image 1: THE EXACT MODEL to use. You MUST preserve this person's EXACT face, hairstyle, skin tone, facial features, and body proportions. Do NOT generate a different person.
+- Image 2: THE PRODUCT garment to sell. This clothing item MUST be worn by the model and must be the HERO of the photo.
 
 [TASK]
-Generate a professional e-commerce product photo of a {{genderKR}} model wearing the clothing from Image 2.
-{{productNameLine}}
-
-★★★ CRITICAL RULE — THE PRODUCT FROM IMAGE 2 MUST BE THE MOST PROMINENT ITEM IN THE PHOTO ★★★
-- If the product is a TOP (t-shirt, shirt, sweater): DO NOT add any jacket, coat, or outer layer. The top must be 100% visible from front. NO layering on top.
-- If the product is OUTERWEAR (jacket, coat): The outerwear must be the hero piece. Keep inner layers minimal and plain.
-- If the product is BOTTOMS (pants, skirt): The entire bottom garment must be fully visible. Use a short/cropped top so nothing covers the bottoms.
-- Coordinating items are SUPPORTING ONLY — they must NEVER be more visually prominent than the product.
-- NEVER add clothing items that obscure, cover, or compete with the product garment.
-
-[MODEL SETUP]
+Create a professional e-commerce product photo: the SAME person from Image 1 wearing the EXACT garment from Image 2.
 {{genderDesc}}
 
-[STYLING DIRECTION — Korean Fashion Platform Reference]
-- Concept: {{stylingDescription}}
-- Coordinate with: {{coordiText}}
-- For TOP products: Match ONLY with bottoms + shoes + accessories. ABSOLUTELY NO jackets or outerwear over the product.
-- For BOTTOM products: Match with a SHORT cropped top + shoes + accessories. The entire length of bottoms must be visible.
-- For OUTERWEAR products: Match with simple inner + bottoms + shoes. Outerwear is the main visual focus.
-- Reference: Korean fashion platforms (Musinsa, 29CM, W Concept) 2024-2025 best styling sets
-- {{genderStyleTip}}
-- Realistic daily look that Korean 20-30s would actually wear (Instagram-worthy)
-- Color coordination: Supporting items should complement the product color in muted tones, never outshine it
+★★★ ABSOLUTE RULES — VIOLATION = FAILURE ★★★
 
-[MANDATORY PHOTO REQUIREMENTS — STRICT]
-1. ★ SQUARE (1:1) aspect ratio image — NOT portrait, NOT landscape
-2. PURE WHITE (#FFFFFF) studio background — no props, no floor lines, no shadows on background. Clean infinite white.
-3. FULL BODY shot with GENEROUS margins — at least 15-20% white space above head and below feet. Model centered.
-4. Soft diffused studio lighting, minimal shadows, professional fashion photography lighting setup
-5. Model looking STRAIGHT into camera lens at eye level — not looking up or down
-6. EXACT reproduction of the product garment's color, pattern, texture, and details (buttons, zippers, logos) from Image 2 — DO NOT alter or reimagine the garment
-7. Photorealistic fabric texture, accurate color reproduction, natural fit appropriate for current trends
-8. Professional fashion e-commerce quality (Musinsa, 29CM product detail image standard)
-9. ★ THE PRODUCT GARMENT MUST BE THE VISUAL HERO — it should occupy the most visual attention. No other item should compete.
-10. High resolution, sharp details, commercial photography quality
+RULE 1 — MODEL IDENTITY: The generated person MUST be the SAME person as Image 1. Same face, same eyes, same nose, same lips, same skin tone, same hairstyle. If the output shows a different person, the image is WRONG.
+
+RULE 2 — PRODUCT PROMINENCE: The garment from Image 2 MUST be the single most eye-catching item.
+- BOTTOMS (pants/jeans/skirt): The ENTIRE length of pants must be fully visible from waist to ankle. Top must be SHORT and PLAIN (simple t-shirt tucked in or cropped above waist). NEVER tie anything around waist. NEVER add a long top that covers the pants. NO bags, NO scarves, NO items that overlap or cover ANY part of the pants. Both hands should be empty or in pockets.
+- TOPS (t-shirt/shirt/sweater): Must be 100% visible. NO jackets, NO coats, NO layering on top. Arms and torso fully showing the top.
+- OUTERWEAR (jacket/coat): Must be the hero piece, worn properly. Simple plain inner.
+
+RULE 3 — NO TEXT IN IMAGE: Do NOT render ANY text, watermarks, labels, brand names, or captions anywhere in the image. The image must be CLEAN with zero text overlay.
+
+RULE 4 — MINIMAL COORDINATION: Keep other items extremely simple and subdued.
+- Shoes: plain simple sneakers or clean shoes in neutral color
+- NO large bags, NO tote bags, NO crossbody bags
+- NO scarves, NO ties around waist, NO layered accessories
+- NO items in hands (both hands empty or in pockets for a clean look)
+- All non-product items must be in muted neutral colors (white, gray, black, beige)
+
+[STYLING]
+- Concept: {{stylingDescription}}
+- Style reference: {{coordiText}}
+- {{genderStyleTip}}
+- Keep it minimal — the product garment is the ONLY visual focus
+
+[PHOTO SPECIFICATIONS]
+1. SQUARE 1:1 aspect ratio
+2. PURE WHITE (#FFFFFF) infinite studio background — no shadows, no floor line, no props
+3. FULL BODY: head to toe with 15-20% white margin on all sides
+4. Soft diffused studio lighting, minimal shadows
+5. Model looking STRAIGHT at camera, eye-level
+6. EXACT color, pattern, texture, details of the product from Image 2 — do not alter
+7. Photorealistic quality, sharp details, commercial fashion photography standard
+8. Model's hands: empty, relaxed at sides or in pockets. NO holding items.
 
 Generate the image now.`,
 

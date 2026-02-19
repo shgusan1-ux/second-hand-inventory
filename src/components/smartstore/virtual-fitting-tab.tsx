@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 
 interface Product {
     originProductNo: string;
+    channelProductNo?: number;
     name: string;
     salePrice?: number;
     representativeImage?: { url: string };
@@ -41,6 +42,8 @@ function extractGender(name: string): 'MAN' | 'WOMAN' | 'KIDS' {
     return 'MAN';
 }
 
+const MAX_FITTING_SELECT = 30; // 한 번에 최대 선택 가능 수
+
 export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProps) {
     // 상태
     const [searchTerm, setSearchTerm] = useState('');
@@ -55,9 +58,13 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const [modelUploadType, setModelUploadType] = useState<'MAN' | 'WOMAN' | 'KIDS'>('MAN');
     const [modelUploadName, setModelUploadName] = useState('');
     const [genderFilter, setGenderFilter] = useState<'ALL' | 'MAN' | 'WOMAN' | 'KIDS'>('ALL');
+    const [unfittedOnly, setUnfittedOnly] = useState(false);
     const [enlargedModelUrl, setEnlargedModelUrl] = useState<string | null>(null); // 모델 이미지 크게보기
     const [sortByAI, setSortByAI] = useState(false);
     const [aiRanking, setAiRanking] = useState<Map<string, { score: number; reasons: string[] }>>(new Map());
+    const [showBulkSearch, setShowBulkSearch] = useState(false);
+    const [bulkText, setBulkText] = useState('');
+    const [bulkCodes, setBulkCodes] = useState<Set<string>>(new Set());
     const logRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,23 +91,40 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
             .catch(e => console.error('모델 로드 실패:', e));
     }, []);
 
-    // 피팅 결과 로드
+    // 피팅 결과 로드 (DB에서 완료된 상품번호 목록)
     useEffect(() => {
-        // 기존 결과가 있으면 맵에 저장 (추후 DB에서 로드)
+        fetch('/api/smartstore/virtual-fitting/results')
+            .then(r => r.json())
+            .then(data => {
+                if (data.results) {
+                    const map = new Map<string, string>();
+                    data.results.forEach((r: { product_no: string; result_image_url: string }) => {
+                        map.set(r.product_no, r.result_image_url);
+                    });
+                    setFittingResults(map);
+                }
+            })
+            .catch(e => console.error('피팅 결과 로드 실패:', e));
     }, []);
 
     // 필터된 상품
     const filtered = useMemo(() => {
-        let result = products.filter(p => {
-            if (searchTerm) {
-                const term = searchTerm.toLowerCase();
-                return p.name.toLowerCase().includes(term) || p.originProductNo.includes(term);
-            }
-            return true;
-        });
+        let result = bulkCodes.size > 0
+            ? products.filter(p => bulkCodes.has(p.originProductNo))
+            : products.filter(p => {
+                if (searchTerm) {
+                    const term = searchTerm.toLowerCase();
+                    return p.name.toLowerCase().includes(term) || p.originProductNo.includes(term);
+                }
+                return true;
+            });
 
         if (genderFilter !== 'ALL') {
             result = result.filter(p => extractGender(p.name) === genderFilter);
+        }
+
+        if (unfittedOnly) {
+            result = result.filter(p => !fittingResults.has(p.originProductNo));
         }
 
         if (sortByAI && aiRanking.size > 0) {
@@ -112,7 +136,7 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
         }
 
         return result;
-    }, [products, searchTerm, genderFilter, sortByAI, aiRanking]);
+    }, [products, searchTerm, genderFilter, unfittedOnly, fittingResults, sortByAI, aiRanking, bulkCodes]);
 
     // 성별별 통계
     const genderStats = useMemo(() => {
@@ -173,17 +197,28 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                if (next.size >= MAX_FITTING_SELECT) {
+                    alert(`한 번에 최대 ${MAX_FITTING_SELECT}개까지 선택 가능합니다.\n현재 ${next.size}개 선택됨`);
+                    return prev;
+                }
+                next.add(id);
+            }
             return next;
         });
     };
 
     const toggleSelectAll = () => {
-        if (selectedIds.size === filtered.length) {
+        if (selectedIds.size === filtered.length || selectedIds.size >= MAX_FITTING_SELECT) {
             setSelectedIds(new Set());
         } else {
-            setSelectedIds(new Set(filtered.map(p => p.originProductNo)));
+            const toSelect = filtered.slice(0, MAX_FITTING_SELECT).map(p => p.originProductNo);
+            if (filtered.length > MAX_FITTING_SELECT) {
+                alert(`전체 ${filtered.length}개 중 최대 ${MAX_FITTING_SELECT}개만 선택됩니다.`);
+            }
+            setSelectedIds(new Set(toSelect));
         }
     };
 
@@ -213,30 +248,23 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
     const handleGenerate = () => {
         const selected = filtered.filter(p => selectedIds.has(p.originProductNo));
         if (selected.length === 0) {
-            addLog('선택된 상품이 없습니다');
+            alert('선택된 상품이 없습니다');
             return;
         }
 
         if (models.length === 0) {
-            addLog('등록된 모델이 없습니다. 먼저 모델을 등록해주세요.');
+            alert('등록된 모델이 없습니다. 먼저 모델을 등록해주세요.');
             setShowModelManager(true);
             return;
         }
 
-        if (selected.length > 30) {
-            addLog('한 번에 최대 30개까지 처리 가능합니다');
-            return;
-        }
-
-        // 새창에서 피팅 에디터 열기
+        // sessionStorage로 데이터 전달 (URL 길이 제한 회피)
         const ids = selected.map(p => p.originProductNo).join(',');
-        const params = new URLSearchParams({
-            ids,
-            model: modelChoice,
-            sync: syncToNaver ? 'true' : 'false',
-        });
-        const url = `/smartstore/fitting-editor?${params.toString()}`;
-        window.open(url, '_blank', 'width=1400,height=900,menubar=no,toolbar=no');
+        sessionStorage.setItem('fitting-editor-ids', ids);
+        sessionStorage.setItem('fitting-editor-model', modelChoice);
+        sessionStorage.setItem('fitting-editor-sync', syncToNaver ? 'true' : 'false');
+
+        window.open('/smartstore/fitting-editor', '_blank', 'width=1400,height=900');
         addLog(`새 창에서 피팅 에디터 열림: ${selected.length}개 상품`);
     };
 
@@ -378,8 +406,24 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     placeholder="상품 검색..."
-                    className="flex-1 min-w-[200px] px-4 py-2.5 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={bulkCodes.size > 0}
+                    className="flex-1 min-w-[200px] px-4 py-2.5 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                 />
+                {bulkCodes.size > 0 ? (
+                    <button
+                        onClick={() => { setBulkCodes(new Set()); setBulkText(''); }}
+                        className="px-3 py-2 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600"
+                    >
+                        대량검색 해제 ({bulkCodes.size})
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => setShowBulkSearch(true)}
+                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700"
+                    >
+                        대량검색
+                    </button>
+                )}
                 <div className="flex gap-1">
                     {(['ALL', 'MAN', 'WOMAN', 'KIDS'] as const).map(g => (
                         <button
@@ -393,6 +437,12 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                     ))}
                 </div>
                 <button
+                    onClick={() => setUnfittedOnly(!unfittedOnly)}
+                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${unfittedOnly ? 'bg-orange-500 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-50'}`}
+                >
+                    미완료만 {unfittedOnly && `(${filtered.length})`}
+                </button>
+                <button
                     onClick={handleAIRecommend}
                     disabled={isProcessing}
                     className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50"
@@ -403,7 +453,7 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                     onClick={toggleSelectAll}
                     className="px-3 py-2 bg-white border rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50"
                 >
-                    {selectedIds.size === filtered.length ? '전체 해제' : '전체 선택'}
+                    {selectedIds.size > 0 ? '전체 해제' : `전체 선택 (최대${MAX_FITTING_SELECT})`}
                 </button>
             </div>
 
@@ -506,21 +556,35 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                                     onClick={(e) => {
                                         if (resultUrl) {
                                             e.stopPropagation();
-                                            // 새창에서 에디터 열기
-                                            const params = new URLSearchParams({
-                                                ids: product.originProductNo,
-                                                model: modelChoice,
-                                                sync: 'false',
-                                            });
-                                            window.open(`/smartstore/fitting-editor?${params.toString()}`, '_blank', 'width=1400,height=900');
+                                            sessionStorage.setItem('fitting-editor-ids', product.originProductNo);
+                                            sessionStorage.setItem('fitting-editor-model', modelChoice);
+                                            sessionStorage.setItem('fitting-editor-sync', 'false');
+                                            window.open('/smartstore/fitting-editor', '_blank', 'width=1400,height=900');
                                         }
                                     }}
                                 />
                             </div>
                             <div className="p-2">
-                                <p className="text-xs font-medium text-slate-700 truncate">{product.name}</p>
+                                <p
+                                    className="text-xs font-medium text-slate-700 truncate hover:text-blue-600 hover:underline cursor-pointer"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (product.channelProductNo) {
+                                            window.open(`https://smartstore.naver.com/brownstreet/products/${product.channelProductNo}`, '_blank');
+                                        }
+                                    }}
+                                    title={product.channelProductNo ? '네이버 상품 페이지 열기' : product.name}
+                                >{product.name}</p>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[10px] text-slate-400">
+                                    <span
+                                        className="text-[10px] text-slate-400 hover:text-blue-600 hover:underline cursor-pointer"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (product.channelProductNo) {
+                                                window.open(`https://smartstore.naver.com/brownstreet/products/${product.channelProductNo}`, '_blank');
+                                            }
+                                        }}
+                                    >
                                         {product.salePrice?.toLocaleString()}원
                                     </span>
                                     {ranking && (
@@ -571,6 +635,55 @@ export function VirtualFittingTab({ products, onRefresh }: VirtualFittingTabProp
                         >
                             X
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* 대량검색 모달 */}
+            {showBulkSearch && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setShowBulkSearch(false)}>
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h2 className="font-bold text-lg text-slate-800">상품코드 대량 검색</h2>
+                            <button onClick={() => setShowBulkSearch(false)} className="text-slate-400 hover:text-slate-600">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500">상품코드를 붙여넣기 하세요. (줄바꿈, 쉼표, 공백, 탭으로 구분)</p>
+                        <textarea
+                            value={bulkText}
+                            onChange={e => setBulkText(e.target.value)}
+                            placeholder={"82945286614\n82945286615\n82945286616\n..."}
+                            rows={10}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                            autoFocus
+                        />
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-400">
+                                {bulkText.trim() ? `${bulkText.trim().split(/[\n,\s\t]+/).filter(Boolean).length}개 코드 감지` : '코드를 입력하세요'}
+                            </span>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowBulkSearch(false)}
+                                    className="px-4 py-2 bg-slate-100 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-200"
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const codes = bulkText.trim().split(/[\n,\s\t]+/).map(c => c.trim()).filter(Boolean);
+                                        if (codes.length === 0) { alert('상품코드를 입력하세요'); return; }
+                                        setBulkCodes(new Set(codes));
+                                        setSearchTerm('');
+                                        setShowBulkSearch(false);
+                                        addLog(`[대량검색] ${codes.length}개 상품코드로 필터링`);
+                                    }}
+                                    className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700"
+                                >
+                                    검색 적용
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

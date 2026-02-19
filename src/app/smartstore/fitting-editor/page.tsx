@@ -33,9 +33,10 @@ interface LogEntry {
 
 export default function FittingEditorPage() {
     const searchParams = useSearchParams();
-    const idsParam = searchParams.get('ids');
-    const modelChoice = (searchParams.get('model') || 'flash') as 'flash' | 'pro';
-    const syncToNaver = searchParams.get('sync') === 'true';
+    // sessionStorage 우선, URL params 폴백
+    const idsParam = (typeof window !== 'undefined' && sessionStorage.getItem('fitting-editor-ids')) || searchParams.get('ids');
+    const modelChoice = ((typeof window !== 'undefined' && sessionStorage.getItem('fitting-editor-model')) || searchParams.get('model') || 'flash') as 'flash' | 'pro';
+    const syncToNaver = ((typeof window !== 'undefined' && sessionStorage.getItem('fitting-editor-sync')) || searchParams.get('sync')) === 'true';
 
     const [products, setProducts] = useState<ProductData[]>([]);
     const [results, setResults] = useState<Map<string, FittingResult>>(new Map());
@@ -59,6 +60,15 @@ export default function FittingEditorPage() {
             logRef.current.scrollTop = logRef.current.scrollHeight;
         }
     }, [logs]);
+
+    // sessionStorage 클리어 (읽은 후)
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('fitting-editor-ids');
+            sessionStorage.removeItem('fitting-editor-model');
+            sessionStorage.removeItem('fitting-editor-sync');
+        }
+    }, []);
 
     // 상품 데이터 로드
     useEffect(() => {
@@ -514,21 +524,11 @@ export default function FittingEditorPage() {
                                             </p>
                                             <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/5 flex items-center justify-center relative">
                                                 {selectedResult ? (
-                                                    <>
-                                                        <img
-                                                            src={selectedResult.resultUrl}
-                                                            alt="Fitting Result"
-                                                            className="w-full h-full object-contain"
-                                                        />
-                                                        {/* 등급뱃지 오버레이 */}
-                                                        {(selectedP.descriptionGrade || selectedP.classification?.visionGrade) && (
-                                                            <img
-                                                                src={`/images/grades/${(selectedP.descriptionGrade || selectedP.classification?.visionGrade || 'b').toLowerCase()}grade.png`}
-                                                                alt="Grade Badge"
-                                                                className="absolute top-3 right-3 w-[18%] opacity-50"
-                                                            />
-                                                        )}
-                                                    </>
+                                                    <img
+                                                        src={selectedResult.resultUrl}
+                                                        alt="Fitting Result"
+                                                        className="w-full h-full object-contain"
+                                                    />
                                                 ) : processingProductNo === selectedP.originProductNo ? (
                                                     <div className="text-center">
                                                         <div className="w-10 h-10 border-3 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />

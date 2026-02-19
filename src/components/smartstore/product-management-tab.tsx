@@ -63,6 +63,21 @@ interface ProductManagementTabProps {
   syncingDisplay?: boolean;
 }
 
+// 검수 이슈 레이블
+function auditIssueLabel(code: string): string {
+  const labels: Record<string, string> = {
+    IMAGE_BROKEN: '엑박',
+    NAME_MISMATCH: '명칭불일치',
+    IMAGE_MISMATCH: '이미지불일치',
+    NO_DETAIL: '상세없음',
+    NO_GRADE: '등급없음',
+    NO_THUMBNAIL: '썸네일없음',
+    PRICE_ZERO: '가격0원',
+    SCAN_ERROR: '스캔오류',
+  };
+  return labels[code] || code;
+}
+
 // 상품명에서 브랜드 추출: 한글 나오기 전까지 영문+특수문자 부분
 function extractBrand(name: string): string {
   // "DOLCE&GABBANA 다크블루..." → "DOLCE&GABBANA"
@@ -86,6 +101,27 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
       // 기본값 20도 유지
     });
   }, []);
+
+  // 검수 결과 로드
+  useEffect(() => {
+    fetch('/api/smartstore/products/audit')
+      .then(r => r.json())
+      .then(data => {
+        if (data.results) {
+          const map = new Map<string, string[]>();
+          data.results.forEach((r: any) => {
+            try {
+              const issues = typeof r.issues === 'string' ? JSON.parse(r.issues) : r.issues;
+              if (issues.length > 0) map.set(r.origin_product_no, issues);
+            } catch { /* skip */ }
+          });
+          setAuditResults(map);
+        }
+        setAuditLoaded(true);
+      })
+      .catch(() => setAuditLoaded(true));
+  }, []);
+
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
@@ -100,6 +136,13 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const [applyingDiscount, setApplyingDiscount] = useState(false);
   const [discountProgress, setDiscountProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [rebalancing, setRebalancing] = useState(false);
+
+  // 검수(Audit) 관련 상태
+  const [auditResults, setAuditResults] = useState<Map<string, string[]>>(new Map());
+  const [auditLoaded, setAuditLoaded] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+  const [auditSubFilter, setAuditSubFilter] = useState<string>('ALL');
 
   // 카테고리 네비게이션
   const [stageFilter, setStageFilter] = useState<string>('ALL');
@@ -809,6 +852,12 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
       if (stageFilter === 'KIDS') {
         return cat === 'KIDS';
       }
+      if (stageFilter === 'AUDIT') {
+        const issues = auditResults.get(p.originProductNo);
+        if (!issues || issues.length === 0) return false;
+        if (auditSubFilter === 'ALL') return true;
+        return issues.includes(auditSubFilter);
+      }
 
       if (issueFilter !== 'NONE') {
         const hasThumbnail = !!p.thumbnailUrl;
@@ -825,7 +874,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
 
       return true;
     });
-  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, issueFilter, ARCHIVE_SUBS]);
+  }, [products, searchTerm, stageFilter, subFilter, curatedDaysFilter, newDaysFilter, archiveDaysFilter, issueFilter, ARCHIVE_SUBS, auditResults, auditSubFilter]);
 
   // 정렬
   const GRADE_ORDER: Record<string, number> = { 'V급': 0, 'S급': 1, 'A급': 2, 'B급': 3, 'C급': 4 };
@@ -896,6 +945,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const handleStageChange = (stage: string) => {
     setStageFilter(stage);
     setSubFilter('ALL');
+    setAuditSubFilter('ALL');
     setCuratedDaysFilter(0);
     setNewDaysFilter(false);
     setArchiveDaysFilter(false);
@@ -905,6 +955,59 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const handleSubChange = (sub: string) => {
     setSubFilter(sub);
     setCurrentPage(1);
+  };
+
+  // 딥 스캔 실행
+  const startAuditScan = async () => {
+    if (scanning) return;
+    setScanning(true);
+    setScanProgress({ current: 0, total: 0, message: '스캔 시작...' });
+
+    try {
+      const res = await fetch('/api/smartstore/products/audit', { method: 'POST' });
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('스트림 읽기 실패');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const newResults = new Map<string, string[]>();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'start') {
+              setScanProgress({ current: 0, total: event.total, message: '스캔 중...' });
+            } else if (event.type === 'progress') {
+              setScanProgress({ current: event.current, total: event.total, message: event.message });
+              if (event.issues?.length > 0) {
+                newResults.set(event.productNo, event.issues);
+              }
+            } else if (event.type === 'complete') {
+              setScanProgress({ current: event.total, total: event.total, message: event.message });
+              toast.success(event.message);
+            } else if (event.type === 'error') {
+              toast.error(event.message);
+            }
+          } catch { /* JSON parse error */ }
+        }
+      }
+
+      setAuditResults(newResults);
+    } catch (err: any) {
+      toast.error(`스캔 실패: ${err.message}`);
+    } finally {
+      setScanning(false);
+      setTimeout(() => setScanProgress(null), 3000);
+    }
   };
 
   const handleSearchChange = (val: string) => {
@@ -975,6 +1078,21 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
               </div>
             </button>
           ))}
+          {/* 검수필요 버튼 */}
+          <button
+            onClick={() => handleStageChange('AUDIT')}
+            className={`flex-1 py-3 sm:py-4 text-center transition-all ${stageFilter === 'AUDIT'
+              ? 'bg-red-600 text-white'
+              : auditResults.size > 0 ? 'bg-red-50 hover:bg-red-100 text-red-500' : 'hover:bg-slate-50/50 text-slate-400'
+              }`}
+          >
+            <div className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${stageFilter === 'AUDIT' ? 'text-white/80' : auditResults.size > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+              검수필요
+            </div>
+            <div className={`text-base sm:text-lg font-black leading-none mt-1 ${stageFilter === 'AUDIT' ? 'text-white' : auditResults.size > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+              {auditResults.size}
+            </div>
+          </button>
         </div>
 
         {/* 전체 재배치 버튼 */}
@@ -1260,6 +1378,59 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                   <div className="bg-red-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${discountProgress.total > 0 ? (discountProgress.current / discountProgress.total) * 100 : 0}%` }} />
                 </div>
                 <p className="text-[10px] text-slate-500 truncate">{discountProgress.current}/{discountProgress.total} {discountProgress.message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 검수필요 서브 패널 */}
+        {stageFilter === 'AUDIT' && (
+          <div className="border-t border-red-200 px-4 py-3 bg-red-50/50 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-bold text-red-800">
+                  {auditResults.size > 0 ? `${auditResults.size}개 문제 상품 발견` : '스캔 결과 없음'}
+                </span>
+                {auditLoaded && !scanning && (
+                  <button
+                    onClick={startAuditScan}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700 active:scale-95 transition-all"
+                  >
+                    딥 스캔 시작
+                  </button>
+                )}
+                {scanning && (
+                  <span className="text-xs text-red-600 font-medium animate-pulse">스캔 중...</span>
+                )}
+              </div>
+            </div>
+            {scanProgress && (
+              <div className="space-y-1">
+                <div className="w-full bg-red-100 rounded-full h-2">
+                  <div className="bg-red-500 h-2 rounded-full transition-all duration-300" style={{ width: `${scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0}%` }} />
+                </div>
+                <p className="text-[10px] text-red-600 truncate">{scanProgress.current}/{scanProgress.total} {scanProgress.message}</p>
+              </div>
+            )}
+            {auditResults.size > 0 && (
+              <div className="flex gap-1.5 flex-wrap">
+                {([
+                  ['ALL', '전체', auditResults.size],
+                  ...Object.entries(
+                    Array.from(auditResults.values()).flat().reduce((acc, issue) => {
+                      acc[issue] = (acc[issue] || 0) + 1;
+                      return acc;
+                    }, {} as Record<string, number>)
+                  ).map(([key, count]) => [key, auditIssueLabel(key), count])
+                ] as [string, string, number][]).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    onClick={() => setAuditSubFilter(key)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${auditSubFilter === key ? 'bg-red-600 text-white' : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'}`}
+                  >
+                    {label} {count}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -1608,20 +1779,38 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 max-w-[220px]" onClick={e => e.stopPropagation()}>
-                      {p.channelProductNo ? (
-                        <a
-                          href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] font-bold text-slate-800 truncate leading-tight block hover:text-blue-600 hover:underline transition-colors cursor-pointer"
-                          onClick={e => { e.preventDefault(); window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank'); }}
-                        >
-                          {p.name}
-                        </a>
-                      ) : (
-                        <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
-                      )}
+                    <td className="px-3 py-2.5 max-w-[260px]" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          {p.channelProductNo ? (
+                            <a
+                              href={`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] font-bold text-slate-800 truncate leading-tight block hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                              onClick={e => { e.preventDefault(); window.open(`https://smartstore.naver.com/brownstreet/products/${p.channelProductNo}`, '_blank'); }}
+                            >
+                              {p.name}
+                            </a>
+                          ) : (
+                            <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">{p.name}</p>
+                          )}
+                        </div>
+                        {auditResults.has(p.originProductNo) && (
+                          <div className="flex gap-0.5 shrink-0">
+                            {auditResults.get(p.originProductNo)!.slice(0, 2).map(issue => (
+                              <span key={issue} className="px-1 py-0.5 bg-red-100 text-red-600 text-[8px] font-bold rounded whitespace-nowrap">
+                                {auditIssueLabel(issue)}
+                              </span>
+                            ))}
+                            {auditResults.get(p.originProductNo)!.length > 2 && (
+                              <span className="px-1 py-0.5 bg-red-100 text-red-600 text-[8px] font-bold rounded">
+                                +{auditResults.get(p.originProductNo)!.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5">
                       <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
