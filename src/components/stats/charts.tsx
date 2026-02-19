@@ -9,6 +9,7 @@ export default function StatsCharts() {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [warning, setWarning] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -20,13 +21,13 @@ export default function StatsCharts() {
         try {
             setLoading(true);
             setError(null);
+            setWarning(null);
             const res = await fetch('/api/naver/stats');
             const result = await res.json();
             if (result.success) {
                 setStats(result.data);
-                // If no channels, it's a fallback state
-                if (result.data.channels.length === 0) {
-                    setError('조회된 스마트스토어 채널이 없습니다. API 연동 설정을 확인해주세요.');
+                if (!result.data.channels || result.data.channels.length === 0) {
+                    setWarning('스마트스토어 채널 정보를 조회할 수 없습니다. (일반 판매자의 경우 상세 실적 조회가 제한될 수 있습니다.)');
                 }
             } else {
                 setError(result.error || result.message || '데이터를 가져오지 못했습니다.');
@@ -53,10 +54,10 @@ export default function StatsCharts() {
     const categoryData = stats?.ordersSummary?.statusCounts
         ? Object.entries(stats.ordersSummary.statusCounts).map(([name, value]) => ({ name, value }))
         : [
-            { name: 'Man', value: 400 },
-            { name: 'Woman', value: 300 },
-            { name: 'Kids', value: 300 },
-            { name: 'Acc', value: 200 },
+            { name: '결제완료', value: 400 },
+            { name: '배송준비', value: 300 },
+            { name: '배송중', value: 300 },
+            { name: '배송완료', value: 200 },
         ];
 
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -76,60 +77,72 @@ export default function StatsCharts() {
 
     return (
         <div className="space-y-6">
-            {/* 상단 채널 요약 정보 */}
-            {channel && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="bg-blue-50 border-blue-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-blue-600 flex items-center">
-                                <ShoppingBag className="w-4 h-4 mr-2" />
-                                활성 채널
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-900">{channel.channelName}</div>
-                            <p className="text-xs text-blue-500 mt-1">{channel.channelServiceType}</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="bg-emerald-50 border-emerald-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-emerald-600 flex items-center">
-                                <TrendingUp className="w-4 h-4 mr-2" />
-                                최근 30일 주문 건수
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-emerald-900">
-                                {stats.ordersSummary?.totalCount || 0} 건
-                            </div>
-                            <p className="text-xs text-emerald-500 mt-1">
-                                총액: {(stats.ordersSummary?.totalAmount || 0).toLocaleString()}원
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card className="bg-amber-50 border-amber-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-amber-600 flex items-center">
-                                <Users className="w-4 h-4 mr-2" />
-                                채널 상태
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-amber-900">
-                                {channel.channelStatus === 'ON' ? '운영 중' : '중지'}
-                            </div>
-                            <p className="text-xs text-amber-500 mt-1">최종 갱신: {new Date().toLocaleTimeString()}</p>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+            {/* 상단 요약 정보 (채널이 없어도 ordersSummary가 있으면 표시) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-blue-50 border-blue-100">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-blue-600 flex items-center">
+                            <ShoppingBag className="w-4 h-4 mr-2" />
+                            채널 정보
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-blue-900 truncate">
+                            {channel ? channel.channelName : '기본 스토어'}
+                        </div>
+                        <p className="text-xs text-blue-500 mt-1">
+                            {channel ? channel.channelServiceType : 'SmartStore'}
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-emerald-50 border-emerald-100">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-emerald-600 flex items-center">
+                            <TrendingUp className="w-4 h-4 mr-2" />
+                            최근 30일 주문 건수
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-emerald-900">
+                            {stats?.ordersSummary?.totalCount || 0} 건
+                        </div>
+                        <p className="text-xs text-emerald-500 mt-1">
+                            총액: {(stats?.ordersSummary?.totalAmount || 0).toLocaleString()}원
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-amber-50 border-amber-100">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-amber-600 flex items-center">
+                            <Users className="w-4 h-4 mr-2" />
+                            채널 상태
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-amber-900">
+                            {channel?.channelStatus === 'ON' ? '운영 중' : '정상 연동'}
+                        </div>
+                        <p className="text-xs text-amber-500 mt-1">최종 갱신: {new Date().toLocaleTimeString()}</p>
+                    </CardContent>
+                </Card>
+            </div>
 
             {error && (
                 <div className="p-4 bg-red-50 border border-red-100 rounded-lg flex items-start space-x-3 text-red-800">
                     <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
                     <div>
-                        <p className="font-semibold">통계 연동 제한됨</p>
+                        <p className="font-semibold">통계 연동 오류</p>
                         <p className="text-sm opacity-90">{error}</p>
+                    </div>
+                </div>
+            )}
+
+            {warning && !error && (
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg flex items-start space-x-3 text-amber-800">
+                    <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="font-semibold text-sm">참고 사항</p>
+                        <p className="text-xs opacity-90">{warning}</p>
                     </div>
                 </div>
             )}
