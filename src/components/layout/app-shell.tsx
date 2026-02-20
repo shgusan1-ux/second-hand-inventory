@@ -22,7 +22,7 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
     }
 
     return (
-        <div className="flex min-h-screen bg-slate-50 flex-col md:flex-row relative">
+        <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 flex-col md:flex-row relative">
             <MobileHeader user={user} />
 
             {/* Sidebar Desktop */}

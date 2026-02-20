@@ -445,6 +445,14 @@ export async function initDatabase() {
       )
     `);
 
+    // 기존 chat_messages 테이블이 옛날 스키마(sender_id)면 삭제 후 재생성
+    try {
+      await db.query(`SELECT session_id FROM chat_messages LIMIT 1`);
+    } catch {
+      // session_id 컬럼이 없거나 테이블이 없음 → drop 후 재생성
+      await db.query(`DROP TABLE IF EXISTS chat_messages`);
+    }
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS chat_messages (
         id TEXT PRIMARY KEY,

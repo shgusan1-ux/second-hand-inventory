@@ -21,11 +21,11 @@ export async function POST(req: Request) {
         const kakaoUserId = userRequest.user?.id || 'unknown';
         const commandText = userRequest.utterance || '';
 
-        // TODO: Map kakaoUserId to internal user. For now, assume Admin.
+        // 카카오 외부 사용자는 읽기 전용 (viewer) 권한만 부여
         const userInfo = {
             id: `kakao-${kakaoUserId}`,
             name: 'Kakao User',
-            role: 'admin' // Dangerous: for POC only, consider adding authentication flow later
+            role: 'viewer'
         };
 
         const result = await processUserCommand(commandText, userInfo);

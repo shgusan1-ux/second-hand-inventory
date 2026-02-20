@@ -75,6 +75,7 @@ export default function ProductEditorPage() {
     const [isFitting, setIsFitting] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [aiResult, setAiResult] = useState<AIResult | null>(null);
+    const [aiChecked, setAiChecked] = useState<Set<string>>(new Set());
     const [formKey, setFormKey] = useState(0);
     const [isBadgeProcessing, setIsBadgeProcessing] = useState(false);
     const [badgePreview, setBadgePreview] = useState<string | null>(null);
@@ -504,7 +505,20 @@ export default function ProductEditorPage() {
             if (res.ok) {
                 const data = await res.json();
                 setAiResult(data);
-                toast.success(`AI 분석 완료 (신뢰도 ${data.confidence}%)`);
+                // 현재값과 다른 항목만 자동 체크
+                const diffFields = new Set<string>();
+                if (data.suggestedName && data.suggestedName !== draft.name) diffFields.add('name');
+                if (data.suggestedBrand && data.suggestedBrand !== draft.brand) diffFields.add('brand');
+                if (data.grade && data.grade !== draft.condition) diffFields.add('condition');
+                if (data.suggestedSize && data.suggestedSize !== draft.size) diffFields.add('size');
+                if (data.suggestedFabric && data.suggestedFabric !== draft.fabric) diffFields.add('fabric');
+                if (data.suggestedPrice > 0 && data.suggestedPrice !== draft.price_sell) diffFields.add('price_sell');
+                if (data.suggestedConsumerPrice > 0 && data.suggestedConsumerPrice !== draft.price_consumer) diffFields.add('price_consumer');
+                if (data.suggestedCategory) diffFields.add('category');
+                if (data.suggestedGender) diffFields.add('gender');
+                if (data.mdDescription) diffFields.add('md_comment');
+                setAiChecked(diffFields);
+                toast.success(`AI 분석 완료 (신뢰도 ${data.confidence}%) — 변경 ${diffFields.size}건 감지`);
             } else {
                 const data = await res.json();
                 toast.error(`AI 분석 실패: ${data.error}`);
@@ -529,25 +543,27 @@ export default function ProductEditorPage() {
         toast.success(`AI 추천값 적용`);
     };
 
-    // AI 결과 전체 적용
+    // AI 결과 선택 적용 (체크된 항목만)
     const applyAllAI = () => {
         if (!selectedId || !aiResult) return;
+        const checked = aiChecked;
+        if (checked.size === 0) { toast.error('적용할 항목을 선택하세요'); return; }
         const updates: Partial<DraftData> = {};
-        if (aiResult.suggestedName) updates.name = aiResult.suggestedName;
-        if (aiResult.suggestedBrand) updates.brand = aiResult.suggestedBrand;
-        if (aiResult.suggestedSize) updates.size = aiResult.suggestedSize;
-        if (aiResult.suggestedFabric) updates.fabric = aiResult.suggestedFabric;
-        if (aiResult.grade) updates.condition = aiResult.grade;
-        if (aiResult.suggestedPrice) updates.price_sell = aiResult.suggestedPrice;
-        if (aiResult.suggestedConsumerPrice) updates.price_consumer = aiResult.suggestedConsumerPrice;
-        if (aiResult.mdDescription) updates.md_comment = aiResult.mdDescription;
+        if (checked.has('name') && aiResult.suggestedName) updates.name = aiResult.suggestedName;
+        if (checked.has('brand') && aiResult.suggestedBrand) updates.brand = aiResult.suggestedBrand;
+        if (checked.has('size') && aiResult.suggestedSize) updates.size = aiResult.suggestedSize;
+        if (checked.has('fabric') && aiResult.suggestedFabric) updates.fabric = aiResult.suggestedFabric;
+        if (checked.has('condition') && aiResult.grade) updates.condition = aiResult.grade;
+        if (checked.has('price_sell') && aiResult.suggestedPrice) updates.price_sell = aiResult.suggestedPrice;
+        if (checked.has('price_consumer') && aiResult.suggestedConsumerPrice) updates.price_consumer = aiResult.suggestedConsumerPrice;
+        if (checked.has('md_comment') && aiResult.mdDescription) updates.md_comment = aiResult.mdDescription;
         // 카테고리 ID 매칭 (동의어 포함)
-        if (aiResult.suggestedCategory) {
+        if (checked.has('category') && aiResult.suggestedCategory) {
             const matched = matchCategory(aiResult.suggestedCategory);
             if (matched) updates.category = matched.id;
         }
         // 성별 대분류 자동 설정
-        if (aiResult.suggestedGender) setSelectedGender(aiResult.suggestedGender);
+        if (checked.has('gender') && aiResult.suggestedGender) setSelectedGender(aiResult.suggestedGender);
 
         setDrafts(prev => {
             const next = new Map(prev);
@@ -585,7 +601,8 @@ export default function ProductEditorPage() {
                 }
             }
         }
-        toast.success('AI 추천값 전체 적용 완료');
+        const appliedCount = Object.keys(updates).length + (checked.has('gender') ? 1 : 0);
+        toast.success(`AI 추천값 ${appliedCount}개 항목 적용 완료`);
     };
 
     // 전체 상품 AI 분석 배치 (분석+draft 적용만, 저장은 수동)
@@ -1201,91 +1218,67 @@ export default function ProductEditorPage() {
                                             <div className="flex gap-2">
                                                 {aiResult && (
                                                     <button onClick={applyAllAI} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                        전체 적용
+                                                        선택 적용 ({aiChecked.size}건)
                                                     </button>
                                                 )}
                                                 <button onClick={handleAIAnalyze} disabled={isAnalyzing} className="px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                                                     {isAnalyzing ? (
                                                         <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 분석 중...</>
-                                                    ) : currentSupplier?.label_image ? 'AI 분석 (라벨 포함)' : 'AI 분석 실행'}
+                                                    ) : currentSupplier?.label_image ? 'AI 재분석 (라벨 포함)' : 'AI 분석'}
                                                 </button>
                                             </div>
                                         </div>
                                         {aiResult ? (
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-[10px] text-cyan-400 font-bold">신뢰도 {aiResult.confidence}%</span>
-                                                    <button onClick={() => setAiResult(null)} className="text-slate-500 hover:text-white text-[10px]">닫기</button>
+                                                    <span className="text-[10px] text-cyan-400 font-bold">신뢰도 {aiResult.confidence}% — 체크된 항목만 적용됩니다</span>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => {
+                                                            const allFields = ['name','brand','condition','size','fabric','price_sell','price_consumer','category','gender','md_comment'];
+                                                            setAiChecked(aiChecked.size === allFields.length ? new Set() : new Set(allFields));
+                                                        }} className="text-slate-400 hover:text-white text-[10px]">{aiChecked.size > 0 ? '전체해제' : '전체선택'}</button>
+                                                        <button onClick={() => setAiResult(null)} className="text-slate-500 hover:text-white text-[10px]">닫기</button>
+                                                    </div>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                                    {aiResult.suggestedName && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">상품명</span>
-                                                            <p className="text-white truncate">{aiResult.suggestedName}</p>
-                                                            <button onClick={() => applyAI('name', aiResult.suggestedName)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedBrand && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">브랜드</span>
-                                                            <p className="text-white">{aiResult.suggestedBrand}</p>
-                                                            <button onClick={() => applyAI('brand', aiResult.suggestedBrand)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.grade && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">등급</span>
-                                                            <p className="text-white">{aiResult.grade}</p>
-                                                            {aiResult.gradeReason && <p className="text-slate-500 text-[10px]">{aiResult.gradeReason}</p>}
-                                                            <button onClick={() => applyAI('condition', aiResult.grade)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedPrice > 0 && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">추천가</span>
-                                                            <p className="text-white">{aiResult.suggestedPrice.toLocaleString()}원</p>
-                                                            {aiResult.priceReason && <p className="text-slate-500 text-[10px] truncate">{aiResult.priceReason}</p>}
-                                                            <button onClick={() => applyAI('price_sell', aiResult.suggestedPrice)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedSize && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">사이즈</span>
-                                                            <p className="text-white">{aiResult.suggestedSize}</p>
-                                                            <button onClick={() => applyAI('size', aiResult.suggestedSize)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedFabric && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">원단</span>
-                                                            <p className="text-white">{aiResult.suggestedFabric}</p>
-                                                            <button onClick={() => applyAI('fabric', aiResult.suggestedFabric)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedCategory && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">카테고리</span>
-                                                            <p className="text-white">{aiResult.suggestedCategory}</p>
-                                                            <button onClick={() => {
-                                                                const matched = matchCategory(aiResult.suggestedCategory);
-                                                                if (matched) applyAI('category', matched.id);
-                                                                else toast.error(`카테고리 "${aiResult.suggestedCategory}"를 목록에서 찾을 수 없습니다`);
-                                                            }} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedGender && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">성별</span>
-                                                            <p className="text-white font-bold">{aiResult.suggestedGender}</p>
-                                                        </div>
-                                                    )}
-                                                    {aiResult.suggestedConsumerPrice > 0 && (
-                                                        <div className="bg-slate-800/50 rounded-lg p-2">
-                                                            <span className="text-slate-500">소비자가 (새제품 70%)</span>
-                                                            <p className="text-white">{aiResult.suggestedConsumerPrice.toLocaleString()}원</p>
-                                                            <button onClick={() => applyAI('price_consumer', aiResult.suggestedConsumerPrice)} className="text-cyan-400 text-[10px] font-bold mt-1 hover:text-cyan-300">[적용]</button>
-                                                        </div>
-                                                    )}
+                                                <div className="space-y-1 text-[11px]">
+                                                    {(() => {
+                                                        const d = currentDraft;
+                                                        const items: { key: string; label: string; current: string; ai: string; }[] = [];
+                                                        if (aiResult.suggestedName) items.push({ key: 'name', label: '상품명', current: d.name || '-', ai: aiResult.suggestedName });
+                                                        if (aiResult.suggestedBrand) items.push({ key: 'brand', label: '브랜드', current: d.brand || '-', ai: aiResult.suggestedBrand });
+                                                        if (aiResult.grade) items.push({ key: 'condition', label: '등급', current: d.condition || '-', ai: `${aiResult.grade}${aiResult.gradeReason ? ` (${aiResult.gradeReason})` : ''}` });
+                                                        if (aiResult.suggestedSize) items.push({ key: 'size', label: '사이즈', current: d.size || '-', ai: aiResult.suggestedSize });
+                                                        if (aiResult.suggestedFabric) items.push({ key: 'fabric', label: '원단', current: d.fabric || '-', ai: aiResult.suggestedFabric });
+                                                        if (aiResult.suggestedConsumerPrice > 0) items.push({ key: 'price_consumer', label: '소비자가', current: `${(d.price_consumer||0).toLocaleString()}원`, ai: `${aiResult.suggestedConsumerPrice.toLocaleString()}원` });
+                                                        if (aiResult.suggestedPrice > 0) items.push({ key: 'price_sell', label: '판매가', current: `${(d.price_sell||0).toLocaleString()}원`, ai: `${aiResult.suggestedPrice.toLocaleString()}원${aiResult.priceReason ? ` (${aiResult.priceReason})` : ''}` });
+                                                        if (aiResult.suggestedCategory) items.push({ key: 'category', label: '카테고리', current: categories.find(c => c.id === d.category)?.name || d.category || '-', ai: aiResult.suggestedCategory });
+                                                        if (aiResult.suggestedGender) items.push({ key: 'gender', label: '성별', current: selectedGender || '-', ai: aiResult.suggestedGender });
+                                                        if (aiResult.mdDescription) items.push({ key: 'md_comment', label: 'MD설명', current: d.md_comment ? `${d.md_comment.substring(0,30)}...` : '-', ai: `${aiResult.mdDescription.substring(0,30)}...` });
+                                                        return items.map(item => {
+                                                            const isChecked = aiChecked.has(item.key);
+                                                            const isDiff = item.current !== item.ai.split(' (')[0]; // 간단 비교
+                                                            return (
+                                                                <label key={item.key}
+                                                                    className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-all ${isChecked ? 'bg-cyan-900/30 border border-cyan-500/40' : 'bg-slate-800/30 border border-transparent hover:border-slate-600/50'}`}
+                                                                    onClick={() => setAiChecked(prev => { const n = new Set(prev); n.has(item.key) ? n.delete(item.key) : n.add(item.key); return n; })}
+                                                                >
+                                                                    <input type="checkbox" checked={isChecked} readOnly
+                                                                        className="mt-0.5 w-3.5 h-3.5 rounded border-slate-500 text-cyan-500 focus:ring-cyan-500/30 cursor-pointer" />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <span className="text-slate-500 text-[10px] font-bold">{item.label}</span>
+                                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                                            <span className={`truncate max-w-[120px] ${isDiff ? 'text-red-400/70 line-through' : 'text-slate-400'}`}>{item.current}</span>
+                                                                            {isDiff && <>
+                                                                                <span className="text-slate-600">→</span>
+                                                                                <span className="text-emerald-400 font-bold truncate max-w-[160px]">{item.ai}</span>
+                                                                            </>}
+                                                                            {!isDiff && <span className="text-slate-600 text-[10px]">(동일)</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                </label>
+                                                            );
+                                                        });
+                                                    })()}
                                                 </div>
                                             </div>
                                         ) : (

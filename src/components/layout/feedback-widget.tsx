@@ -124,7 +124,7 @@ export function FeedbackWidget() {
                                 placeholder="예: 출근 기록이 저장되지 않습니다."
                                 value={data.title}
                                 onChange={(e) => setData({ ...data, title: e.target.value })}
-                                className="bg-slate-900 border-slate-800 focus-visible:ring-emerald-500"
+                                className="bg-slate-900 border-slate-800 focus-visible:ring-emerald-500 text-white"
                             />
                         </div>
 
@@ -136,7 +136,7 @@ export function FeedbackWidget() {
                                 rows={5}
                                 value={data.content}
                                 onChange={(e) => setData({ ...data, content: e.target.value })}
-                                className="bg-slate-900 border-slate-800 focus-visible:ring-emerald-500"
+                                className="bg-slate-900 border-slate-800 focus-visible:ring-emerald-500 text-white"
                             />
                         </div>
                     </div>

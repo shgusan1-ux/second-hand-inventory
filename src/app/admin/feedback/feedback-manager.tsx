@@ -121,8 +121,8 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         size="sm"
                         onClick={() => setFilterStatus('ALL')}
                         className={cn(
-                            "text-xs h-8 px-4",
-                            filterStatus === 'ALL' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                            "text-xs h-8 px-4 transition-all",
+                            filterStatus === 'ALL' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"
                         )}
                     >
                         전체 ({feedbacks.length})
@@ -132,8 +132,8 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         size="sm"
                         onClick={() => setFilterStatus('PENDING')}
                         className={cn(
-                            "text-xs h-8 px-4",
-                            filterStatus === 'PENDING' ? "bg-slate-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-400"
+                            "text-xs h-8 px-4 transition-all",
+                            filterStatus === 'PENDING' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
                         )}
                     >
                         처리 전 ({feedbacks.filter(f => f.status === 'PENDING').length})
@@ -143,8 +143,8 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         size="sm"
                         onClick={() => setFilterStatus('IN_PROGRESS')}
                         className={cn(
-                            "text-xs h-8 px-4",
-                            filterStatus === 'IN_PROGRESS' ? "bg-blue-600/20 text-blue-400 shadow-sm" : "text-slate-500 hover:text-blue-400/50"
+                            "text-xs h-8 px-4 transition-all",
+                            filterStatus === 'IN_PROGRESS' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-blue-400"
                         )}
                     >
                         처리 중 ({feedbacks.filter(f => f.status === 'IN_PROGRESS').length})
@@ -154,8 +154,8 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         size="sm"
                         onClick={() => setFilterStatus('COMPLETED')}
                         className={cn(
-                            "text-xs h-8 px-4",
-                            filterStatus === 'COMPLETED' ? "bg-emerald-600/20 text-emerald-400 shadow-sm" : "text-slate-500 hover:text-emerald-400/50"
+                            "text-xs h-8 px-4 transition-all",
+                            filterStatus === 'COMPLETED' ? "bg-emerald-600 text-white shadow-md" : "text-slate-400 hover:text-emerald-400"
                         )}
                     >
                         완료 ({feedbacks.filter(f => f.status === 'COMPLETED').length})
@@ -201,7 +201,7 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                             <Input
                                 value={createData.title}
                                 onChange={(e) => setCreateData({ ...createData, title: e.target.value })}
-                                className="bg-slate-900 border-slate-800"
+                                className="bg-slate-900 border-slate-800 text-white"
                                 placeholder="이슈 제목"
                             />
                         </div>
@@ -210,7 +210,7 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                             <Textarea
                                 value={createData.content}
                                 onChange={(e) => setCreateData({ ...createData, content: e.target.value })}
-                                className="bg-slate-900 border-slate-800"
+                                className="bg-slate-900 border-slate-800 text-white"
                                 placeholder="상세 내용"
                                 rows={4}
                             />
@@ -301,7 +301,7 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                                 <div className="grid gap-3">
                                     <Textarea
                                         placeholder="공유할 진행 상황이나 답변을 입력하세요..."
-                                        className="bg-slate-950 border-slate-800 text-sm focus-visible:ring-emerald-500"
+                                        className="bg-slate-950 border-slate-800 text-sm focus-visible:ring-emerald-500 text-white"
                                         value={commentMap[f.id] || ''}
                                         onChange={(e) => setCommentMap(prev => ({ ...prev, [f.id]: e.target.value }))}
                                     />

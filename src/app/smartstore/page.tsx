@@ -560,7 +560,7 @@ export default function SmartstorePage() {
       {/* 헤더 */}
       <div className="flex items-end justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">스마트스토어</h1>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">스마트스토어</h1>
           <p className="text-sm text-slate-400 mt-1">
             {hasData ? `상품 현황 · ${totalCount.toLocaleString()}건` : '상품 동기화 전'}
           </p>
@@ -706,7 +706,7 @@ export default function SmartstorePage() {
                 )}
               </div>
               <p className="text-slate-500 text-sm font-medium">{item.label}</p>
-              <h3 className="text-xl font-black text-slate-900 -mt-1">{item.count.toLocaleString()}</h3>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white -mt-1">{item.count.toLocaleString()}</h3>
             </button>
           ))}
           {lastUpdated && (
@@ -744,7 +744,7 @@ export default function SmartstorePage() {
                     }
                   }}
                   className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors flex-shrink-0 ${isActive
-                    ? 'border-slate-900 text-slate-900'
+                    ? 'border-slate-900 text-slate-900 dark:text-white dark:border-white'
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                     }`}
                 >

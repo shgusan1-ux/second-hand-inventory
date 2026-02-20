@@ -85,7 +85,7 @@ export function MobileHeader({ user }: { user?: any }) {
             <div className={cn(
                 "h-14 border-b transition-all duration-300 flex items-center px-3 relative overflow-x-hidden",
                 scrolled
-                    ? "bg-black/20 backdrop-blur-sm border-white/5"
+                    ? "bg-black/70 backdrop-blur-md border-white/10"
                     : "bg-black/80 backdrop-blur-md border-slate-700/50"
             )}>
                 {isSearchOpen ? (

@@ -39,20 +39,20 @@ export async function POST(req: Request) {
         const sessionId = incomingSessionId || crypto.randomUUID();
 
         // 1. Ensure Session Exists
-        const { rows: existingSession } = await db.query('SELECT 1 FROM chat_sessions WHERE id = ?', [sessionId]);
+        const { rows: existingSession } = await db.query('SELECT 1 FROM chat_sessions WHERE id = $1', [sessionId]);
         if (existingSession.length === 0) {
             await db.query(
-                'INSERT INTO chat_sessions (id, title, user_id) VALUES (?, ?, ?)',
+                'INSERT INTO chat_sessions (id, title, user_id) VALUES ($1, $2, $3)',
                 [sessionId, command.substring(0, 30) + (command.length > 30 ? '...' : ''), session.id]
             );
         } else {
-            await db.query('UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [sessionId]);
+            await db.query('UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [sessionId]);
         }
 
         // 2. Save User Message
         const userMsgId = crypto.randomUUID();
         await db.query(
-            'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+            'INSERT INTO chat_messages (id, session_id, role, content) VALUES ($1, $2, $3, $4)',
             [userMsgId, sessionId, 'user', command]
         );
 
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         // 4. Save Assistant Response
         const aiMsgId = crypto.randomUUID();
         await db.query(
-            'INSERT INTO chat_messages (id, session_id, role, content, type, action_data) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO chat_messages (id, session_id, role, content, type, action_data) VALUES ($1, $2, $3, $4, $5, $6)',
             [aiMsgId, sessionId, 'assistant', result.reply, result.type, JSON.stringify(result.actionData)]
         );
 

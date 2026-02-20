@@ -140,7 +140,7 @@ export async function processUserCommand(
             } else {
                 try {
                     // 1. Search Product
-                    const searchQ = `SELECT id, name, price_sell, status FROM products WHERE name LIKE ? OR id = ? LIMIT 5`;
+                    const searchQ = `SELECT id, name, price_sell, status FROM products WHERE name LIKE $1 OR id = $2 LIMIT 5`;
                     const { rows: products } = await db.query(searchQ, [`%${keyword}%`, keyword]);
 
                     if (products.length === 0) {
@@ -151,11 +151,11 @@ export async function processUserCommand(
                         const product = products[0];
 
                         if (parsed.intent === 'update_product_price' && price) {
-                            await db.query('UPDATE products SET price_sell = ? WHERE id = ?', [price, product.id]);
+                            await db.query('UPDATE products SET price_sell = $1 WHERE id = $2', [price, product.id]);
                             parsed.reply = `'${product.name}'의 가격을 ${Number(price).toLocaleString()}원으로 변경했습니다.`;
                             type = 'action_success';
                         } else if (parsed.intent === 'update_product_status' && status) {
-                            await db.query('UPDATE products SET status = ? WHERE id = ?', [status, product.id]);
+                            await db.query('UPDATE products SET status = $1 WHERE id = $2', [status, product.id]);
                             parsed.reply = `'${product.name}'의 상태를 '${status}'(으)로 변경했습니다.`;
                             type = 'action_success';
                         } else {
