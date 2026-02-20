@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface VoiceAssistantProps {
@@ -139,11 +139,21 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
         if ('speechSynthesis' in window) {
             // Cancel any ongoing speech
             window.speechSynthesis.cancel();
+            window.speechSynthesis.resume(); // Wake up!
 
             const utterance = new SpeechSynthesisUtterance(text);
+
+            // Explicitly find Korean voice
+            const voices = window.speechSynthesis.getVoices();
+            const koVoice = voices.find(v => v.lang === 'ko-KR' || v.lang.startsWith('ko'));
+            if (koVoice) {
+                utterance.voice = koVoice;
+            }
+
             utterance.lang = 'ko-KR';
             utterance.pitch = 1;
-            utterance.rate = 1;
+            utterance.rate = 1.1; // Slightly faster for natural feel
+            utterance.volume = 1;
 
             utterance.onstart = () => setIsSpeaking(true);
             utterance.onend = () => {
@@ -198,6 +208,13 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
             oscillator.start();
             oscillator.stop(ctx.currentTime + 0.2);
+
+            // SILENT PRIME: Important for mobile browsers to allow subsequent speech without gesture
+            if ('speechSynthesis' in window) {
+                const prime = new SpeechSynthesisUtterance('');
+                prime.volume = 0;
+                window.speechSynthesis.speak(prime);
+            }
         } catch (e) {
             console.error('Audio beep failed', e);
         }
@@ -231,9 +248,16 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
     if (!isSupported) {
         return (
-            <div className="text-rose-500 text-sm p-4 bg-rose-50 rounded-lg text-center">
-                이 브라우저는 음성 인식을 지원하지 않습니다.<br />
-                (Chrome, Safari, Edge 사용 권장)
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-rose-50 border border-rose-100 p-4 rounded-2xl shadow-xl z-50 text-center">
+                <div className="flex justify-center mb-2">
+                    <AlertCircle className="w-8 h-8 text-rose-500" />
+                </div>
+                <h3 className="font-bold text-rose-900 mb-1">음성 기능을 사용할 수 없습니다</h3>
+                <p className="text-xs text-rose-700 leading-relaxed">
+                    1. <b>HTTPS</b> 주소로 접속했는지 확인해 주세요.<br />
+                    2. <b>Chrome</b> 또는 <b>Safari</b> 브라우저를 사용하세요.<br />
+                    3. 마이크 권한을 허용해 주셔야 합니다.
+                </p>
             </div>
         );
     }

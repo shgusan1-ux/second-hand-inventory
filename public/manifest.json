@@ -1,6 +1,6 @@
 {
-    "name": "Inventory AI Command Center",
-    "short_name": "InventoryAI",
+    "name": "Brownstreet AI",
+    "short_name": "Brownstreet",
     "start_url": "/admin/command",
     "display": "standalone",
     "background_color": "#0f172a",
