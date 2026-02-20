@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDbInitialized } from '@/lib/db-init';
-import { generateProductDetailHTML } from '@/lib/product-detail-generator';
+import { generateProductDetailHTML, prepareProductWithSupplierData } from '@/lib/product-detail-generator';
 import * as XLSX from 'xlsx';
 
 export const maxDuration = 60;
@@ -107,53 +107,15 @@ function buildExcelResponse(products: any[]) {
 
         // 상품 데이터 매핑
         const rows = products.map((p: any) => {
-            // 이미지 파싱 (products.images → supplier.image_urls 순서 폴백)
-            let images: string[] = [];
-            try {
-                images = JSON.parse(p.images || '[]');
-            } catch {
-                images = [];
-            }
-            images = images.filter(Boolean);
-
-            // products.images가 비었으면 supplier_products.image_urls 시도
-            if (images.length === 0 && p.sp_image_urls) {
-                try {
-                    images = JSON.parse(p.sp_image_urls || '[]');
-                } catch {
-                    images = [];
-                }
-                images = images.filter(Boolean);
-            }
-
-            // 그래도 비면 image_url (쉼표 구분 또는 단일)
-            if (images.length === 0 && p.image_url) {
-                images = p.image_url.split(',').map((u: string) => u.trim()).filter(Boolean);
-            }
-
+            // 공급사 데이터 병합 (실측사이즈, 이미지, 라벨 이미지, 원단 등)
+            const prepared = prepareProductWithSupplierData(p);
+            const images = prepared.image_url
+                ? prepared.image_url.split(',').map((u: string) => u.trim()).filter(Boolean)
+                : [];
             const mainImage = images[0] || '';
             const additionalImages = images.slice(1);
 
-            // 원단 정보 보완 (products.fabric 없으면 supplier fabric)
-            const fabric = p.fabric || (p.sp_fabric1 ? `${p.sp_fabric1}${p.sp_fabric2 ? ', ' + p.sp_fabric2 : ''}` : '');
-
-            // label 이미지 파싱 (브랜드택, 세탁택 — 파이프 구분)
-            const labelImages: string[] = p.sp_label_image
-                ? p.sp_label_image.split('|').map((u: string) => u.trim()).filter(Boolean)
-                : [];
-
-            // 상세설명 HTML 생성 (실측 데이터 + 상품 이미지 + label 이미지 포함)
-            // CRITICAL: libsql Row의 "length" 별칭은 내장 .length (컬럼수)와 충돌하므로
-            // SQL에서 total_length로 별칭 → 여기서 length로 리매핑
-            const detailImageUrls = images.join(',');
-            const detailProduct = {
-                ...p,
-                length: p.total_length,  // sp.length1 → total_length → length 리매핑
-                fabric: fabric || p.fabric,
-                image_url: detailImageUrls,
-                label_images: labelImages,  // LABEL / CARE TAG 섹션용
-            };
-            const detailHTML = generateProductDetailHTML(detailProduct);
+            const detailHTML = generateProductDetailHTML(prepared);
 
             // 브랜드 추출 (상품명에서 영문 브랜드)
             const brandMatch = p.brand || (p.name || '').split(' ')[0] || '';
@@ -188,7 +150,7 @@ function buildExcelResponse(products: any[]) {
                 '해외=아시아=일본',                     // 원산지
                 'N',                                  // 복수원산지 여부
                 '과세',                                // 과세여부
-                '무료',                                // 배송방법
+                '선결제',                              // 배송방법
                 0,                                    // 배송비
                 mainImage,                            // 기본이미지
                 additionalImages[0] || '',            // 추가이미지1
@@ -202,15 +164,15 @@ function buildExcelResponse(products: any[]) {
                 additionalImages[8] || '',            // 추가이미지9
                 detailHTML,                           // 상세설명
                 '',                                   // 머리말/꼬리말 템플릿코드
-                '',                                   // 모델명
+                p.id || '',                           // 모델명 (자체상품코드)
                 brandMatch,                           // 브랜드
                 '',                                   // 제조사
-                '',                                   // 미성년자 구매
+                'Y',                                  // 미성년자 구매
                 '',                                   // UPC/EAN코드
                 '',                                   // ISBN코드
                 '',                                   // 바코드
                 '',                                   // 키워드
-                '',                                   // 인증유형
+                '2',                                  // 인증유형
                 '',                                   // 인증정보
                 '',                                   // HS코드
                 '',                                   // 사은품
@@ -219,9 +181,13 @@ function buildExcelResponse(products: any[]) {
                 '',                                   // 제조일자
                 '',                                   // 유효일자
                 '',                                   // 상품분류코드
-                // 상품정보제공고시 1~24 (빈값)
-                '', '', '', '', '', '', '', '', '', '', '', '',
-                '', '', '', '', '', '', '', '', '', '', '', '',
+                // 상품정보제공고시 1~24
+                '01',                                 // 상품정보제공고시 1 (의류)
+                '상세설명참조', '상세설명참조', '상세설명참조',
+                '상세설명참조', '상세설명참조', '상세설명참조',
+                '상세설명참조', '상세설명참조',
+                // 10~24 빈값
+                '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
             ];
         });
 

@@ -83,7 +83,8 @@ export default function ProductEditorPage() {
     const [isMDGenerating, setIsMDGenerating] = useState(false);
     const [mdGeneratedText, setMdGeneratedText] = useState<string | null>(null);
     const [mdInserted, setMdInserted] = useState(false); // MD 삽입 완료 여부
-    const [fittingApplied, setFittingApplied] = useState<'none' | 'thumbnail' | 'added'>('none'); // 착용샷 적용 상태
+    const [fittingAsThumbnailDone, setFittingAsThumbnailDone] = useState(false); // 착용샷 → 썸네일 적용 완료
+    const [fittingAsImageDone, setFittingAsImageDone] = useState(false); // 착용샷 → 이미지 추가 완료
     const [aiApplied, setAiApplied] = useState(false); // AI 선택 적용 완료 여부
     const [mdMoodImage, setMdMoodImage] = useState<string | null>(null); // MD 무드이미지 URL
     const [isMoodImageGenerating, setIsMoodImageGenerating] = useState(false);
@@ -783,7 +784,7 @@ export default function ProductEditorPage() {
         });
         setHasDraft(prev => new Set(prev).add(id));
         setFormKey(k => k + 1);
-        setFittingApplied('added');
+        setFittingAsImageDone(true);
         toast.success('상세 이미지 1번에 추가됨');
     };
 
@@ -806,7 +807,7 @@ export default function ProductEditorPage() {
         });
         setHasDraft(prev => new Set(prev).add(id));
         setFormKey(k => k + 1);
-        setFittingApplied('thumbnail');
+        setFittingAsThumbnailDone(true);
         toast.success('착용샷이 대표 썸네일로 설정됨');
 
         // 뱃지 자동 재생성 (새 대표이미지 기준)
@@ -857,7 +858,7 @@ export default function ProductEditorPage() {
 
             if (uploadRes.ok) {
                 const { url } = await uploadRes.json();
-                setBadgePreview(url);
+                setBadgePreview(url + '?t=' + Date.now());
 
                 // 자동으로 대표이미지(0번)에 적용
                 const id = selectedProduct.id;
@@ -1023,7 +1024,7 @@ export default function ProductEditorPage() {
     const selectedIdRef = useRef<string | null>(null);
     const badgeGenerationId = useRef(0);
 
-    // 뱃지 자동 생성 함수 (레이스 컨디션 방지)
+    // 뱃지 자동 생성 함수 (레이스 컨디션 방지) → 생성 후 대표이미지(0번)에 자동 적용
     const autoGenerateBadge = useCallback(async (imageUrl: string, condition: string, productId: string) => {
         const currentGenId = ++badgeGenerationId.current;
         setIsBadgeProcessing(true);
@@ -1043,7 +1044,23 @@ export default function ProductEditorPage() {
             if (badgeGenerationId.current !== currentGenId) return;
             if (uploadRes.ok) {
                 const { url } = await uploadRes.json();
-                setBadgePreview(url);
+                // 캐시 방지용 타임스탬프 (미리보기 표시용)
+                setBadgePreview(url + '?t=' + Date.now());
+
+                // 자동으로 대표이미지(0번)에 적용 (handleBadgeGenerate와 동일 동작)
+                setDrafts(prev => {
+                    const current = prev.get(productId);
+                    if (!current) return prev;
+                    const newImages = [...current.images];
+                    // 원본 이미지 백업 (취소용)
+                    setOriginalImage0(newImages[0] || '');
+                    newImages[0] = url;
+                    const next = new Map(prev);
+                    next.set(productId, { ...current, images: newImages });
+                    return next;
+                });
+                setHasDraft(prev => new Set(prev).add(productId));
+                setFormKey(k => k + 1);
             }
         } catch (err) {
             if (badgeGenerationId.current === currentGenId) {
@@ -1067,7 +1084,8 @@ export default function ProductEditorPage() {
         setMdInserted(false);
         setMdMoodImage(null);
         setMdMoodImageInserted(false);
-        setFittingApplied('none');
+        setFittingAsThumbnailDone(false);
+        setFittingAsImageDone(false);
         setAiApplied(false);
         setSelectedGender('');
         // 공급사 데이터에서 성별 자동 감지
@@ -1646,7 +1664,12 @@ export default function ProductEditorPage() {
                                         {mdGeneratedText ? (
                                             <div className="space-y-2">
                                                 <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
-                                                    <p className="text-[11px] text-slate-300 leading-relaxed max-h-[200px] overflow-y-auto whitespace-pre-wrap">{mdGeneratedText.replace(/<[^>]*>/g, '')}</p>
+                                                    <textarea
+                                                        value={mdGeneratedText.replace(/<[^>]*>/g, '')}
+                                                        onChange={(e) => setMdGeneratedText(e.target.value)}
+                                                        className="w-full text-[11px] text-slate-300 leading-relaxed bg-transparent border-none outline-none resize-y min-h-[80px] max-h-[300px] whitespace-pre-wrap"
+                                                        rows={8}
+                                                    />
                                                 </div>
 
                                                 {/* 무드이미지 영역 */}
@@ -1738,11 +1761,11 @@ export default function ProductEditorPage() {
                                         {/* 착용샷 하단 버튼들 */}
                                         {fittingImage && (
                                             <div className="flex gap-2 mt-3">
-                                                <button onClick={setFittingAsThumbnail} disabled={fittingApplied === 'thumbnail'} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingApplied === 'thumbnail' ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-                                                    {fittingApplied === 'thumbnail' ? '썸네일 설정됨' : '썸네일로 설정'}
+                                                <button onClick={setFittingAsThumbnail} disabled={fittingAsThumbnailDone} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingAsThumbnailDone ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                                    {fittingAsThumbnailDone ? '썸네일 설정됨' : '썸네일로 설정'}
                                                 </button>
-                                                <button onClick={addFittingToImages} disabled={fittingApplied === 'added'} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingApplied === 'added' ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600/70 hover:bg-emerald-700'}`}>
-                                                    {fittingApplied === 'added' ? '이미지 추가됨' : '이미지에 추가'}
+                                                <button onClick={addFittingToImages} disabled={fittingAsImageDone} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingAsImageDone ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600/70 hover:bg-emerald-700'}`}>
+                                                    {fittingAsImageDone ? '이미지 추가됨' : '이미지에 추가'}
                                                 </button>
                                             </div>
                                         )}

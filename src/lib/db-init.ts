@@ -1,6 +1,7 @@
 import { db } from './db';
 
 let isInitialized = false;
+let initPromise: Promise<void> | null = null;
 
 /**
  * 데이터베이스 테이블 초기화
@@ -509,9 +510,15 @@ export async function initDatabase() {
 
 /**
  * DB가 초기화되었는지 확인하고, 안 되어있으면 초기화
+ * 동시 요청 시 하나의 Promise만 실행 (race condition 방지)
  */
 export async function ensureDbInitialized() {
-  if (!isInitialized) {
-    await initDatabase();
+  if (isInitialized) return;
+  if (!initPromise) {
+    initPromise = initDatabase().catch(e => {
+      initPromise = null; // 실패 시 재시도 가능하도록
+      throw e;
+    });
   }
+  await initPromise;
 }

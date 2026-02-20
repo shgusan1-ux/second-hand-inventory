@@ -18,6 +18,22 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: '매칭 파라미터가 필요합니다.' }, { status: 400 });
         }
 
+        // 0차: product_code 직접 매칭 (가장 정확)
+        if (productId) {
+            const { rows: directRows } = await db.query(
+                `SELECT * FROM supplier_products WHERE product_code = $1`,
+                [productId]
+            );
+            if (directRows.length > 0) {
+                return NextResponse.json({
+                    matched: true,
+                    score: 100,
+                    candidates_count: 1,
+                    data: directRows[0],
+                });
+            }
+        }
+
         // 1차: 브랜드 정확 매칭 + 이름/사이즈 유사 매칭
         let candidates: any[] = [];
 

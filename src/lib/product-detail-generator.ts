@@ -1,13 +1,76 @@
+// 공급사 데이터(sp_* 컬럼)를 상품 데이터에 병합하는 헬퍼
+// manage 페이지, export, 미리보기 등 모든 곳에서 공통 사용
+export function prepareProductWithSupplierData(p: any): any {
+  const result = { ...p };
+
+  // total_length → length 리매핑 (libsql .length 충돌 방지)
+  if (p.total_length && !p.length) {
+    result.length = p.total_length;
+  }
+
+  // 원단 보완 (products.fabric 없으면 supplier fabric)
+  if (!result.fabric && p.sp_fabric1) {
+    result.fabric = `${p.sp_fabric1}${p.sp_fabric2 ? ', ' + p.sp_fabric2 : ''}`;
+  }
+
+  // 공급사 이미지 병합 (products.images 또는 image_url에 공급사 이미지 추가)
+  let images: string[] = [];
+  try {
+    images = JSON.parse(p.images || '[]').filter(Boolean);
+  } catch { images = []; }
+
+  // products.images가 배지 썸네일 1장뿐이면 공급사 이미지를 병합
+  if (p.sp_image_urls) {
+    try {
+      const supplierImages: string[] = JSON.parse(p.sp_image_urls || '[]').filter(Boolean);
+      if (supplierImages.length > 0) {
+        // 기존 이미지 뒤에 공급사 이미지 추가 (중복 제거)
+        for (const img of supplierImages) {
+          if (!images.includes(img)) images.push(img);
+        }
+      }
+    } catch { }
+  }
+
+  // image_url도 빌 때 공급사 이미지 반영
+  if (images.length > 0) {
+    result.image_url = images.join(',');
+  } else if (p.image_url) {
+    // 원래 image_url 유지
+    const existingImages = p.image_url.split(',').map((u: string) => u.trim()).filter(Boolean);
+    if (p.sp_image_urls) {
+      try {
+        const supplierImages: string[] = JSON.parse(p.sp_image_urls || '[]').filter(Boolean);
+        for (const img of supplierImages) {
+          if (!existingImages.includes(img)) existingImages.push(img);
+        }
+      } catch { }
+    }
+    result.image_url = existingImages.join(',');
+  }
+
+  // 라벨/케어태그 이미지
+  if (p.sp_label_image && !result.label_images) {
+    result.label_images = p.sp_label_image.split('|').map((u: string) => u.trim()).filter(Boolean);
+  }
+
+  return result;
+}
+
 // Shared HTML generation functions for product detail pages
 export function generateProductDetailHTML(product: any): string {
-  const imageUrls = product.image_url ? [...new Set(product.image_url.split(',').map((url: string) => url.trim()).filter(Boolean))] : [];
+  // 공급사 데이터가 있으면 자동 병합
+  const p = product.sp_image_urls !== undefined || product.total_length !== undefined
+    ? prepareProductWithSupplierData(product)
+    : product;
+  const imageUrls = p.image_url ? [...new Set(p.image_url.split(',').map((url: string) => url.trim()).filter(Boolean))] : [];
   const mainImage = imageUrls[0] || '';
 
-  const measurements = parseMeasurements(product);
-  const { text: rawMdComment, moodImageUrl } = extractMoodImage(product.md_comment || generateMDComment(product));
+  const measurements = parseMeasurements(p);
+  const { text: rawMdComment, moodImageUrl } = extractMoodImage(p.md_comment || generateMDComment(p));
   const mdComment = formatMDComment(rawMdComment);
-  const gradeInfo = getGradeInfo(product.condition || 'A급');
-  const fabric = product.fabric || '케어라벨 미부착으로 확인불가';
+  const gradeInfo = getGradeInfo(p.condition || 'A급');
+  const fabric = p.fabric || '케어라벨 미부착으로 확인불가';
 
   return `<div style="max-width:860px; margin:0 auto; font-family:'나눔스퀘어','NanumSquare','Malgun Gothic',sans-serif; color:#333; line-height:1.75; letter-spacing:-0.3px;">
   <div style="margin:0 0 30px;">
@@ -42,8 +105,8 @@ export function generateProductDetailHTML(product: any): string {
     <h3 style="font-size:19px; font-weight:900; color:#1A4D3E; margin:0 0 20px; letter-spacing:0.8px;">PRODUCT INFO</h3>
     <div style="display:inline-block; text-align:left; width:100%; max-width:520px;">
       <ul style="list-style:none; padding:0; font-size:14px; line-height:2.0; margin:0;">
-        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">BRAND</strong> <b>${product.brand || '-'}</b></li>
-        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${formatSizeWithGender(product.size, product.name)}</li>
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">BRAND</strong> <b>${p.brand || '-'}</b></li>
+        <li style="margin:0 0 6px;"><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">SIZE</strong> ${formatSizeWithGender(p.size, p.name)}</li>
         <li><span style="color:#1A4D3E; margin-right:8px;">▪</span> <strong style="display:inline-block; width:86px; color:#555;">FABRIC</strong> ${fabric}</li>
       </ul>
     </div>
@@ -77,9 +140,8 @@ export function generateProductDetailHTML(product: any): string {
         const vertImage = imageUrls.find((url: string) => url.toLowerCase().includes('vert.jpg'));
         if (vertImage) detailImages.push(vertImage);
       } else {
-        // Rule 1: 대표이미지(1번)은 상단에 이미 표시되므로 DETAIL VIEW에서는 2번부터 출력
-        // Rule 2: 요약 및 생략 금지 - 2번 이후 이미지를 하나도 누락 없이 전부 출력
-        detailImages = imageUrls.length > 1 ? imageUrls.slice(1) : imageUrls;
+        // 모든 상세 이미지를 전부 출력 (1번 포함 - 상단 대표이미지와 별도로 DETAIL VIEW에도 표시)
+        detailImages = [...imageUrls];
       }
 
       // Rule 5: 태그 형식 유지 - 정확한 형식으로 한 줄에 하나씩 출력
@@ -91,8 +153,8 @@ export function generateProductDetailHTML(product: any): string {
 
   ${(() => {
     // LABEL / CARE TAG 섹션 — 브랜드택, 세탁택 이미지 (supplier_products.label_image)
-    const labelImages: string[] = product.label_images
-      ? (Array.isArray(product.label_images) ? product.label_images : product.label_images.split('|').map((u: string) => u.trim()).filter(Boolean))
+    const labelImages: string[] = p.label_images
+      ? (Array.isArray(p.label_images) ? p.label_images : p.label_images.split('|').map((u: string) => u.trim()).filter(Boolean))
       : [];
     if (labelImages.length === 0) return '';
     return `
@@ -106,7 +168,7 @@ export function generateProductDetailHTML(product: any): string {
 
   <div style="padding:35px 18px; background:#F8F7F2; margin:0 0 60px; text-align:center; border-radius:12px; border:1px solid #EAE8DF;">
     <h3 style="font-size:18px; font-weight:900; margin:0 0 22px; color:#1A4D3E;">✨ CONDITION CHECK</h3>
-    <div style="display:inline-block; padding:12px 25px; background:#1A4D3E; color:#fff; font-size:16px; font-weight:900; border-radius:10px; margin-bottom:12px; box-shadow:0 2px 5px rgba(26,77,62,0.18);">GRADE : ${product.condition || 'A급'}</div>
+    <div style="display:inline-block; padding:12px 25px; background:#1A4D3E; color:#fff; font-size:16px; font-weight:900; border-radius:10px; margin-bottom:12px; box-shadow:0 2px 5px rgba(26,77,62,0.18);">GRADE : ${p.condition || 'A급'}</div>
     <p style="font-size:14px; color:#555; line-height:1.6; margin:0;">${gradeInfo}</p>
   </div>
 </div>`;

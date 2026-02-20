@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateMDDescription, generateMoodImage } from '@/lib/ai-automation';
 import { put } from '@vercel/blob';
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -13,12 +15,15 @@ export async function POST(request: NextRequest) {
 
         // 무드이미지 생성 모드
         if (mode === 'mood-image') {
+            console.log('[MD Generate] 무드이미지 생성 시작:', { name, brand, category, imageUrl: imageUrl?.slice(0, 80) });
             const result = await generateMoodImage({ name, brand, category, imageUrl });
             if (!result) {
-                return NextResponse.json({ error: '무드이미지 생성 실패' }, { status: 500 });
+                console.error('[MD Generate] generateMoodImage returned null');
+                return NextResponse.json({ error: '무드이미지 생성 실패 (Gemini 응답 없음)' }, { status: 500 });
             }
 
             // Base64 → Buffer → Vercel Blob 업로드
+            console.log('[MD Generate] 이미지 생성 완료, Blob 업로드 시작, size:', result.imageBase64.length);
             const buffer = Buffer.from(result.imageBase64, 'base64');
             const ext = result.mimeType.includes('png') ? 'png' : 'jpg';
             const filename = `mood-images/${productId || Date.now()}.${ext}`;
@@ -28,6 +33,7 @@ export async function POST(request: NextRequest) {
                 contentType: result.mimeType,
             });
 
+            console.log('[MD Generate] Blob 업로드 완료:', blob.url);
             return NextResponse.json({ success: true, moodImageUrl: blob.url });
         }
 

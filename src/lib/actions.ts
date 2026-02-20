@@ -1016,16 +1016,15 @@ export async function getInventoryForExport(searchParams: any) {
     }
 
     // 스마트스토어 필터
-    let naverJoin = '';
-    if (smartstoreParam !== 'all') {
-        naverJoin = 'LEFT JOIN naver_products np ON p.id = np.seller_management_code';
-        if (smartstoreParam === 'unregistered') {
-            sqlConditions.push('np.seller_management_code IS NULL');
-        } else if (smartstoreParam === 'registered') {
-            sqlConditions.push('np.seller_management_code IS NOT NULL');
-        } else if (smartstoreParam === 'suspended') {
-            sqlConditions.push("np.status_type = 'SUSPENSION'");
-        }
+    const naverJoin = 'LEFT JOIN naver_products np ON p.id = np.seller_management_code';
+    if (smartstoreParam === 'unregistered') {
+        sqlConditions.push('np.seller_management_code IS NULL');
+    } else if (smartstoreParam === 'registered') {
+        sqlConditions.push('np.seller_management_code IS NOT NULL');
+    } else if (smartstoreParam === 'suspended') {
+        sqlConditions.push("np.status_type = 'SUSPENSION'");
+    } else if (smartstoreParam === 'outofstock') {
+        sqlConditions.push("np.status_type = 'OUTOFSTOCK'");
     }
 
     // AI 작업 필터 (ai_completed 컬럼)
@@ -1040,8 +1039,8 @@ export async function getInventoryForExport(searchParams: any) {
     try {
         // Updated Query with JOIN
         const sql = `
-            SELECT p.*, c.name as category_name, c.classification as category_classification
-            ${naverJoin ? ', np.origin_product_no as smartstore_no, np.status_type as smartstore_status, np.sale_price as smartstore_price' : ''}
+            SELECT p.*, c.name as category_name, c.classification as category_classification,
+                   np.origin_product_no as smartstore_no, np.status_type as smartstore_status, np.sale_price as smartstore_price
             FROM products p
             LEFT JOIN categories c ON p.category = c.id
             ${naverJoin}

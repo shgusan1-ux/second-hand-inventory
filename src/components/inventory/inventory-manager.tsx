@@ -22,7 +22,7 @@ interface InventoryManagerProps {
     currentPage: number;
     categories: any[];
     brands?: string[];
-    smartstoreStats?: { total: number; registered: number; unregistered: number };
+    smartstoreStats?: { total: number; registered: number; unregistered: number; suspended: number; outofstock: number };
 }
 
 export function InventoryManager({
@@ -264,7 +264,7 @@ export function InventoryManager({
                                 toast.error('다운로드할 상품이 없습니다.');
                                 return;
                             }
-                            toast.info(`플레이오토 엑셀 생성 중... (${ids.length}건)`);
+                            toast.info(`플레이오토 수정 엑셀 생성 중... (${ids.length}건)`);
                             try {
                                 const res = await fetch('/api/inventory/export', {
                                     method: 'POST',
@@ -287,14 +287,56 @@ export function InventoryManager({
                                 a.click();
                                 a.remove();
                                 URL.revokeObjectURL(url);
-                                toast.success(`플레이오토 엑셀 다운로드 완료! (${ids.length}건)`);
+                                toast.success(`플레이오토 수정 엑셀 다운로드 완료! (${ids.length}건)`);
                             } catch (err: any) {
                                 toast.error(`다운로드 실패: ${err.message}`);
                             }
                         }}
                     >
                         <Download className="h-4 w-4" />
-                        <span className="whitespace-nowrap">플레이오토 엑셀 ({products.length}건)</span>
+                        <span className="whitespace-nowrap">플레이오토 수정 엑셀 ({products.length}건)</span>
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50 gap-2 h-10 sm:h-11"
+                        onClick={async () => {
+                            const ids = products.map((p: any) => p.id);
+                            if (ids.length === 0) {
+                                toast.error('다운로드할 상품이 없습니다.');
+                                return;
+                            }
+                            toast.info(`플레이오토 신규등록 엑셀 생성 중... (${ids.length}건)`);
+                            try {
+                                const res = await fetch('/api/inventory/export-new', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ ids }),
+                                });
+                                if (!res.ok) {
+                                    const err = await res.json();
+                                    toast.error(err.error || '엑셀 생성 실패');
+                                    return;
+                                }
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                const disposition = res.headers.get('Content-Disposition') || '';
+                                const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/);
+                                a.download = filenameMatch ? decodeURIComponent(filenameMatch[1]) : 'playauto_new.xlsx';
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                URL.revokeObjectURL(url);
+                                toast.success(`플레이오토 신규등록 엑셀 다운로드 완료! (${ids.length}건)`);
+                            } catch (err: any) {
+                                toast.error(`다운로드 실패: ${err.message}`);
+                            }
+                        }}
+                    >
+                        <Download className="h-4 w-4" />
+                        <span className="whitespace-nowrap">플레이오토 신규 등록 ({products.length}건)</span>
                     </Button>
                 </div>
             </div>
@@ -308,7 +350,13 @@ export function InventoryManager({
                         스마트스토어 등록상품 <span className="font-bold">{smartstoreStats.registered.toLocaleString()}</span>
                     </span>
                     <span className="px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 font-medium border border-orange-200">
-                        스마트스토어 미등록 상품 <span className="font-bold">{smartstoreStats.unregistered.toLocaleString()}</span>
+                        스토어 판매중지 <span className="font-bold">{smartstoreStats.suspended.toLocaleString()}</span>
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-red-50 text-red-700 font-medium border border-red-200">
+                        스토어 품절 <span className="font-bold">{smartstoreStats.outofstock.toLocaleString()}</span>
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-200">
+                        스토어 미등록 <span className="font-bold">{smartstoreStats.unregistered.toLocaleString()}</span>
                     </span>
                 </div>
             )}

@@ -157,6 +157,10 @@ export default async function InventoryManagePage({
         sqlConditions.push('np.seller_management_code IS NULL');
     } else if (smartstoreParam === 'registered') {
         sqlConditions.push('np.seller_management_code IS NOT NULL');
+    } else if (smartstoreParam === 'suspended') {
+        sqlConditions.push("np.status_type = 'SUSPENSION'");
+    } else if (smartstoreParam === 'outofstock') {
+        sqlConditions.push("np.status_type = 'OUTOFSTOCK'");
     }
 
     // Updated At Date Range
@@ -186,7 +190,7 @@ export default async function InventoryManagePage({
     let result;
     let totalCount = 0;
     let products = [];
-    let smartstoreStats = { total: 0, registered: 0, unregistered: 0 };
+    let smartstoreStats = { total: 0, registered: 0, unregistered: 0, suspended: 0, outofstock: 0 };
 
     try {
         const countSql = `
@@ -203,7 +207,9 @@ export default async function InventoryManagePage({
         const statsSql = `
             SELECT
                 COUNT(*) as total,
-                COUNT(np.seller_management_code) as registered
+                COUNT(np.seller_management_code) as registered,
+                COUNT(CASE WHEN np.status_type = 'SUSPENSION' THEN 1 END) as suspended,
+                COUNT(CASE WHEN np.status_type = 'OUTOFSTOCK' THEN 1 END) as outofstock
             FROM products p
             LEFT JOIN naver_products np ON p.id = np.seller_management_code
             WHERE p.status != '폐기'
@@ -214,16 +220,23 @@ export default async function InventoryManagePage({
             total: parseInt(st?.total || '0'),
             registered: parseInt(st?.registered || '0'),
             unregistered: parseInt(st?.total || '0') - parseInt(st?.registered || '0'),
+            suspended: parseInt(st?.suspended || '0'),
+            outofstock: parseInt(st?.outofstock || '0'),
         };
 
-        // 2. Fetch Data
+        // 2. Fetch Data (supplier_products LEFT JOIN으로 실측사이즈/이미지 포함)
         const dataSql = `
             SELECT p.*, c.name as category_name, c.classification as category_classification,
                    np.origin_product_no as smartstore_no, np.status_type as smartstore_status,
-                   np.sale_price as smartstore_price
+                   np.sale_price as smartstore_price,
+                   sp.shoulder, sp.chest, sp.waist, sp.arm_length as sleeve,
+                   sp.length1 as total_length, sp.hem, sp.rise, sp.thigh, sp.length2 as inseam,
+                   sp.hip, sp.fabric1 as sp_fabric1, sp.fabric2 as sp_fabric2,
+                   sp.image_urls as sp_image_urls, sp.label_image as sp_label_image
             FROM products p
             LEFT JOIN categories c ON p.category = c.id
             ${naverJoin}
+            LEFT JOIN supplier_products sp ON p.id = sp.product_code
             ${whereClause}
             ORDER BY p.created_at DESC
             LIMIT ${safeLimit} OFFSET ${offset}

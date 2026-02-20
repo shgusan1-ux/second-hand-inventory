@@ -411,6 +411,32 @@ async function saveProductsToDB(contents: any[]) {
     console.log(`[saveProductsToDB] ${contents.length}개 상품 DB 저장 완료`);
 }
 
+/**
+ * 네이버 스토어의 상태(품절/판매중지)를 통합재고관리 상태(판매완료)로 동기화
+ */
+async function syncStatusToProducts() {
+    try {
+        const result = await db.query(`
+            UPDATE products 
+            SET status = '판매완료',
+                sold_at = COALESCE(sold_at, CURRENT_TIMESTAMP)
+            WHERE id IN (
+                SELECT seller_management_code 
+                FROM naver_products 
+                WHERE status_type IN ('OUTOFSTOCK', 'SUSPENSION')
+                AND seller_management_code IS NOT NULL 
+                AND seller_management_code != ''
+            ) 
+            AND status NOT IN ('판매완료', '폐기')
+        `);
+        if (result.rowCount > 0) {
+            console.log(`[SyncStatus] ${result.rowCount}건의 상품을 '판매완료'로 동기화했습니다.`);
+        }
+    } catch (e) {
+        console.error('[SyncStatus] 오류:', e);
+    }
+}
+
 // DB에서 저장된 상품 로드 (네이버 API 호출 없이)
 async function loadProductsFromDB(): Promise<any[] | null> {
     try {
@@ -741,6 +767,8 @@ export async function GET(request: Request) {
 
                         // DB에 원본 데이터 영구 저장
                         await saveProductsToDB(allContents);
+                        // 통합재고관리 상태 동기화 (품절/중지 -> 판매완료)
+                        await syncStatusToProducts();
 
                         send({ type: 'progress', percent: 83, message: `${allContents.length}개 상품 처리 중...` });
 
@@ -866,8 +894,10 @@ export async function GET(request: Request) {
             // 중복 제거
             allContents = deduplicateContents(allContents);
 
-            // DB에 원본 데이터 영구 저장
+            // DB 업데이트
             await saveProductsToDB(allContents);
+            // 통합재고관리 상태 동기화 (품절/중지 -> 판매완료)
+            await syncStatusToProducts();
 
             const ids = allContents.map(p => p.originProductNo.toString()).filter(id => !!id);
             const [{ map: overrideMap, customBrands }, lcSettings] = await Promise.all([

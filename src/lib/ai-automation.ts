@@ -333,6 +333,7 @@ export async function generateMDDescription(product: {
 3. HTML 태그 없이 순수 텍스트로만 작성하세요.
 4. 마크다운 기호(###, **, --- 등)도 사용하지 마세요.
 5. 자연스러운 한국어로, 격조 있지만 읽기 쉬운 톤으로 작성하세요.
+6. 상품명이나 제목을 절대 출력하지 마세요. [Brand Heritage]부터 바로 시작하세요.
 
 # 출력 구조 (섹션 제목은 반드시 아래 영어 그대로 사용)
 
@@ -416,11 +417,17 @@ export async function generateMDDescription(product: {
         description = description.replace(/^###\s*\*?\*?(.+?)\*?\*?\s*$/gm, '[$1]');
         // ** 볼드 마크다운 제거
         description = description.replace(/\*\*(.+?)\*\*/g, '$1');
-        // AI가 자체적으로 생성하는 영문 제목/아카이브명 제거 (예: "OBEY Archive: Box Logo Hoodie - Grey Marl")
-        // [섹션제목] 앞에 나오는 영문 제목 줄 제거
-        description = description.replace(/^[A-Z][A-Za-z\s&':\-–—,.]+(Archive|Collection|Edition|Series|Line)[^\n]*\n*/gm, '');
-        // 첫 줄이 [섹션] 전에 있는 영문 only 줄 제거
-        description = description.replace(/^[A-Z][A-Za-z0-9\s\-–—:,'".()&]+\n(?=\[)/gm, '');
+        // [Brand Heritage] 이전에 나오는 모든 텍스트(상품명, 영문 제목 등) 제거
+        const firstSectionIdx = description.indexOf('[Brand Heritage]');
+        if (firstSectionIdx > 0) {
+            description = description.slice(firstSectionIdx);
+        } else {
+            // [Brand Heritage]가 없으면 첫 번째 [ 섹션 시작 전 텍스트 제거
+            const firstBracketIdx = description.indexOf('\n[');
+            if (firstBracketIdx > 0) {
+                description = description.slice(firstBracketIdx + 1);
+            }
+        }
 
         return description;
     } catch (error) {
@@ -479,7 +486,7 @@ RULES:
             }
         }
 
-        const MAX_RETRIES = 2;
+        const MAX_RETRIES = 3;
         let response: Response | null = null;
         let data: any = null;
 
@@ -490,7 +497,7 @@ RULES:
                 body: JSON.stringify({
                     contents: [{ role: 'user', parts }],
                     generationConfig: {
-                        responseModalities: ['IMAGE'],
+                        responseModalities: ['TEXT', 'IMAGE'],
                         temperature: 1.0,
                         imageConfig: {
                             aspectRatio: '4:3',
@@ -501,9 +508,9 @@ RULES:
             data = await response.json();
             if (response.ok) break;
             const errMsg = data.error?.message || '';
+            console.warn(`[MoodImage] attempt ${attempt + 1}/${MAX_RETRIES} failed: ${response.status} ${errMsg}`);
             const isRetryable = errMsg.includes('high demand') || errMsg.includes('overloaded') || response.status === 429 || response.status === 503;
             if (isRetryable) {
-                console.log(`[MoodImage] 재시도 ${attempt + 1}/${MAX_RETRIES}: ${errMsg}`);
                 await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
                 continue;
             }
@@ -511,23 +518,29 @@ RULES:
         }
 
         if (!response!.ok) {
-            console.error('[MoodImage] Gemini 오류:', data.error?.message || JSON.stringify(data));
+            console.error('[MoodImage] Gemini 최종 오류:', data.error?.message || JSON.stringify(data).slice(0, 500));
             return null;
         }
 
-        // 이미지 파트 추출
+        // 이미지 파트 추출 (TEXT+IMAGE 모드에서는 text/image 혼합 응답)
         const candidate = data.candidates?.[0]?.content?.parts;
-        if (!candidate) return null;
+        if (!candidate) {
+            console.error('[MoodImage] 응답에 candidates 없음:', JSON.stringify(data).slice(0, 500));
+            return null;
+        }
 
         for (const part of candidate) {
-            if (part.inline_data) {
+            // Gemini API 응답은 camelCase (inlineData, mimeType)
+            if (part.inlineData) {
+                console.log('[MoodImage] 이미지 생성 성공, mimeType:', part.inlineData.mimeType);
                 return {
-                    imageBase64: part.inline_data.data,
-                    mimeType: part.inline_data.mime_type || 'image/png',
+                    imageBase64: part.inlineData.data,
+                    mimeType: part.inlineData.mimeType || 'image/png',
                 };
             }
         }
 
+        console.error('[MoodImage] 응답에 inlineData 없음, parts:', candidate.map((p: any) => Object.keys(p)));
         return null;
     } catch (error) {
         console.error('[MoodImage] 생성 오류:', error);

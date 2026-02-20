@@ -289,6 +289,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                                 <SelectItem value="registered">스토어 등록</SelectItem>
                                 <SelectItem value="unregistered">스토어 미등록</SelectItem>
                                 <SelectItem value="suspended">스토어 중지</SelectItem>
+                                <SelectItem value="outofstock">스토어 품절</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
