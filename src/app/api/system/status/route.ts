@@ -16,26 +16,46 @@ export async function GET() {
 
     try {
         // 1. Database & AI Credits Check
-        // Get total tokens today
-        const { rows: aiRows } = await db.query(`
-      SELECT SUM(token_count) as total_tokens, COUNT(*) as usage_count 
-      FROM ai_usage_logs 
-      WHERE created_at >= date('now', 'start of day')
-    `);
-        const aiUsage = aiRows[0] || { total_tokens: 0, usage_count: 0 };
+        let aiUsage = { total_tokens: 0, usage_count: 0 };
+        try {
+            const { rows: aiRows } = await db.query(`
+                SELECT SUM(token_count) as total_tokens, COUNT(*) as usage_count 
+                FROM ai_usage_logs 
+                WHERE created_at >= date('now', 'start of day')
+            `);
+            if (aiRows && aiRows[0]) {
+                aiUsage = {
+                    total_tokens: Number(aiRows[0].total_tokens || 0),
+                    usage_count: Number(aiRows[0].usage_count || 0)
+                };
+            }
+        } catch (e) {
+            console.warn('[STATUS_API] AI Usage check failed:', e);
+        }
 
-        // Simulate AI credits (Total available - used)
-        // Assume 1,000,000 tokens limit per month or something
         const totalCredits = 1000000;
-        const remainingCredits = totalCredits - (aiUsage.total_tokens || 0);
+        const remainingCredits = totalCredits - aiUsage.total_tokens;
 
         // 2. Naver Sync Status
-        // Get last sync time from naver_products (most recent update)
-        const { rows: naverRows } = await db.query(`
-      SELECT MAX(updated_at) as last_sync 
-      FROM naver_products
-    `);
-        const lastSync = naverRows[0]?.last_sync;
+        let lastSync: any = null;
+        try {
+            // First try naver_products (from db-init.ts)
+            const { rows: naverRows } = await db.query(`
+                SELECT MAX(synced_at) as last_sync FROM naver_products
+            `);
+            lastSync = naverRows[0]?.last_sync;
+        } catch (e) {
+            console.warn('[STATUS_API] naver_products check failed, trying naver_product_map:', e);
+            try {
+                // Fallback to naver_product_map (from db.ts)
+                const { rows: naverMapRows } = await db.query(`
+                    SELECT MAX(last_synced_at) as last_sync FROM naver_product_map
+                `);
+                lastSync = naverMapRows[0]?.last_sync;
+            } catch (e2) {
+                console.warn('[STATUS_API] Both Naver tables check failed:', e2);
+            }
+        }
 
         // 3. Database Latency
         const dbLatency = Date.now() - startTime;
@@ -47,29 +67,38 @@ export async function GET() {
         const minutes = Math.floor((uptimeSeconds % 3600) / 60);
         const uptimeStr = `${days}일 ${hours}시간 ${minutes}분`;
 
-        // Determine status
-        const dbStatus = dbLatency < 100 ? 'healthy' : dbLatency < 500 ? 'degraded' : 'down';
+        const dbStatus = dbLatency < 150 ? 'healthy' : dbLatency < 600 ? 'degraded' : 'down';
         const aiStatus = remainingCredits > 10000 ? 'healthy' : remainingCredits > 0 ? 'degraded' : 'down';
 
-        // Naver status logic: healthy if synced within 1 hour
-        let naverStatus = 'healthy';
+        let naverStatus: 'healthy' | 'degraded' | 'down' = 'healthy';
         let lastSyncStr = '정보 없음';
 
         if (lastSync) {
-            const diffMs = Date.now() - new Date(lastSync).getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            if (diffMins < 60) {
-                lastSyncStr = `${diffMins}분 전`;
-                naverStatus = 'healthy';
-            } else if (diffMins < 1440) { // 24 hours
-                lastSyncStr = `${Math.floor(diffMins / 60)}시간 전`;
-                naverStatus = 'degraded';
+            // SQLite and other DBs might return different string/date formats
+            // Convert to a robust Date object (replace space with T for ISO-like parsing)
+            const dateStr = String(lastSync).includes(' ') ? String(lastSync).replace(' ', 'T') : String(lastSync);
+            const syncDate = new Date(dateStr);
+
+            if (!isNaN(syncDate.getTime())) {
+                const diffMs = Date.now() - syncDate.getTime();
+                const diffMins = Math.floor(diffMs / 60000);
+
+                if (diffMins < 60) {
+                    lastSyncStr = `${diffMins}분 전`;
+                    naverStatus = 'healthy';
+                } else if (diffMins < 1440) { // 24 hours
+                    lastSyncStr = `${Math.floor(diffMins / 60)}시간 전`;
+                    naverStatus = 'degraded';
+                } else {
+                    lastSyncStr = `${Math.floor(diffMins / 1440)}일 전`;
+                    naverStatus = 'down';
+                }
             } else {
-                lastSyncStr = `${Math.floor(diffMins / 1440)}일 전`;
-                naverStatus = 'down';
+                lastSyncStr = '날짜 오류';
+                naverStatus = 'degraded';
             }
         } else {
-            naverStatus = 'degraded'; // No history
+            naverStatus = 'degraded';
         }
 
         return NextResponse.json({
@@ -80,16 +109,16 @@ export async function GET() {
                 credits: remainingCredits,
                 todayUsage: aiUsage.usage_count
             },
-            server: { status: 'healthy', uptime: uptimeStr, memory: 'N/A' } // Node.js memory usage could be added
+            server: { status: 'healthy', uptime: uptimeStr, memory: 'N/A' }
         });
 
-    } catch (error) {
-        console.error('System status check failed:', error);
+    } catch (error: any) {
+        console.error('[CRITICAL] System status check failed:', error);
         return NextResponse.json({
             database: { status: 'down', latency: 0 },
             naverApi: { status: 'down', lastSync: '오류' },
             aiService: { status: 'down', credits: 0, todayUsage: 0 },
-            server: { status: 'down', uptime: '0시간', memory: '0%' }
+            server: { status: 'down', uptime: '0시간', error: error.message }
         }, { status: 500 });
     }
 }

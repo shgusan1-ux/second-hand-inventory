@@ -4,7 +4,7 @@ export function generateProductDetailHTML(product: any): string {
   const mainImage = imageUrls[0] || '';
 
   const measurements = parseMeasurements(product);
-  const rawMdComment = product.md_comment || generateMDComment(product);
+  const { text: rawMdComment, moodImageUrl } = extractMoodImage(product.md_comment || generateMDComment(product));
   const mdComment = formatMDComment(rawMdComment);
   const gradeInfo = getGradeInfo(product.condition || 'A급');
   const fabric = product.fabric || '케어라벨 미부착으로 확인불가';
@@ -28,6 +28,7 @@ export function generateProductDetailHTML(product: any): string {
               MD's Pick
             </div>
             <div style="width:40px; height:2px; background:#1A4D3E; margin:12px auto 28px;"></div>
+            ${moodImageUrl ? `<div style="margin:0 auto 24px; text-align:center;"><img src="${moodImageUrl}" alt="mood" style="width:100%; max-width:600px; height:auto; border-radius:12px; display:block; margin:0 auto;" /></div>` : ''}
             <div style="text-align:left; margin:0 auto; max-width:680px; font-size:14.5px; color:#4A4A4A; line-height:2.0;">
               ${mdComment}
             </div>
@@ -109,6 +110,18 @@ export function generateProductDetailHTML(product: any): string {
     <p style="font-size:14px; color:#555; line-height:1.6; margin:0;">${gradeInfo}</p>
   </div>
 </div>`;
+}
+
+// md_comment에서 [MD_MOOD_IMAGE:url] 마커를 추출하고 나머지 텍스트를 반환
+function extractMoodImage(mdComment: string): { text: string; moodImageUrl: string | null } {
+    const match = mdComment.match(/^\[MD_MOOD_IMAGE:(.+?)\]\n?/);
+    if (match) {
+        return {
+            text: mdComment.replace(match[0], ''),
+            moodImageUrl: match[1],
+        };
+    }
+    return { text: mdComment, moodImageUrl: null };
 }
 
 function parseMeasurements(product: any): Array<{ label: string; value: string }> {

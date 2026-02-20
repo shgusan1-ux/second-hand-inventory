@@ -8,12 +8,40 @@ interface WeatherData {
     weatherCode: number;
 }
 
+interface Particle {
+    left: string;
+    duration: string;
+    delay: string;
+    width?: string;
+    height?: string;
+    top?: number;
+}
+
 export function WeatherLogo({ className }: { className?: string }) {
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [mounted, setMounted] = useState(false);
+    const [snowParticles, setSnowParticles] = useState<Particle[]>([]);
+    const [rainParticles, setRainParticles] = useState<Particle[]>([]);
 
     useEffect(() => {
         setMounted(true);
+
+        // Generate particles only on the client
+        setSnowParticles([...Array(20)].map(() => ({
+            width: Math.random() * 5 + 3 + 'px',
+            height: Math.random() * 5 + 3 + 'px',
+            left: Math.random() * 100 + '%',
+            duration: Math.random() * 3 + 3 + 's',
+            delay: Math.random() * 5 + 's',
+        })));
+
+        setRainParticles([...Array(12)].map(() => ({
+            left: Math.random() * 100 + '%',
+            top: -10,
+            duration: '0.4s',
+            delay: Math.random() * 2 + 's'
+        })));
+
         // 기본값: 서울 좌표 (37.5665, 126.9780)
         const lat = 37.5665;
         const lon = 126.9780;
@@ -39,25 +67,14 @@ export function WeatherLogo({ className }: { className?: string }) {
         fetchWeather(lat, lon);
     }, []);
 
-    if (!mounted) return <img src="/logo.png" alt="Brownstreet" className={className} />;
+    if (!mounted) return <div className={className} style={{ width: 40, height: 16 }} />; // Placeholder to avoid layout shift
 
     // 날씨 상태 판별
     const isFrozen = weather ? weather.temperature <= 0 : false;
     const wCode = weather?.weatherCode ?? 0;
 
-    // WMO Code Mapping
-    // 0, 1: Clear/Mainly Clear
-    // 2, 3: Partly Cloudy/Overcast
-    // 45, 48: Fog
-    // 51-67: Drizzle/Rain
-    // 71-77: Snow
-    // 80-82: Rain Showers
-    // 85-86: Snow Showers
-    // 95-99: Thunderstorm
-
     const isRainy = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(wCode);
-    // 겨울 시즌 및 테스트를 위해 눈 내림 효과를 강제로 활성화합니다 (실제 날씨가 아니어도 작동)
-    const isSnowy = true; // [71, 73, 75, 77, 85, 86].includes(wCode);
+    const isSnowy = true; // Still forced for effect
     const isThunder = [95, 96, 99].includes(wCode);
     const isSunny = [0, 1].includes(wCode) && !isSnowy;
 
@@ -71,7 +88,7 @@ export function WeatherLogo({ className }: { className?: string }) {
                     }`}
             />
 
-            {/* 1. 얼어붙음 효과 (온도 0도 이하) */}
+            {/* 1. 얼어붙음 효과 */}
             {isFrozen && (
                 <>
                     <div className="absolute inset-0 z-30 pointer-events-none opacity-60 mix-blend-screen bg-gradient-to-t from-white/40 to-transparent rounded-sm" />
@@ -82,21 +99,20 @@ export function WeatherLogo({ className }: { className?: string }) {
             {/* 2. 눈 내림 효과 */}
             {isSnowy && (
                 <div className="absolute inset-x-0 -top-12 -bottom-8 z-[100] pointer-events-none overflow-visible">
-                    {[...Array(20)].map((_, i) => (
+                    {snowParticles.map((p, i) => (
                         <div
                             key={i}
                             className="absolute rounded-full bg-white animate-snow blur-[0.2px] shadow-[0_0_2px_rgba(255,255,255,0.8)]"
                             style={{
-                                width: Math.random() * 5 + 3 + 'px',
-                                height: Math.random() * 5 + 3 + 'px',
-                                left: Math.random() * 100 + '%',
-                                animationDuration: Math.random() * 3 + 3 + 's',
-                                animationDelay: Math.random() * 5 + 's',
-                                opacity: 0.2 // 사용자 요청: 불투명도 20%
+                                width: p.width,
+                                height: p.height,
+                                left: p.left,
+                                animationDuration: p.duration,
+                                animationDelay: p.delay,
+                                opacity: 0.2
                             }}
                         />
                     ))}
-                    {/* 로고 위에 살짝 쌓인 눈 강조 */}
                     <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-20 blur-[1px] z-[110] shadow-[0_1px_2px_rgba(255,255,255,0.2)]" />
                 </div>
             )}
@@ -104,15 +120,15 @@ export function WeatherLogo({ className }: { className?: string }) {
             {/* 3. 비 효과 */}
             {isRainy && (
                 <div className="absolute inset-0 z-[100] pointer-events-none -mt-4 h-[150%] overflow-visible">
-                    {[...Array(12)].map((_, i) => (
+                    {rainParticles.map((p, i) => (
                         <div
                             key={i}
                             className="absolute bg-blue-300 w-[1.5px] h-4 animate-rain opacity-60"
                             style={{
-                                left: Math.random() * 100 + '%',
-                                top: -10,
-                                animationDuration: '0.4s',
-                                animationDelay: Math.random() * 2 + 's'
+                                left: p.left,
+                                top: p.top,
+                                animationDuration: p.duration,
+                                animationDelay: p.delay
                             }}
                         />
                     ))}

@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 export type FeedbackType = 'BUG' | 'FEATURE' | 'IMPROVEMENT';
 export type FeedbackStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 
-export async function submitFeedback(type: FeedbackType, title: string, content: string) {
+export async function submitFeedback(type: FeedbackType, title: string, content: string, imageUrl?: string, consoleLogs?: string) {
     const session = await getSession();
     if (!session) return { success: false, error: 'Login required' };
 
@@ -15,15 +15,16 @@ export async function submitFeedback(type: FeedbackType, title: string, content:
 
     try {
         await db.query(`
-            INSERT INTO app_feedback (id, user_id, user_name, type, title, content, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [id, session.id, session.name, type, title, content, 'PENDING']);
+            INSERT INTO app_feedback (id, user_id, user_name, type, title, content, status, image_url, console_logs)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [id, session.id, session.name, type, title, content, 'PENDING', imageUrl || null, consoleLogs || null]);
 
         await logAction('SUBMIT_FEEDBACK', 'app_feedback', id, `New feedback: ${title}`);
         revalidatePath('/admin/feedback');
         return { success: true };
     } catch (e: any) {
-        return { success: false, error: e.message };
+        console.error('[FEEDBACK_ACTION] Submit failed:', e);
+        return { success: false, error: `Submit failed: ${e.message}` };
     }
 }
 

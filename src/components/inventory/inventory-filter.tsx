@@ -26,8 +26,12 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     const [query, setQuery] = useState(searchParams.get('q') || '');
     const [searchField, setSearchField] = useState(searchParams.get('field') || 'all');
     const [excludeCode, setExcludeCode] = useState(searchParams.get('excludeCode') || '');
-    const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
-    const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
+
+    // Date states - handle both startDate/endDate and updatedStart/updatedEnd
+    const [startDate, setStartDate] = useState(searchParams.get('startDate') || searchParams.get('updatedStart') || '');
+    const [endDate, setEndDate] = useState(searchParams.get('endDate') || searchParams.get('updatedEnd') || '');
+    const [dateType, setDateType] = useState(searchParams.get('updatedStart') || searchParams.get('updatedEnd') ? 'updated' : 'created');
+
     const [limit, setLimit] = useState(searchParams.get('limit') || '50');
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>(searchParams.get('status')?.split(',').filter(Boolean) || []);
     const [selectedCategories, setSelectedCategories] = useState<string[]>(searchParams.get('categories')?.split(',').filter(Boolean) || []);
@@ -36,7 +40,6 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     const [selectedBrand, setSelectedBrand] = useState(searchParams.get('brand') || 'all');
     const [smartstoreFilter, setSmartstoreFilter] = useState(searchParams.get('smartstore') || 'all');
     const [aiFilter, setAiFilter] = useState(searchParams.get('ai') || 'all');
-    const [dateType, setDateType] = useState(searchParams.get('dateType') || 'created'); // created or updated
 
     const handleSearch = () => { // Trigger search
         // Smart Parsing for Glued Codes
@@ -100,6 +103,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             if (startDate) params.set('startDate', startDate);
             if (endDate) params.set('endDate', endDate);
         }
+        params.set('dateType', dateType);
         if (limit) params.set('limit', limit);
         if (selectedStatuses.length > 0) params.set('status', selectedStatuses.join(','));
         if (selectedCategories.length > 0) params.set('categories', selectedCategories.join(','));
@@ -359,6 +363,23 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('yesterday')} className="h-9 text-xs px-2 text-slate-500">어제</Button>
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('week')} className="h-9 text-xs px-2 text-slate-500">1주</Button>
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('month')} className="h-9 text-xs px-2 text-slate-500">1개월</Button>
+
+                        {/* Custom Date Range Picker */}
+                        <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                            <Input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="h-9 text-xs w-[125px] bg-white border-slate-200 focus:ring-slate-400"
+                            />
+                            <span className="text-slate-400 text-xs">~</span>
+                            <Input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="h-9 text-xs w-[125px] bg-white border-slate-200 focus:ring-slate-400"
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2 ml-0 sm:ml-auto w-full sm:w-auto">

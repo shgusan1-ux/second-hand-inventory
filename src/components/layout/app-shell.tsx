@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { MobileHeader } from './mobile-header';
 import { NotificationCenter } from './notification-center';
+import { SystemStatus } from './system-status';
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -58,8 +59,9 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
                 "pt-16 md:pt-8",
                 isCollapsed ? "md:max-w-full" : ""
             )}>
-                {/* Desktop Notification Center (Absolute Top Right) */}
-                <div className="absolute top-4 right-6 z-40 hidden md:block">
+                {/* Desktop Notification Center & Status (Absolute Top Right) */}
+                <div className="absolute top-4 right-6 z-40 hidden md:flex items-center gap-4">
+                    <SystemStatus />
                     <NotificationCenter />
                 </div>
 

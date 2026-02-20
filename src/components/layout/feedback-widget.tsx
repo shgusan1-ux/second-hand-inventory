@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { MessageSquarePlus, Bug, Lightbulb, AlertCircle, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageSquarePlus, Bug, Lightbulb, AlertCircle, Loader2, ImagePlus, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,16 +9,46 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { submitFeedback, FeedbackType } from '@/lib/feedback-actions';
+import { initConsoleCapture, getRecentLogs } from '@/lib/console-capture';
 import { toast } from 'sonner';
 
 export function FeedbackWidget() {
     const [isOpen, setIsOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [data, setData] = useState({
         type: 'BUG' as FeedbackType,
         title: '',
         content: ''
     });
+
+    // 콘솔 로그 캡처 시작
+    useEffect(() => { initConsoleCapture(); }, []);
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { toast.error('이미지는 5MB 이하만 가능합니다'); return; }
+        setImageFile(file);
+        const reader = new FileReader();
+        reader.onload = () => setImagePreview(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const uploadImage = async (): Promise<string | undefined> => {
+        if (!imageFile) return undefined;
+        const formData = new FormData();
+        formData.append('file', imageFile, `feedback-${Date.now()}.jpg`);
+        formData.append('productNo', `feedback-${Date.now()}`);
+        const res = await fetch('/api/smartstore/images/upload', { method: 'POST', body: formData });
+        if (res.ok) {
+            const { url } = await res.json();
+            return url;
+        }
+        return undefined;
+    };
 
     const handleSubmit = async () => {
         if (!data.title.trim() || !data.content.trim()) {
@@ -28,11 +58,18 @@ export function FeedbackWidget() {
 
         setIsSubmitting(true);
         try {
-            const res = await submitFeedback(data.type, data.title, data.content);
+            // 이미지 업로드
+            const imageUrl = await uploadImage();
+            // 콘솔 로그 자동 첨부
+            const consoleLogs = getRecentLogs();
+
+            const res = await submitFeedback(data.type, data.title, data.content, imageUrl, consoleLogs);
             if (res.success) {
                 toast.success('감사합니다! 소중한 의견이 접수되었습니다.');
                 setIsOpen(false);
                 setData({ type: 'BUG', title: '', content: '' });
+                setImageFile(null);
+                setImagePreview(null);
             } else {
                 toast.error('전송 실패: ' + res.error);
             }
@@ -139,6 +176,35 @@ export function FeedbackWidget() {
                                 className="bg-slate-900 border-slate-800 focus-visible:ring-emerald-500 text-white"
                             />
                         </div>
+
+                        {/* 이미지 첨부 */}
+                        <div className="space-y-2">
+                            <Label className="text-xs text-slate-400">스크린샷 첨부 (선택)</Label>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                            {imagePreview ? (
+                                <div className="relative inline-block">
+                                    <img src={imagePreview} alt="첨부 이미지" className="max-h-32 rounded-lg border border-slate-700" />
+                                    <button
+                                        onClick={() => { setImageFile(null); setImagePreview(null); }}
+                                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-xs"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="border-dashed border-slate-700 text-slate-400 hover:text-slate-200 gap-2"
+                                >
+                                    <ImagePlus className="w-4 h-4" />
+                                    이미지 선택
+                                </Button>
+                            )}
+                        </div>
+
+                        <p className="text-[10px] text-slate-600">* 콘솔 로그가 자동으로 첨부되어 오류 분석에 활용됩니다</p>
                     </div>
 
                     <DialogFooter>

@@ -430,6 +430,112 @@ export async function generateMDDescription(product: {
 }
 
 /**
+ * 3-2. MD 소개글 무드이미지 AI 생성
+ * Gemini Image Generation으로 상품 컨셉에 맞는 감성 무드이미지 생성
+ */
+export async function generateMoodImage(product: {
+    name: string;
+    brand: string;
+    category: string;
+    imageUrl?: string;
+}): Promise<{ imageBase64: string; mimeType: string } | null> {
+    try {
+        const MOOD_MODEL = 'gemini-2.5-flash-image';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${MOOD_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+        const prompt = `You are a top-tier fashion editorial photographer and visual director.
+
+Generate ONE high-end fashion magazine mood image inspired by this product:
+- Brand: ${product.brand || 'Unknown'}
+- Product: ${product.name || 'Fashion item'}
+- Category: ${product.category || 'Apparel'}
+
+RULES:
+1. Create a cinematic, editorial-style lifestyle/mood photograph
+2. Reference the product's color palette, texture, and aesthetic from the provided product image
+3. Style: Fashion magazine flat lay OR atmospheric lifestyle scene (coffee table, vintage interior, studio props)
+4. Mood: Elevated, curated, collector-grade aesthetic — think "vintage archive meets modern editorial"
+5. Color tone: Warm earth tones, muted neutrals, or vintage film grain — match the product's vibe
+6. ABSOLUTELY NO TEXT, LOGOS, WATERMARKS, OR LETTERS in the image
+7. DO NOT show the actual product — create an atmospheric mood that COMPLEMENTS the product
+8. Think: the kind of image you'd see in a high-end resale editorial (e.g., Grailed, The RealReal editorial spreads)
+9. Include subtle fashion-related props: leather goods, vintage cameras, coffee cups, botanical elements, etc.`;
+
+        const parts: any[] = [{ text: prompt }];
+
+        // 상품 이미지 첨부 (색상/톤 참조용)
+        if (product.imageUrl) {
+            try {
+                const imageBase64 = await fetchImageAsBase64(product.imageUrl);
+                parts.push({
+                    inline_data: {
+                        mime_type: 'image/jpeg',
+                        data: imageBase64
+                    }
+                });
+                parts.push({ text: 'Above is the product image. Match its color palette and aesthetic vibe in the mood image you generate.' });
+            } catch (e) {
+                console.warn('[MoodImage] 상품 이미지 로드 실패, 텍스트만으로 생성');
+            }
+        }
+
+        const MAX_RETRIES = 2;
+        let response: Response | null = null;
+        let data: any = null;
+
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts }],
+                    generationConfig: {
+                        responseModalities: ['IMAGE'],
+                        temperature: 1.0,
+                        imageConfig: {
+                            aspectRatio: '4:3',
+                        },
+                    },
+                }),
+            });
+            data = await response.json();
+            if (response.ok) break;
+            const errMsg = data.error?.message || '';
+            const isRetryable = errMsg.includes('high demand') || errMsg.includes('overloaded') || response.status === 429 || response.status === 503;
+            if (isRetryable) {
+                console.log(`[MoodImage] 재시도 ${attempt + 1}/${MAX_RETRIES}: ${errMsg}`);
+                await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+                continue;
+            }
+            break;
+        }
+
+        if (!response!.ok) {
+            console.error('[MoodImage] Gemini 오류:', data.error?.message || JSON.stringify(data));
+            return null;
+        }
+
+        // 이미지 파트 추출
+        const candidate = data.candidates?.[0]?.content?.parts;
+        if (!candidate) return null;
+
+        for (const part of candidate) {
+            if (part.inline_data) {
+                return {
+                    imageBase64: part.inline_data.data,
+                    mimeType: part.inline_data.mime_type || 'image/png',
+                };
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('[MoodImage] 생성 오류:', error);
+        return null;
+    }
+}
+
+/**
  * 4. 썸네일 자동화
  * 이미지를 정사각형으로 크롭하고 최적화
  */

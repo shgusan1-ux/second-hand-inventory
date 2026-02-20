@@ -13,6 +13,7 @@ const publicPaths = [
   '/favicon.ico',
   '/logo.png',
   '/brown_street.svg',
+  '/manifest.json',
   '/models-proxy', // @imgly/background-removal 모델 파일 프록시 (인증 불필요)
   '/api/smartstore/automation/reclassify-archive', // 재분류 API (curl 호출용)
   '/api/smartstore/automation/md-strategy', // MD 전략 API (curl 호출용)
@@ -52,13 +53,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

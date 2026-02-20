@@ -82,6 +82,12 @@ export default function ProductEditorPage() {
     const [originalImage0, setOriginalImage0] = useState<string | null>(null); // 뱃지 적용 전 원본 이미지 백업
     const [isMDGenerating, setIsMDGenerating] = useState(false);
     const [mdGeneratedText, setMdGeneratedText] = useState<string | null>(null);
+    const [mdInserted, setMdInserted] = useState(false); // MD 삽입 완료 여부
+    const [fittingApplied, setFittingApplied] = useState<'none' | 'thumbnail' | 'added'>('none'); // 착용샷 적용 상태
+    const [aiApplied, setAiApplied] = useState(false); // AI 선택 적용 완료 여부
+    const [mdMoodImage, setMdMoodImage] = useState<string | null>(null); // MD 무드이미지 URL
+    const [isMoodImageGenerating, setIsMoodImageGenerating] = useState(false);
+    const [mdMoodImageInserted, setMdMoodImageInserted] = useState(false);
     const [supplierData, setSupplierData] = useState<Map<string, any>>(new Map());
     const [isSupplierLoading, setIsSupplierLoading] = useState(false);
     const [selectedGender, setSelectedGender] = useState<string>(''); // 대분류: MAN/WOMAN/KIDS/UNISEX
@@ -452,6 +458,7 @@ export default function ProductEditorPage() {
                         const event = JSON.parse(line.slice(6));
                         if (event.type === 'result' && event.resultUrl) {
                             setFittingImage(event.resultUrl);
+                            setFittingApplied('none');
                             toast.success('모델착용샷 생성 완료!');
                         } else if (event.type === 'error') {
                             toast.error(`피팅 실패: ${event.reason || event.message}`);
@@ -471,6 +478,7 @@ export default function ProductEditorPage() {
         if (!selectedProduct || isAnalyzing) return;
         setIsAnalyzing(true);
         setAiResult(null);
+        setAiApplied(false);
 
         try {
             const draft = getCurrentDraft(selectedProduct);
@@ -602,6 +610,7 @@ export default function ProductEditorPage() {
             }
         }
         const appliedCount = Object.keys(updates).length + (checked.has('gender') ? 1 : 0);
+        setAiApplied(true);
         toast.success(`AI 추천값 ${appliedCount}개 항목 적용 완료`);
     };
 
@@ -696,10 +705,20 @@ export default function ProductEditorPage() {
         if (!product) return;
         const draft = getCurrentDraft(product);
         const newImages = [...draft.images];
-        while (newImages.length < 5) newImages.push('');
         [newImages[fromIdx], newImages[toIdx]] = [newImages[toIdx], newImages[fromIdx]];
         updateDraft(selectedId, 'images', newImages);
         setFormKey(k => k + 1);
+        // 1번 이미지가 변경되면 뱃지 프리뷰 초기화 + 자동 재생성
+        if (fromIdx === 0 || toIdx === 0) {
+            setBadgePreview(null);
+            setOriginalImage0(null);
+            const newFirst = newImages[0];
+            if (newFirst) {
+                const grade = (draft.condition || product.condition || 'B').replace('급', '');
+                autoGenerateBadge(newFirst, grade, product.id);
+                toast.info('1번 이미지 변경 → 뱃지 자동 재생성');
+            }
+        }
     };
 
     // 이미지 삭제
@@ -724,13 +743,14 @@ export default function ProductEditorPage() {
             const product = products.find(p => p.id === id);
             if (!product) return prev;
             const current = prev.get(id) || createDefaultDraft(product);
-            const newImages = [fitImg, ...current.images.filter(img => img && img !== fitImg)].slice(0, 5);
+            const newImages = [fitImg, ...current.images.filter(img => img && img !== fitImg)];
             const next = new Map(prev);
             next.set(id, { ...current, images: newImages });
             return next;
         });
         setHasDraft(prev => new Set(prev).add(id));
         setFormKey(k => k + 1);
+        setFittingApplied('added');
         toast.success('상세 이미지 1번에 추가됨');
     };
 
@@ -746,23 +766,38 @@ export default function ProductEditorPage() {
             if (!product) return prev;
             const current = prev.get(id) || createDefaultDraft(product);
             const otherImages = current.images.filter(img => img && img !== fitImg);
-            const newImages = [fitImg, ...otherImages].slice(0, 5);
+            const newImages = [fitImg, ...otherImages];
             const next = new Map(prev);
             next.set(id, { ...current, images: newImages });
             return next;
         });
         setHasDraft(prev => new Set(prev).add(id));
         setFormKey(k => k + 1);
+        setFittingApplied('thumbnail');
         toast.success('착용샷이 대표 썸네일로 설정됨');
+
+        // 뱃지 자동 재생성 (새 대표이미지 기준)
+        const product = products.find(p => p.id === id);
+        if (product) {
+            setBadgePreview(null);
+            setOriginalImage0(null);
+            const grade = (getCurrentDraft(product).condition || product.condition || 'B').replace('급', '');
+            autoGenerateBadge(fitImg, grade, product.id);
+            toast.info('대표이미지 변경 → 뱃지 자동 재생성');
+        }
     };
 
-    // 뱃지 썸네일 생성 (배경제거 + 등급 뱃지 합성)
+    // 뱃지 썸네일 생성 (배경제거 + 등급 뱃지 합성) → 자동 대표이미지 적용
     const handleBadgeGenerate = async (quickMode = false) => {
         if (!selectedProduct || isBadgeProcessing) return;
         setIsBadgeProcessing(true);
         setBadgePreview(null);
 
         try {
+            // pending 변경사항 먼저 flush (stale draft 방지)
+            if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+            flushPendingDrafts();
+
             const draft = getCurrentDraft(selectedProduct);
             const imageUrl = draft.images[0] || selectedProduct.image_url || '';
             if (!imageUrl) {
@@ -790,7 +825,24 @@ export default function ProductEditorPage() {
             if (uploadRes.ok) {
                 const { url } = await uploadRes.json();
                 setBadgePreview(url);
-                toast.success('뱃지 썸네일 생성 완료!');
+
+                // 자동으로 대표이미지(0번)에 적용
+                const id = selectedProduct.id;
+                setDrafts(prev => {
+                    const product = products.find(p => p.id === id);
+                    if (!product) return prev;
+                    const current = prev.get(id) || createDefaultDraft(product);
+                    const newImages = [...current.images];
+                    // 원본 이미지 백업 (취소용)
+                    setOriginalImage0(newImages[0] || product.image_url || '');
+                    newImages[0] = url;
+                    const next = new Map(prev);
+                    next.set(id, { ...current, images: newImages });
+                    return next;
+                });
+                setHasDraft(prev => new Set(prev).add(id));
+                setFormKey(k => k + 1);
+                toast.success('뱃지 생성 완료 → 대표이미지 자동 적용');
             } else {
                 const data = await uploadRes.json();
                 toast.error(`업로드 실패: ${data.error}`);
@@ -800,31 +852,6 @@ export default function ProductEditorPage() {
         } finally {
             setIsBadgeProcessing(false);
         }
-    };
-
-    // 뱃지 이미지를 대표이미지(0번)에 적용 (직접 state 업데이트로 레이스 컨디션 방지)
-    const applyBadgeToImages = () => {
-        if (!badgePreview || !selectedId) return;
-        // pending 변경사항 먼저 flush
-        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
-        flushPendingDrafts();
-
-        const id = selectedId;
-        setDrafts(prev => {
-            const product = products.find(p => p.id === id);
-            if (!product) return prev;
-            const current = prev.get(id) || createDefaultDraft(product);
-            const newImages = [...current.images];
-            // 원본 이미지 백업 (취소용)
-            setOriginalImage0(newImages[0] || product.image_url || '');
-            newImages[0] = badgePreview;
-            const next = new Map(prev);
-            next.set(id, { ...current, images: newImages });
-            return next;
-        });
-        setHasDraft(prev => new Set(prev).add(id));
-        setFormKey(k => k + 1);
-        toast.success('대표이미지에 뱃지 적용됨');
     };
 
     // 뱃지 적용 취소 (원본 복원)
@@ -976,6 +1003,11 @@ export default function ProductEditorPage() {
         setBadgePreview(null);
         setOriginalImage0(null);
         setMdGeneratedText(null);
+        setMdInserted(false);
+        setMdMoodImage(null);
+        setMdMoodImageInserted(false);
+        setFittingApplied('none');
+        setAiApplied(false);
         setSelectedGender('');
         // 공급사 데이터에서 성별 자동 감지
         if (selectedId) {
@@ -996,6 +1028,9 @@ export default function ProductEditorPage() {
         if (!selectedProduct || isMDGenerating) return;
         setIsMDGenerating(true);
         setMdGeneratedText(null);
+        setMdInserted(false);
+        setMdMoodImage(null);
+        setMdMoodImageInserted(false);
 
         try {
             const draft = getCurrentDraft(selectedProduct);
@@ -1037,10 +1072,64 @@ export default function ProductEditorPage() {
 
     // MD 소개글 삽입 (draft의 md_comment에 적용)
     const insertMDComment = () => {
-        if (!mdGeneratedText || !selectedId) return;
-        updateDraft(selectedId, 'md_comment', mdGeneratedText);
+        if (!mdGeneratedText || !selectedId || mdInserted) return;
+        // 무드이미지가 삽입된 경우 마커를 md_comment 앞에 추가
+        const moodPrefix = mdMoodImageInserted && mdMoodImage ? `[MD_MOOD_IMAGE:${mdMoodImage}]\n` : '';
+        updateDraft(selectedId, 'md_comment', moodPrefix + mdGeneratedText);
         setFormKey(k => k + 1);
+        setMdInserted(true);
         toast.success('MD 소개글이 삽입되었습니다');
+    };
+
+    // MD 무드이미지 AI 생성
+    const handleMoodImageGenerate = async () => {
+        if (!selectedProduct || isMoodImageGenerating) return;
+        setIsMoodImageGenerating(true);
+        setMdMoodImage(null);
+        setMdMoodImageInserted(false);
+        try {
+            const draft = getCurrentDraft(selectedProduct);
+            const res = await fetch('/api/ai/md-generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: 'mood-image',
+                    name: draft.name || selectedProduct.name,
+                    brand: draft.brand || selectedProduct.brand,
+                    category: getCategoryDisplayName(draft.category) || selectedProduct.category_name || selectedProduct.category,
+                    imageUrl: draft.images[0] || selectedProduct.image_url || '',
+                    productId: selectedProduct.id,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMdMoodImage(data.moodImageUrl);
+                toast.success('무드이미지 생성 완료!');
+            } else {
+                const data = await res.json();
+                toast.error(`무드이미지 생성 실패: ${data.error}`);
+            }
+        } catch (err: any) {
+            toast.error(`무드이미지 오류: ${err.message}`);
+        } finally {
+            setIsMoodImageGenerating(false);
+        }
+    };
+
+    // 무드이미지 삽입 (md_comment에 마커 추가)
+    const insertMoodImage = () => {
+        if (!mdMoodImage || mdMoodImageInserted) return;
+        setMdMoodImageInserted(true);
+        // 이미 MD가 삽입되어있다면 기존 md_comment 앞에 마커 추가
+        if (mdInserted && selectedId) {
+            const draft = getCurrentDraft(selectedProduct!);
+            const existing = draft.md_comment || '';
+            if (!existing.startsWith('[MD_MOOD_IMAGE:')) {
+                updateDraft(selectedId, 'md_comment', `[MD_MOOD_IMAGE:${mdMoodImage}]\n${existing}`);
+                setFormKey(k => k + 1);
+            }
+        }
+        toast.success('무드이미지가 MD소개글에 삽입됩니다');
     };
 
     // 등급 변경 시 뱃지 자동 재생성
@@ -1216,11 +1305,6 @@ export default function ProductEditorPage() {
                                                 {currentSupplier?.label_image && <span className="ml-2 text-amber-400 text-[9px] normal-case">라벨 {currentSupplier.label_image.split('|').filter(Boolean).length}장</span>}
                                             </h3>
                                             <div className="flex gap-2">
-                                                {aiResult && (
-                                                    <button onClick={applyAllAI} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                        선택 적용 ({aiChecked.size}건)
-                                                    </button>
-                                                )}
                                                 <button onClick={handleAIAnalyze} disabled={isAnalyzing} className="px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                                                     {isAnalyzing ? (
                                                         <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 분석 중...</>
@@ -1280,6 +1364,9 @@ export default function ProductEditorPage() {
                                                         });
                                                     })()}
                                                 </div>
+                                                <button onClick={applyAllAI} disabled={aiApplied || aiChecked.size === 0} className={`w-full mt-2 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${aiApplied ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                                    {aiApplied ? `선택 적용 완료 (${aiChecked.size}건)` : `선택 적용 (${aiChecked.size}건)`}
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="bg-slate-800 rounded-lg h-16 flex items-center justify-center text-slate-600 text-xs">
@@ -1302,7 +1389,7 @@ export default function ProductEditorPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                            <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.name} onChange={e => updateDraftDebounced(selectedId!, 'name', e.target.value)} />
+                                            <textarea rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none leading-snug" defaultValue={currentDraft.name} onChange={e => updateDraftDebounced(selectedId!, 'name', e.target.value)} />
                                         </div>
 
                                         {/* 브랜드 */}
@@ -1359,7 +1446,7 @@ export default function ProductEditorPage() {
                                                 <label className="text-[10px] text-slate-500 uppercase font-bold">
                                                     카테고리 {selectedGender ? `(${selectedGender})` : ''}
                                                 </label>
-                                                <select key={`cat-${selectedGender}-${formKey}`} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.category} onChange={e => updateDraft(selectedId!, 'category', e.target.value)}>
+                                                <select key={`cat-${selectedGender}-${formKey}`} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" value={currentDraft.category || ''} onChange={e => updateDraft(selectedId!, 'category', e.target.value)}>
                                                     <option value="">선택</option>
                                                     {(selectedGender
                                                         ? categories.filter(cat => cat.classification === selectedGender)
@@ -1453,10 +1540,10 @@ export default function ProductEditorPage() {
                                             <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.fabric} onChange={e => updateDraftDebounced(selectedId!, 'fabric', e.target.value)} />
                                         </div>
 
-                                        {/* 이미지 URLs */}
+                                        {/* 이미지 URLs (무제한) */}
                                         <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 uppercase font-bold">이미지 URL (최대 5개)</label>
-                                            {[0, 1, 2, 3, 4].map(i => (
+                                            <label className="text-[10px] text-slate-500 uppercase font-bold">이미지 URL ({currentDraft.images.filter(Boolean).length}개)</label>
+                                            {[...Array(Math.max(currentDraft.images.length + 1, 1))].map((_, i) => (
                                                 <input key={i} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 md:py-1.5 text-xs text-white mb-1 break-all" placeholder={`이미지 ${i + 1}`}
                                                     defaultValue={currentDraft.images[i] || ''}
                                                     onChange={e => {
@@ -1500,8 +1587,31 @@ export default function ProductEditorPage() {
                                                 <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
                                                     <p className="text-[11px] text-slate-300 leading-relaxed max-h-[200px] overflow-y-auto whitespace-pre-wrap">{mdGeneratedText.replace(/<[^>]*>/g, '')}</p>
                                                 </div>
-                                                <button onClick={insertMDComment} className="w-full px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                    MD 코멘트에 삽입
+
+                                                {/* 무드이미지 영역 */}
+                                                <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-lg p-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-[10px] text-indigo-400 font-bold uppercase">MD 소개 무드이미지</span>
+                                                        <button onClick={handleMoodImageGenerate} disabled={isMoodImageGenerating} className="px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1">
+                                                            {isMoodImageGenerating ? (
+                                                                <><div className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
+                                                            ) : mdMoodImage ? '다시 생성' : '무드이미지 AI 생성'}
+                                                        </button>
+                                                    </div>
+                                                    {mdMoodImage ? (
+                                                        <div className="space-y-2">
+                                                            <img src={mdMoodImage} alt="MD Mood" className="w-full max-h-48 object-contain rounded-lg cursor-pointer" onClick={() => setZoomImage(mdMoodImage)} />
+                                                            <button onClick={insertMoodImage} disabled={mdMoodImageInserted} className={`w-full px-2 py-1.5 text-white text-[10px] font-bold rounded-lg transition-colors ${mdMoodImageInserted ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                                                {mdMoodImageInserted ? '무드이미지 삽입됨' : 'MD소개글에 무드이미지 삽입'}
+                                                            </button>
+                                                        </div>
+                                                    ) : !isMoodImageGenerating ? (
+                                                        <p className="text-[10px] text-slate-600 text-center py-2">Gemini AI가 상품 컨셉에 맞는 감성 무드이미지를 생성합니다</p>
+                                                    ) : null}
+                                                </div>
+
+                                                <button onClick={insertMDComment} disabled={mdInserted} className={`w-full px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${mdInserted ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                                    {mdInserted ? 'MD 코멘트에 삽입 완료' : `MD 코멘트에 삽입${mdMoodImageInserted ? ' (무드이미지 포함)' : ''}`}
                                                 </button>
                                             </div>
                                         ) : (
@@ -1568,11 +1678,11 @@ export default function ProductEditorPage() {
                                         {/* 착용샷 하단 버튼들 */}
                                         {fittingImage && (
                                             <div className="flex gap-2 mt-3">
-                                                <button onClick={setFittingAsThumbnail} className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                    썸네일로 설정
+                                                <button onClick={setFittingAsThumbnail} disabled={fittingApplied === 'thumbnail'} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingApplied === 'thumbnail' ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                                    {fittingApplied === 'thumbnail' ? '썸네일 설정됨' : '썸네일로 설정'}
                                                 </button>
-                                                <button onClick={addFittingToImages} className="flex-1 px-3 py-2 bg-emerald-600/70 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                                                    이미지에 추가
+                                                <button onClick={addFittingToImages} disabled={fittingApplied === 'added'} className={`flex-1 px-3 py-2 text-white text-xs font-bold rounded-lg transition-colors ${fittingApplied === 'added' ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-emerald-600/70 hover:bg-emerald-700'}`}>
+                                                    {fittingApplied === 'added' ? '이미지 추가됨' : '이미지에 추가'}
                                                 </button>
                                             </div>
                                         )}
@@ -1606,41 +1716,29 @@ export default function ProductEditorPage() {
                                                         </div>
                                                     )}
                                                 </div>
-                                                {badgePreview && (
-                                                    <button onClick={applyBadgeToImages} className="mt-1 w-full px-1 py-0.5 bg-orange-600 text-white text-[9px] font-bold rounded hover:bg-orange-700 transition-colors">
-                                                        대표 적용
-                                                    </button>
-                                                )}
                                                 {originalImage0 && (
                                                     <button onClick={undoBadgeApply} className="mt-1 w-full px-1 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded hover:bg-red-700 transition-colors">
                                                         적용 취소
                                                     </button>
                                                 )}
                                             </div>
-                                            {/* 상품 이미지 1~5 (이동/삭제 가능) */}
-                                            <div className="flex-1">
-                                                <p className="text-[9px] text-slate-500 font-bold mb-1">상품 이미지 (1~5) — 클릭: 이동/삭제</p>
+                                            {/* 상품 이미지 (무제한, 이동/삭제 가능) */}
+                                            <div className="flex-1 overflow-x-auto">
+                                                <p className="text-[9px] text-slate-500 font-bold mb-1">상품 이미지 ({currentDraft.images.filter(Boolean).length}개) — 1번 = 뱃지 원본</p>
                                                 <div className="flex gap-1.5">
-                                                    {[0, 1, 2, 3, 4].map(i => (
+                                                    {currentDraft.images.map((img, i) => img ? (
                                                         <div key={i} className="flex flex-col items-center gap-0.5">
-                                                            <div className={`w-[60px] h-[60px] rounded-lg overflow-hidden bg-slate-800 border flex-shrink-0 relative group ${i === 0 ? 'border-emerald-500/50' : 'border-white/10'}`}>
-                                                                {currentDraft.images[i] ? (
-                                                                    <>
-                                                                        <img src={currentDraft.images[i]} alt={`img-${i+1}`} className="w-full h-full object-cover cursor-pointer" onClick={() => setZoomImage(currentDraft.images[i])} />
-                                                                        <button onClick={() => removeImage(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-[8px] rounded-bl opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">✕</button>
-                                                                    </>
-                                                                ) : (
-                                                                    <div className="w-full h-full flex items-center justify-center text-slate-700 text-[10px]">{i + 1}</div>
-                                                                )}
+                                                            {i === 0 && <span className="text-[8px] text-emerald-400 font-black">뱃지원본</span>}
+                                                            <div className={`w-[60px] h-[60px] rounded-lg overflow-hidden bg-slate-800 border-2 flex-shrink-0 relative group ${i === 0 ? 'border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 'border-white/10'}`}>
+                                                                <img src={img} alt={`img-${i+1}`} className="w-full h-full object-cover cursor-pointer" onClick={() => setZoomImage(img)} />
+                                                                <button onClick={() => removeImage(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-[8px] rounded-bl opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">✕</button>
                                                             </div>
-                                                            {currentDraft.images[i] && (
-                                                                <div className="flex gap-0.5">
-                                                                    {i > 0 && <button onClick={() => swapImages(i, i - 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="왼쪽으로">◀</button>}
-                                                                    {i < 4 && currentDraft.images[i + 1] && <button onClick={() => swapImages(i, i + 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="오른쪽으로">▶</button>}
-                                                                </div>
-                                                            )}
+                                                            <div className="flex gap-0.5">
+                                                                {i > 0 && <button onClick={() => swapImages(i, i - 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="왼쪽으로">◀</button>}
+                                                                {i < currentDraft.images.length - 1 && currentDraft.images[i + 1] && <button onClick={() => swapImages(i, i + 1)} className="text-[8px] text-slate-500 hover:text-white px-1 bg-slate-800 rounded" title="오른쪽으로">▶</button>}
+                                                            </div>
                                                         </div>
-                                                    ))}
+                                                    ) : null)}
                                                 </div>
                                             </div>
                                         </div>

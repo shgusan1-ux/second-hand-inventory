@@ -376,7 +376,9 @@ async function initTables() {
       'ALTER TABLE attendance_logs ADD COLUMN note TEXT',
       'ALTER TABLE users ADD COLUMN allowed_locations TEXT',
       'ALTER TABLE users ADD COLUMN attendance_score INTEGER DEFAULT 100',
-      'ALTER TABLE app_feedback ADD COLUMN user_name TEXT'
+      'ALTER TABLE app_feedback ADD COLUMN user_name TEXT',
+      'ALTER TABLE app_feedback ADD COLUMN image_url TEXT',
+      'ALTER TABLE app_feedback ADD COLUMN console_logs TEXT'
     ];
     for (const m of migrations) {
       try {

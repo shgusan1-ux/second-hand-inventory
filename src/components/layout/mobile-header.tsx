@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { NotificationCenter } from './notification-center';
+import { SystemStatus } from './system-status';
 import { Menu, X, Search, ArrowLeft, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeatherLogo } from '@/components/ui/weather-logo';
@@ -133,6 +134,10 @@ export function MobileHeader({ user }: { user?: any }) {
                         >
                             <Bot className="h-5 w-5" />
                         </Button>
+
+                        <div className="mr-2">
+                            <SystemStatus />
+                        </div>
 
                         <div className="mr-1">
                             <NotificationCenter />

@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     Bug, Lightbulb, AlertCircle, Clock, CheckCircle2,
-    PlayCircle, MessageSquare, User, Calendar, Loader2, Plus
+    PlayCircle, MessageSquare, User, Calendar, Loader2, Plus, Image, Terminal, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { updateFeedbackStatus, updateAdminComment, submitFeedback, FeedbackStatus, FeedbackType } from '@/lib/feedback-actions';
 import { toast } from 'sonner';
@@ -291,6 +291,15 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         <CardContent className="space-y-6">
                             <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800/50">
                                 <p className="text-slate-300 text-sm whitespace-pre-wrap">{f.content}</p>
+                                {f.image_url && (
+                                    <div className="mt-3 pt-3 border-t border-slate-800/50">
+                                        <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1 mb-2"><Image className="w-3 h-3" /> 첨부 스크린샷</p>
+                                        <img src={f.image_url} alt="첨부 이미지" className="max-w-full max-h-60 rounded-lg border border-slate-700 cursor-pointer" onClick={() => window.open(f.image_url, '_blank')} />
+                                    </div>
+                                )}
+                                {f.console_logs && (
+                                    <ConsoleLogSection logs={f.console_logs} />
+                                )}
                             </div>
 
                             <div className="space-y-3 pt-4 border-t border-slate-800/50">
@@ -320,6 +329,29 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                         </CardContent>
                     </Card>
                 ))
+            )}
+        </div>
+    );
+}
+
+function ConsoleLogSection({ logs }: { logs: string }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const lines = logs.split('\n').filter(Boolean);
+    return (
+        <div className="mt-3 pt-3 border-t border-slate-800/50">
+            <button onClick={() => setIsOpen(!isOpen)} className="text-[10px] text-slate-500 font-bold flex items-center gap-1 hover:text-slate-300 transition-colors">
+                <Terminal className="w-3 h-3" />
+                콘솔 로그 ({lines.length}건)
+                {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+            {isOpen && (
+                <pre className="mt-2 p-3 bg-black rounded-lg text-[10px] text-green-400 font-mono overflow-x-auto max-h-48 overflow-y-auto border border-slate-800">
+                    {lines.map((line, i) => (
+                        <div key={i} className={line.startsWith('[ERROR]') ? 'text-red-400' : line.startsWith('[WARN]') ? 'text-yellow-400' : ''}>
+                            {line}
+                        </div>
+                    ))}
+                </pre>
             )}
         </div>
     );
