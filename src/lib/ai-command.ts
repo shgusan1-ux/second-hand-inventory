@@ -29,6 +29,8 @@ export async function processUserCommand(
         { name: 'check_profit', description: 'Analyze profit margin for a product or overall today' },
         { name: 'check_system_status', description: 'Check overall system health (DB, Naver API, AI Credits)' },
         { name: 'sync_naver', description: 'Trigger synchronization with Naver Smartstore' },
+        { name: 'update_product_price', description: 'Update the selling price of a product' },
+        { name: 'update_product_status', description: 'Update the status of a product (e.g., 판매중, 판매완료, 예약중)' },
         { name: 'chat', description: 'General conversation, greeting, or unknown request' }
     ];
 
@@ -44,12 +46,15 @@ export async function processUserCommand(
     If the user asks for sales, revenue, or "how much sold today", allow 'get_sales_summary'.
     If the user asks about profit, margin, or "is this profitable?", allow 'check_profit'.
     If the user asks "system status", "health", "credit", allow 'check_system_status'.
+    If the user wants to change/update price, allow 'update_product_price'. Extract 'keyword' (product name/id) and 'price' (number).
+    If the user wants to change status (sold, reserved), allow 'update_product_status'. Extract 'keyword' and 'status' (판매중, 판매완료, 예약중).
     If the user greets or chat, allow 'chat'.
     
     Output ONLY a JSON object with:
     {
       "intent": "intent_name",
-      "reply": "A helpful response in Korean based on the intent. If it's a data request, say 'Checking...' or asking for confirmation."
+      "reply": "A helpful response...",
+      "args": { "keyword": "...", "price": 1000, "status": "..." } // Only if needed
     }
   `;
 
@@ -64,7 +69,7 @@ export async function processUserCommand(
         const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
         const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
 
-        let parsed: { intent: string; reply: string } = { intent: 'chat', reply: '죄송합니다. 다시 말씀해 주시겠어요?' };
+        let parsed: { intent: string; reply: string; args?: any } = { intent: 'chat', reply: '죄송합니다. 다시 말씀해 주시겠어요?' };
         try {
             parsed = JSON.parse(jsonStr);
         } catch (e) {
@@ -126,6 +131,40 @@ export async function processUserCommand(
             type = 'status';
             parsed.reply = "시스템 상태를 확인합니다.";
             actionDetails = { status: 'running' };
+        } else if (parsed.intent === 'update_product_price' || parsed.intent === 'update_product_status') {
+            const { keyword, price, status } = parsed.args || {};
+            if (!keyword) {
+                parsed.reply = "상품명을 말씀해 주세요.";
+            } else {
+                try {
+                    // 1. Search Product
+                    const searchQ = `SELECT id, name, price_sell, status FROM products WHERE name LIKE ? OR id = ? LIMIT 5`;
+                    const { rows: products } = await db.query(searchQ, [`%${keyword}%`, keyword]);
+
+                    if (products.length === 0) {
+                        parsed.reply = `'${keyword}' 상품을 찾을 수 없습니다.`;
+                    } else if (products.length > 1) {
+                        parsed.reply = `'${keyword}' 검색 결과가 ${products.length}건 있습니다. 더 정확하게 말씀해 주세요. (${products.map((p: any) => p.name).join(', ')})`;
+                    } else {
+                        const product = products[0];
+
+                        if (parsed.intent === 'update_product_price' && price) {
+                            await db.query('UPDATE products SET price_sell = ? WHERE id = ?', [price, product.id]);
+                            parsed.reply = `'${product.name}'의 가격을 ${Number(price).toLocaleString()}원으로 변경했습니다.`;
+                            type = 'action_success';
+                        } else if (parsed.intent === 'update_product_status' && status) {
+                            await db.query('UPDATE products SET status = ? WHERE id = ?', [status, product.id]);
+                            parsed.reply = `'${product.name}'의 상태를 '${status}'(으)로 변경했습니다.`;
+                            type = 'action_success';
+                        } else {
+                            parsed.reply = "변경할 내용을 정확히 알 수 없습니다.";
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    parsed.reply = "상품 정보 수정 중 오류가 발생했습니다.";
+                }
+            }
         }
 
         return {
