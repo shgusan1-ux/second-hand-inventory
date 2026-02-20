@@ -20,9 +20,9 @@ export interface CommandResult {
 export async function processUserCommand(
     command: string,
     userInfo: { id: string, name: string, role: string },
-    model: ModelType = 'flash'
+    model: ModelType = 'v3.1'
 ): Promise<CommandResult> {
-    const modelName = MODELS[model] || MODELS['flash'];
+    const modelName = MODELS[model] || MODELS['v3.1'];
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
     const tools = [
         { name: 'get_sales_summary', description: 'Get today sales summary (count, total amount)' },
@@ -35,7 +35,7 @@ export async function processUserCommand(
     ];
 
     const prompt = `
-    You are an AI assistant for a vintage inventory system called "Inventory AI".
+    You are an AI assistant for a vintage inventory system called "Brownstreet".
     User: ${userInfo.name} (${userInfo.role})
     Command: "${command}"
     

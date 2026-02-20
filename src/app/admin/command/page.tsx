@@ -30,7 +30,7 @@ export default function CommandCenterPage() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [showVoice, setShowVoice] = useState(false);
-    const [model, setModel] = useState<'flash' | 'pro' | 'v3.1'>('flash');
+    const [model, setModel] = useState<'flash' | 'pro' | 'v3.1'>('v3.1');
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
