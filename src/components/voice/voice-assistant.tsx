@@ -7,9 +7,10 @@ import { toast } from 'sonner';
 interface VoiceAssistantProps {
     onCommand: (text: string) => Promise<any>;
     autoStart?: boolean;
+    minimal?: boolean;
 }
 
-export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantProps) {
+export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }: VoiceAssistantProps) {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -174,35 +175,65 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
             <button
                 onClick={toggleListening}
                 disabled={isProcessing}
-                className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${isListening
-                    ? 'bg-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.5)] scale-110'
-                    : isProcessing
-                        ? 'bg-indigo-400 cursor-wait'
-                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'
+                className={minimal
+                    ? `p-2 rounded-full transition-colors relative ${isListening ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-indigo-500 hover:bg-slate-100'}`
+                    : `relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${isListening
+                        ? 'bg-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.5)] scale-110'
+                        : isProcessing
+                            ? 'bg-indigo-400 cursor-wait'
+                            : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'
                     }`}
+                title={isListening ? "듣는 중..." : "음성 대화"}
             >
-                {isListening ? (
-                    <div className="absolute inset-0 rounded-full border-4 border-rose-300 animate-ping opacity-25"></div>
-                ) : null}
-
-                {isProcessing ? (
-                    <Loader2 className="w-8 h-8 text-white animate-spin" />
-                ) : isSpeaking ? (
-                    <div className="flex gap-1 justify-center items-center h-full">
-                        <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_100ms] rounded-full"></span>
-                        <span className="w-1 h-5 bg-white animate-[bounce_1s_infinite_200ms] rounded-full"></span>
-                        <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_300ms] rounded-full"></span>
-                    </div>
-                ) : isListening ? (
-                    <Mic className="w-8 h-8 text-white animate-pulse" />
+                {/* Minimal specific active indicator or just use icon color */}
+                {minimal ? (
+                    <>
+                        {isListening && (
+                            <span className="absolute inset-0 rounded-full border-2 border-rose-400/50 animate-ping"></span>
+                        )}
+                        {isProcessing ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : isSpeaking ? (
+                            <div className="flex gap-0.5 items-center justify-center w-5 h-5">
+                                <span className="w-0.5 h-2 bg-indigo-500 animate-[bounce_1s_infinite_100ms] rounded-full"></span>
+                                <span className="w-0.5 h-3 bg-indigo-500 animate-[bounce_1s_infinite_200ms] rounded-full"></span>
+                                <span className="w-0.5 h-2 bg-indigo-500 animate-[bounce_1s_infinite_300ms] rounded-full"></span>
+                            </div>
+                        ) : isListening ? (
+                            <Mic className="w-5 h-5" />
+                        ) : (
+                            <Mic className="w-5 h-5" />
+                        )}
+                    </>
                 ) : (
-                    <Mic className="w-8 h-8 text-white" />
+                    <>
+                        {isListening ? (
+                            <div className="absolute inset-0 rounded-full border-4 border-rose-300 animate-ping opacity-25"></div>
+                        ) : null}
+
+                        {isProcessing ? (
+                            <Loader2 className="w-8 h-8 text-white animate-spin" />
+                        ) : isSpeaking ? (
+                            <div className="flex gap-1 justify-center items-center h-full">
+                                <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_100ms] rounded-full"></span>
+                                <span className="w-1 h-5 bg-white animate-[bounce_1s_infinite_200ms] rounded-full"></span>
+                                <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_300ms] rounded-full"></span>
+                            </div>
+                        ) : isListening ? (
+                            <Mic className="w-8 h-8 text-white animate-pulse" />
+                        ) : (
+                            <Mic className="w-8 h-8 text-white" />
+                        )}
+                    </>
                 )}
             </button>
 
             {transcript && (
-                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-50">
-                    <div className="bg-black/60 backdrop-blur-md text-white px-6 py-4 rounded-2xl text-lg font-medium text-center shadow-2xl animate-in fade-in slide-in-from-bottom-4 leading-relaxed">
+                <div className={minimal
+                    ? "fixed bottom-20 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-xl pointer-events-none z-50 text-center"
+                    : "fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-50"
+                }>
+                    <div className="bg-black/70 backdrop-blur-md text-white px-4 py-3 rounded-2xl text-base font-medium shadow-2xl animate-in fade-in slide-in-from-bottom-2 leading-relaxed">
                         {transcript}
                     </div>
                 </div>

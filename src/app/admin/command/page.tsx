@@ -141,20 +141,6 @@ export default function CommandCenterPage() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] w-full max-w-md md:max-w-2xl mx-auto bg-white dark:bg-slate-900 border-x border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden rounded-xl relative">
-            {/* Voice Overlay */}
-            {showVoice && (
-                <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
-                    <button
-                        onClick={() => setShowVoice(false)}
-                        className="absolute top-4 right-4 p-2 text-white/50 hover:text-white"
-                    >
-                        <X className="w-8 h-8" />
-                    </button>
-                    <h2 className="text-2xl font-bold text-white mb-8">AI 음성 대화</h2>
-                    <VoiceAssistant onCommand={handleVoiceCommand} autoStart={true} />
-                    <p className="text-slate-400 mt-8 text-sm">말씀하시면 AI가 듣고 대답합니다.</p>
-                </div>
-            )}
 
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur flex items-center justify-between z-10">
@@ -301,21 +287,9 @@ export default function CommandCenterPage() {
                             className="w-full bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[44px] max-h-[120px]"
                             rows={1}
                         />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if ('speechSynthesis' in window) {
-                                    // Warm up speech synthesis
-                                    const utterance = new SpeechSynthesisUtterance('');
-                                    window.speechSynthesis.speak(utterance);
-                                }
-                                setShowVoice(true);
-                            }}
-                            className="absolute right-2 bottom-2 p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"
-                            title="음성 대화 모드"
-                        >
-                            <Mic className="w-4 h-4" />
-                        </button>
+                        <div className="absolute right-2 bottom-2">
+                            <VoiceAssistant onCommand={handleVoiceCommand} minimal={true} />
+                        </div>
                     </div>
                     <button
                         type="submit"
