@@ -15,7 +15,14 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [isSessionActive, setIsSessionActive] = useState(false);
     const recognitionRef = useRef<any>(null);
+    const isSessionActiveRef = useRef(false);
+
+    // Update ref when state changes
+    useEffect(() => {
+        isSessionActiveRef.current = isSessionActive;
+    }, [isSessionActive]);
 
     const [isSupported, setIsSupported] = useState(false);
 
@@ -129,7 +136,15 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
             utterance.rate = 1;
 
             utterance.onstart = () => setIsSpeaking(true);
-            utterance.onend = () => setIsSpeaking(false);
+            utterance.onend = () => {
+                setIsSpeaking(false);
+                // Auto-restart mic if session is active
+                if (isSessionActiveRef.current) {
+                    try {
+                        recognitionRef.current.start();
+                    } catch (e) { /* ignore */ }
+                }
+            };
             utterance.onerror = () => setIsSpeaking(false);
 
             window.speechSynthesis.speak(utterance);
@@ -146,15 +161,21 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
     const toggleListening = () => {
         if (!recognitionRef.current) return;
 
-        if (isListening) {
+        if (isSessionActive) {
+            // Stop session
+            setIsSessionActive(false);
             recognitionRef.current.stop();
+            window.speechSynthesis.cancel();
+            setIsListening(false);
+            setTranscript('');
         } else {
+            // Start session
+            setIsSessionActive(true);
             setTranscript('듣고 있어요...');
             try {
                 recognitionRef.current.start();
             } catch (e) {
                 console.error(e);
-                // Sometimes it throws if already started
                 recognitionRef.current.stop();
                 setTimeout(() => recognitionRef.current.start(), 100);
             }
@@ -176,14 +197,14 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 onClick={toggleListening}
                 disabled={isProcessing}
                 className={minimal
-                    ? `p-2 rounded-full transition-colors relative ${isListening ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-indigo-500 hover:bg-slate-100'}`
-                    : `relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${isListening
+                    ? `p-2 rounded-full transition-colors relative ${isSessionActive ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-indigo-500 hover:bg-slate-100'}`
+                    : `relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${isSessionActive
                         ? 'bg-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.5)] scale-110'
                         : isProcessing
                             ? 'bg-indigo-400 cursor-wait'
                             : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'
                     }`}
-                title={isListening ? "듣는 중..." : "음성 대화"}
+                title={isSessionActive ? "대화 종료" : "음성 대화 시작"}
             >
                 {/* Minimal specific active indicator or just use icon color */}
                 {minimal ? (
