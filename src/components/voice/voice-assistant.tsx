@@ -367,8 +367,8 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 }>
                     <div className="bg-black/80 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 border border-white/10">
                         <div className="flex items-center gap-2 mb-2">
-                            <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Antigravity Mobile</span>
+                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Antigravity Core</span>
                         </div>
                         <div className="text-sm font-medium leading-relaxed">
                             {aiReply ? (
