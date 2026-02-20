@@ -148,8 +148,8 @@ export default function CommandCenterPage() {
                         <Bot className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none">Brownstreet AI</h1>
-                        <p className="text-[10px] text-slate-500 font-medium">Command Center</p>
+                        <h1 className="text-sm font-black text-slate-900 dark:text-white leading-none tracking-tight">Antigravity Alpha</h1>
+                        <p className="text-[10px] text-cyan-600 font-black uppercase tracking-widest mt-0.5">The Strongest Code AI</p>
                     </div>
                 </div>
 

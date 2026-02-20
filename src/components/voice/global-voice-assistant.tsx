@@ -41,8 +41,8 @@ export function GlobalVoiceAssistant() {
         <div className="fixed bottom-6 right-6 z-[100] md:bottom-10 md:right-10">
             <div className="group relative">
                 {/* Floating label for desktop */}
-                <div className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-[10px] font-black px-3 py-1.5 rounded-full whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none uppercase tracking-widest shadow-xl hidden md:block border border-slate-700">
-                    Antigravity Core
+                <div className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-[10px] font-black px-3 py-1.5 rounded-full whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none uppercase tracking-widest shadow-xl hidden md:block border border-cyan-500/50">
+                    Antigravity Alpha Code
                 </div>
 
                 <VoiceAssistant

@@ -308,12 +308,12 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 onClick={toggleListening}
                 disabled={isProcessing}
                 className={minimal
-                    ? `p-2 rounded-full transition-colors relative ${isSessionActive ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-indigo-500 hover:bg-slate-100'}`
+                    ? `p-2 rounded-full transition-colors relative ${isSessionActive ? 'text-cyan-500 bg-cyan-50' : 'text-slate-400 hover:text-indigo-500 hover:bg-slate-100'}`
                     : `relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${isSessionActive
-                        ? 'bg-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.5)] scale-110'
+                        ? 'bg-cyan-500 shadow-[0_0_20px_rgba(34,211,238,0.5)] scale-110'
                         : isProcessing
-                            ? 'bg-indigo-400 cursor-wait'
-                            : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'
+                            ? 'bg-slate-400 cursor-wait'
+                            : 'bg-slate-900 hover:bg-slate-800 shadow-lg'
                     }`}
                 title={isSessionActive ? "대화 종료" : "음성 대화 시작"}
             >
@@ -321,15 +321,15 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 {minimal ? (
                     <>
                         {isListening && (
-                            <span className="absolute inset-0 rounded-full border-2 border-rose-400/50 animate-ping"></span>
+                            <span className="absolute inset-0 rounded-full border-2 border-cyan-400/50 animate-ping"></span>
                         )}
                         {isProcessing ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : isSpeaking ? (
                             <div className="flex gap-0.5 items-center justify-center w-5 h-5">
-                                <span className="w-0.5 h-2 bg-indigo-500 animate-[bounce_1s_infinite_100ms] rounded-full"></span>
-                                <span className="w-0.5 h-3 bg-indigo-500 animate-[bounce_1s_infinite_200ms] rounded-full"></span>
-                                <span className="w-0.5 h-2 bg-indigo-500 animate-[bounce_1s_infinite_300ms] rounded-full"></span>
+                                <span className="w-0.5 h-2 bg-cyan-400 animate-[bounce_1s_infinite_100ms] rounded-full"></span>
+                                <span className="w-0.5 h-3 bg-cyan-400 animate-[bounce_1s_infinite_200ms] rounded-full"></span>
+                                <span className="w-0.5 h-2 bg-cyan-400 animate-[bounce_1s_infinite_300ms] rounded-full"></span>
                             </div>
                         ) : isListening ? (
                             <Mic className="w-5 h-5" />
@@ -340,7 +340,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 ) : (
                     <>
                         {isListening ? (
-                            <div className="absolute inset-0 rounded-full border-4 border-rose-300 animate-ping opacity-25"></div>
+                            <div className="absolute inset-0 rounded-full border-4 border-cyan-300 animate-ping opacity-25"></div>
                         ) : null}
 
                         {isProcessing ? (
@@ -367,8 +367,8 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 }>
                     <div className="bg-black/80 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 border border-white/10">
                         <div className="flex items-center gap-2 mb-2">
-                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Antigravity Core</span>
+                            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Antigravity Alpha Code</span>
                         </div>
                         <div className="text-sm font-medium leading-relaxed">
                             {aiReply ? (
