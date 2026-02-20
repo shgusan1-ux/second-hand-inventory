@@ -30,7 +30,7 @@ export default function CommandCenterPage() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [showVoice, setShowVoice] = useState(false);
-    const [model, setModel] = useState<'flash' | 'pro' | 'ultra'>('flash');
+    const [model, setModel] = useState<'flash' | 'pro' | 'v3.1'>('flash');
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -204,6 +204,14 @@ export default function CommandCenterPage() {
                             : 'text-slate-500 hover:text-slate-800'}`}
                     >
                         <Star className="w-3 h-3" /> Pro 1.5
+                    </button>
+                    <button
+                        onClick={() => setModel('v3.1')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${model === 'v3.1'
+                            ? 'bg-purple-100 text-purple-700 font-bold shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                        <Sparkles className="w-3 h-3" /> Gemini 3.1
                     </button>
                 </div>
             </div>

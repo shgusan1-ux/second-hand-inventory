@@ -5,7 +5,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const MODELS = {
     'flash': 'gemini-2.0-flash',
     'pro': 'gemini-1.5-pro',
-    'ultra': 'gemini-1.5-pro' // Fallback or distinct if available
+    'v3.1': 'gemini-2.0-flash' // Placeholder for user request, mapping to fastest 2.0
 };
 
 type ModelType = keyof typeof MODELS;

@@ -29,33 +29,57 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
             if (SpeechRecognition) {
                 const recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                recognition.interimResults = false;
+                recognition.interimResults = true; // Changed to true to see partial results
                 recognition.lang = 'ko-KR';
+
+                // Prevent GC
+                (window as any).recognition = recognition;
 
                 recognition.onstart = () => {
                     setIsListening(true);
                     setTranscript('듣고 있어요...');
                 };
 
-                recognition.onresult = async (event: any) => {
-                    const text = event.results[0][0].transcript;
-                    setTranscript(text);
-                    setIsListening(false);
+                recognition.onsoundstart = () => {
+                    setTranscript('듣고 있어요... (소리 감지)');
+                };
 
-                    setIsProcessing(true);
-                    try {
-                        const result = await onCommandRef.current(text);
-                        if (result && result.message) {
-                            if ('speechSynthesis' in window) {
-                                const utterance = new SpeechSynthesisUtterance(result.message);
-                                utterance.lang = 'ko-KR';
-                                window.speechSynthesis.speak(utterance);
-                            }
+                recognition.onresult = async (event: any) => {
+                    // Combine all results
+                    let finalTranscript = '';
+                    let interimTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            interimTranscript += event.results[i][0].transcript;
                         }
-                    } catch (error) {
-                        // Error
-                    } finally {
-                        setIsProcessing(false);
+                    }
+
+                    if (interimTranscript) {
+                        setTranscript(interimTranscript);
+                    }
+
+                    if (finalTranscript) {
+                        setTranscript(finalTranscript);
+                        setIsListening(false);
+
+                        setIsProcessing(true);
+                        try {
+                            const result = await onCommandRef.current(finalTranscript);
+                            if (result && result.message) {
+                                if ('speechSynthesis' in window) {
+                                    const utterance = new SpeechSynthesisUtterance(result.message);
+                                    utterance.lang = 'ko-KR';
+                                    window.speechSynthesis.speak(utterance);
+                                }
+                            }
+                        } catch (error) {
+                            // Error
+                        } finally {
+                            setIsProcessing(false);
+                        }
                     }
                 };
 
