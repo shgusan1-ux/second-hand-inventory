@@ -13,6 +13,7 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
     const recognitionRef = useRef<any>(null);
 
     const [isSupported, setIsSupported] = useState(false);
@@ -69,11 +70,7 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                         try {
                             const result = await onCommandRef.current(finalTranscript);
                             if (result && result.message) {
-                                if ('speechSynthesis' in window) {
-                                    const utterance = new SpeechSynthesisUtterance(result.message);
-                                    utterance.lang = 'ko-KR';
-                                    window.speechSynthesis.speak(utterance);
-                                }
+                                speak(result.message);
                             }
                         } catch (error) {
                             // Error
@@ -91,6 +88,9 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                         setTranscript('권한 거부됨');
                     } else if (event.error === 'no-speech') {
                         // Silent fail
+                    } else if (event.error === 'aborted') {
+                        setIsListening(false);
+                        // Don't show toast, just stop
                     } else {
                         toast.error('오류가 발생했습니다: ' + event.error);
                     }
@@ -117,16 +117,30 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
         }
     }, [autoStart]);
 
-
     const speak = (text: string) => {
         if ('speechSynthesis' in window) {
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'ko-KR';
             utterance.pitch = 1;
             utterance.rate = 1;
+
+            utterance.onstart = () => setIsSpeaking(true);
+            utterance.onend = () => setIsSpeaking(false);
+            utterance.onerror = () => setIsSpeaking(false);
+
             window.speechSynthesis.speak(utterance);
+
+            // Chrome bug fix: resume if paused (sometimes happens)
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
         }
     };
+
+
 
     const toggleListening = () => {
         if (!recognitionRef.current) return;
@@ -173,6 +187,12 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
 
                 {isProcessing ? (
                     <Loader2 className="w-8 h-8 text-white animate-spin" />
+                ) : isSpeaking ? (
+                    <div className="flex gap-1 justify-center items-center h-full">
+                        <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_100ms] rounded-full"></span>
+                        <span className="w-1 h-5 bg-white animate-[bounce_1s_infinite_200ms] rounded-full"></span>
+                        <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_300ms] rounded-full"></span>
+                    </div>
                 ) : isListening ? (
                     <Mic className="w-8 h-8 text-white animate-pulse" />
                 ) : (
@@ -181,8 +201,10 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
             </button>
 
             {transcript && (
-                <div className="bg-slate-900/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-medium animate-in fade-in slide-in-from-bottom-2">
-                    {transcript}
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-50">
+                    <div className="bg-black/60 backdrop-blur-md text-white px-6 py-4 rounded-2xl text-lg font-medium text-center shadow-2xl animate-in fade-in slide-in-from-bottom-4 leading-relaxed">
+                        {transcript}
+                    </div>
                 </div>
             )}
         </div>

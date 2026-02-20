@@ -1,1 +1,0 @@
-const fs=require("fs");let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{fs.writeFileSync(process.argv[2],d,"utf8");console.log("Written:"+d.length)});

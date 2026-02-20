@@ -182,3 +182,39 @@ async function run() {
         printTable('6-3. name 빈값 상품 샘플 (최대10건)', emptyNames);
     }
 
+    // === 종합 요약 ===
+    console.log('');
+    console.log('');
+    console.log('+======================================================================+');
+    console.log('|                         종합 요약                                    |');
+    console.log('+======================================================================+');
+    const issues = [];
+    if (imgEmpty > 0) issues.push('[이미지] products 이미지 없음: ' + imgEmpty + '건');
+    if (noImgButSupHas > 0) issues.push('[이미지] supplier에서 보완 가능: ' + noImgButSupHas + '건');
+    if (catUnmatched > 0) issues.push('[카테고리] 매칭 안 됨: ' + catUnmatched + '건');
+    if (aiCatUnmatched > 0) issues.push('[카테고리] AI완료 중 매칭 안 됨: ' + aiCatUnmatched + '건');
+    if (aiBadFabric > 0) issues.push('[AI] fabric 확인불가/빈값: ' + aiBadFabric + '건');
+    if (aiNoComment > 0) issues.push('[AI] md_comment 빈값: ' + aiNoComment + '건');
+    if (aiNoBrand > 0) issues.push('[AI] brand 빈값: ' + aiNoBrand + '건');
+    if (matchedNoMeasure > 0) issues.push('[실측] 매칭됨+실측 전무: ' + matchedNoMeasure + '건');
+    if (priceSellZero > 0) issues.push('[가격] 판매가 0/NULL: ' + priceSellZero + '건');
+    if (priceAbnormal > 0) issues.push('[가격] 판매가 > 소비자가: ' + priceAbnormal + '건');
+    if (nameEmpty > 0) issues.push('[버그] 이름 빈값: ' + nameEmpty + '건');
+    if (noSupplierMatch > 0) issues.push('[버그] supplier 매칭 안 됨: ' + noSupplierMatch + '건');
+    if (dupProducts > 0) issues.push('[버그] 중복 product ID: ' + dupProducts + '건');
+    if (dupSupplier > 0) issues.push('[버그] 중복 supplier product_code: ' + dupSupplier + '건');
+
+    if (issues.length === 0) {
+        console.log('  모든 검사 항목 정상!');
+    } else {
+        console.log('  발견된 이슈: 총 ' + issues.length + '건');
+        console.log('+----------------------------------------------------------------------+');
+        issues.forEach((issue, i) => {
+            console.log('  ' + String(i + 1).padStart(2) + '. ' + issue);
+        });
+    }
+    console.log('+======================================================================+');
+    console.log('');
+}
+
+run().catch(err => { console.error('오류:', err); process.exit(1); });
