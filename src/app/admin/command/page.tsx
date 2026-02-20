@@ -303,7 +303,14 @@ export default function CommandCenterPage() {
                         />
                         <button
                             type="button"
-                            onClick={() => setShowVoice(true)}
+                            onClick={() => {
+                                if ('speechSynthesis' in window) {
+                                    // Warm up speech synthesis
+                                    const utterance = new SpeechSynthesisUtterance('');
+                                    window.speechSynthesis.speak(utterance);
+                                }
+                                setShowVoice(true);
+                            }}
                             className="absolute right-2 bottom-2 p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"
                             title="음성 대화 모드"
                         >
