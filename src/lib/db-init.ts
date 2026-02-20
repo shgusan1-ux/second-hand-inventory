@@ -434,6 +434,30 @@ export async function initDatabase() {
       )
     `);
 
+    // Chat History Tables
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        user_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL, -- 'user', 'assistant'
+        content TEXT NOT NULL,
+        type TEXT DEFAULT 'text',
+        action_data TEXT, -- JSON string
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
@@ -444,7 +468,11 @@ export async function initDatabase() {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON account_transactions(transaction_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_product ON fitting_results(product_no)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_status ON fitting_results(status)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_status_sold ON products(status, sold_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_reg_date ON naver_products(reg_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_chat_session_user ON chat_sessions(user_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)`);
 
     // 알림 테이블
     await db.query(`

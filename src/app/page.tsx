@@ -29,16 +29,18 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  // Fetch Data
-  const stats = await getDashboardStats();
-  const weather = await getMarketWeather();
-  await checkSystemUpdates();
-  const tasks = await getDashboardTasks();
-  const orgUsers = await getUsersForOrgChart();
-  const attendanceRecords = await getAllTodayAttendance();
+  // Fetch Data in parallel for performance optimization
+  const [stats, weather, tasks, orgUsers, attendanceRecords, meetings] = await Promise.all([
+    getDashboardStats(),
+    getMarketWeather(),
+    getDashboardTasks(),
+    getUsersForOrgChart(),
+    getAllTodayAttendance(),
+    getMeetings(3)
+  ]);
 
-  // Fetch meetings directly
-  const meetings: any[] = await getMeetings(3) as any[];
+  // Non-blocking background check
+  checkSystemUpdates().catch(console.error);
 
   const currentDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 

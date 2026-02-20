@@ -8,9 +8,10 @@ interface VoiceAssistantProps {
     onCommand: (text: string) => Promise<any>;
     autoStart?: boolean;
     minimal?: boolean;
+    onTranscript?: (text: string) => void;
 }
 
-export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }: VoiceAssistantProps) {
+export function VoiceAssistant({ onCommand, autoStart = false, minimal = false, onTranscript }: VoiceAssistantProps) {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -18,6 +19,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
     const [isSessionActive, setIsSessionActive] = useState(autoStart);
     const [aiReply, setAiReply] = useState('');
     const recognitionRef = useRef<any>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const isSessionActiveRef = useRef(false);
 
     // Update ref when state changes
@@ -27,119 +29,91 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
     const [isSupported, setIsSupported] = useState(false);
 
-    const onCommandRef = useRef(onCommand);
-    useEffect(() => {
-        onCommandRef.current = onCommand;
-    }, [onCommand]);
-
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
             if (SpeechRecognition) {
+                setIsSupported(true);
                 const recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = true; // Changed to true to see partial results
+                recognition.continuous = true;
+                recognition.interimResults = true;
                 recognition.lang = 'ko-KR';
-
-                (window as any).recognition = recognition;
-
-                // Pre-load voices
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.getVoices();
-                }
 
                 recognition.onstart = () => {
                     setIsListening(true);
                     setTranscript('듣고 있어요...');
                 };
 
-                recognition.onsoundstart = () => {
-                    setTranscript('듣고 있어요... (소리 감지)');
-                };
-
-                recognition.onresult = async (event: any) => {
-                    // Combine all results
-                    let finalTranscript = '';
-                    let interimTranscript = '';
-
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
-                        } else {
-                            interimTranscript += event.results[i][0].transcript;
-                        }
-                    }
-
-                    if (interimTranscript) {
-                        setTranscript(interimTranscript);
-                    }
-
-                    if (finalTranscript) {
-                        setTranscript(finalTranscript);
-                        setIsListening(false);
-
-                        setIsProcessing(true);
-                        try {
-                            const result = await onCommandRef.current(finalTranscript);
-                            if (result && result.message) {
-                                setAiReply(result.message);
-                                speak(result.message);
-                            }
-                        } catch (error) {
-                            // Error
-                        } finally {
-                            setIsProcessing(false);
-                        }
-                    }
-                };
-
                 recognition.onerror = (event: any) => {
                     console.error('Speech recognition error', event.error);
-                    setIsListening(false);
+                    // Don't stop session on common errors like no-speech
                     if (event.error === 'not-allowed') {
+                        setIsSessionActive(false);
                         toast.error('마이크 권한이 필요합니다.');
-                        setTranscript('권한 거부됨');
-                    } else if (event.error === 'no-speech') {
-                        // Silent fail
-                    } else if (event.error === 'aborted') {
-                        setIsListening(false);
-                        // Don't show toast, just stop
-                    } else {
-                        toast.error('오류가 발생했습니다: ' + event.error);
                     }
                 };
 
                 recognition.onend = () => {
                     setIsListening(false);
-                    // Continuous session logic: restart if session is active and not speaking/processing
-                    if (isSessionActiveRef.current && !isProcessing && !window.speechSynthesis.speaking) {
-                        setTimeout(() => {
-                            if (isSessionActiveRef.current) {
-                                try {
-                                    recognitionRef.current.start();
-                                } catch (e) { /* ignore */ }
-                            }
-                        }, 300);
+                    // Auto-restart if session is active and not speaking
+                    if (isSessionActiveRef.current && !isSpeaking) {
+                        try { recognition.start(); } catch (e) { }
+                    }
+                };
+
+                recognition.onresult = (event: any) => {
+                    const current = event.resultIndex;
+                    const resultText = event.results[current][0].transcript;
+                    setTranscript(resultText);
+                    if (onTranscript) onTranscript(resultText);
+
+                    if (event.results[current].isFinal) {
+                        handleFinalTranscript(resultText);
                     }
                 };
 
                 recognitionRef.current = recognition;
-                setIsSupported(true);
 
                 if (autoStart) {
-                    try {
-                        recognition.start();
-                    } catch (e) {
-                        console.log('Auto-start failed', e);
-                    }
+                    try { recognition.start(); } catch (e) { }
                 }
-            } else {
-                console.warn('Web Speech API not supported');
-                setIsSupported(false);
+
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.getVoices();
+                }
+
+                // Initialize stable audio ref for iOS
+                if (!audioRef.current) {
+                    audioRef.current = new Audio();
+                }
+
+                return () => {
+                    recognition.stop();
+                };
             }
         }
     }, [autoStart]);
+
+    const handleFinalTranscript = async (text: string) => {
+        if (!text.trim() || text === '듣고 있어요...') return;
+
+        setIsProcessing(true);
+        // Stop recognition while processing to avoid echo
+        try { recognitionRef.current.stop(); } catch (e) { }
+
+        try {
+            const result = await onCommand(text);
+            if (result && result.message) {
+                setAiReply(result.message);
+                await speak(result.message);
+            }
+        } catch (error) {
+            console.error('Command processing error', error);
+            toast.error('명령 처리 중 오류가 발생했습니다.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const speak = async (text: string) => {
         setIsSpeaking(true);
@@ -150,60 +124,57 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
             const response = await fetch('/api/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, voice: 'nova' }) // 'nova' is very clear/natural
+                body: JSON.stringify({ text, voice: 'alloy' })
             });
 
             if (response.ok) {
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
 
-                audio.onended = () => {
-                    setIsSpeaking(false);
-                    URL.revokeObjectURL(url);
-                    // Auto-restart mic if session is active
-                    if (isSessionActiveRef.current) {
-                        setTimeout(() => {
-                            if (isSessionActiveRef.current) {
-                                try { recognitionRef.current.start(); } catch (e) { }
-                            }
-                        }, 200);
-                    }
-                };
+                if (audioRef.current) {
+                    audioRef.current.src = url;
 
-                audio.onerror = () => {
-                    setIsSpeaking(false);
-                    URL.revokeObjectURL(url);
-                };
+                    audioRef.current.onended = () => {
+                        setIsSpeaking(false);
+                        URL.revokeObjectURL(url);
+                        if (isSessionActiveRef.current) {
+                            setTimeout(() => {
+                                if (isSessionActiveRef.current) {
+                                    try { recognitionRef.current.start(); } catch (e) { }
+                                }
+                            }, 200);
+                        }
+                    };
 
-                await audio.play();
-                success = true;
+                    audioRef.current.onerror = () => {
+                        setIsSpeaking(false);
+                        URL.revokeObjectURL(url);
+                    };
+
+                    await audioRef.current.play();
+                    success = true;
+                }
             }
         } catch (e) {
-            console.warn('OpenAI TTS failed, falling back to System Speech:', e);
+            console.warn('OpenAI TTS failed (possibly iOS restriction), falling back to System Speech:', e);
         }
 
         // 2. Fallback to System Speech (window.speechSynthesis)
         if (!success && 'speechSynthesis' in window) {
+            // Cancel any current speech
             window.speechSynthesis.cancel();
-            window.speechSynthesis.resume();
 
             const utterance = new SpeechSynthesisUtterance(text);
-            const voices = window.speechSynthesis.getVoices();
-            const preferredVoice = voices.find(v => (v.lang === 'ko-KR' || v.lang.startsWith('ko')) &&
-                (v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Google')))
-                || voices.find(v => v.lang === 'ko-KR' || v.lang.startsWith('ko'));
+            utterance.lang = 'ko-KR';
 
+            // Find a better Korean voice if available
+            const voices = window.speechSynthesis.getVoices();
+            const preferredVoice = voices.find(v => v.lang.includes('KR')) || voices[0];
             if (preferredVoice) utterance.voice = preferredVoice;
 
-            utterance.lang = 'ko-KR';
-            utterance.pitch = 1;
-            utterance.rate = 1.1;
-            utterance.volume = 1;
-
-            utterance.onstart = () => setIsSpeaking(true);
             utterance.onend = () => {
                 setIsSpeaking(false);
+                // Restart mic after system speech
                 if (isSessionActiveRef.current) {
                     setTimeout(() => {
                         if (isSessionActiveRef.current) {
@@ -212,66 +183,47 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                     }, 200);
                 }
             };
+
             utterance.onerror = () => setIsSpeaking(false);
+
             window.speechSynthesis.speak(utterance);
         } else if (!success) {
             setIsSpeaking(false);
         }
     };
 
-
-
     const playBeep = () => {
         try {
-            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioContext) return;
-            const ctx = new AudioContext();
-
-            // Resume context if suspended (common in Safari)
-            if (ctx.state === 'suspended') {
-                ctx.resume();
-            }
-
-            const oscillator = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(440, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
-
-            gain.gain.setValueAtTime(0.1, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-
+            const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
             oscillator.connect(gain);
-            gain.connect(ctx.destination);
-
+            gain.connect(context.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, context.currentTime);
+            gain.gain.setValueAtTime(0.1, context.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.1);
             oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.2);
-
-            // SILENT PRIME: Important for mobile browsers to allow subsequent speech without gesture
-            if ('speechSynthesis' in window) {
-                const prime = new SpeechSynthesisUtterance('');
-                prime.volume = 0;
-                window.speechSynthesis.speak(prime);
-            }
-        } catch (e) {
-            console.error('Audio beep failed', e);
-        }
+            oscillator.stop(context.currentTime + 0.1);
+        } catch (e) { }
     };
 
     const toggleListening = () => {
-        if (!recognitionRef.current) return;
-
         if (isSessionActive) {
-            // Stop session
             setIsSessionActive(false);
-            recognitionRef.current.stop();
-            window.speechSynthesis.cancel();
-            setIsListening(false);
+            setAiReply('');
             setTranscript('');
+            try { recognitionRef.current.stop(); } catch (e) { }
         } else {
             // Start session with beep to wake up Bluetooth
             playBeep();
+
+            // "Unlock" audio context/element for iOS
+            if (audioRef.current) {
+                audioRef.current.play().catch(() => { });
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }
 
             setIsSessionActive(true);
             setTranscript('듣고 있어요...');
@@ -280,30 +232,24 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 recognitionRef.current.start();
             } catch (e) {
                 console.error(e);
-                recognitionRef.current.stop();
-                setTimeout(() => recognitionRef.current.start(), 100);
+                try {
+                    recognitionRef.current.stop();
+                    setTimeout(() => recognitionRef.current.start(), 100);
+                } catch (err) { }
             }
         }
     };
 
     if (!isSupported) {
         return (
-            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-rose-50 border border-rose-100 p-4 rounded-2xl shadow-xl z-50 text-center">
-                <div className="flex justify-center mb-2">
-                    <AlertCircle className="w-8 h-8 text-rose-500" />
-                </div>
-                <h3 className="font-bold text-rose-900 mb-1">음성 기능을 사용할 수 없습니다</h3>
-                <p className="text-xs text-rose-700 leading-relaxed">
-                    1. <b>HTTPS</b> 주소로 접속했는지 확인해 주세요.<br />
-                    2. <b>Chrome</b> 또는 <b>Safari</b> 브라우저를 사용하세요.<br />
-                    3. 마이크 권한을 허용해 주셔야 합니다.
-                </p>
+            <div className="text-rose-500 p-2" title="이 브라우저는 음성 인식을 지원하지 않습니다.">
+                <MicOff className="w-5 h-5 opacity-50" />
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col items-center gap-2">
+        <div className="relative flex flex-col items-center gap-2">
             <button
                 onClick={toggleListening}
                 disabled={isProcessing}
@@ -317,7 +263,6 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                     }`}
                 title={isSessionActive ? "대화 종료" : "음성 대화 시작"}
             >
-                {/* Minimal specific active indicator or just use icon color */}
                 {minimal ? (
                     <>
                         {isListening && (
@@ -360,21 +305,39 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 )}
             </button>
 
-            {(transcript || aiReply) && (
+            {(transcript || aiReply) && isSessionActive && !minimal && (
                 <div className={minimal
-                    ? "fixed bottom-20 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-xl pointer-events-none z-50 text-center"
-                    : "fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-50"
+                    ? "fixed bottom-24 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-xl pointer-events-none z-[110] text-center"
+                    : "fixed bottom-28 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-[110]"
                 }>
-                    <div className="bg-black/80 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 border border-white/10">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Antigravity Alpha Code</span>
+                    <div className="bg-slate-900/90 backdrop-blur-2xl text-white p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 border border-white/10 ring-1 ring-white/20">
+                        <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Antigravity Alpha</span>
+                            </div>
+                            <span className="text-[9px] font-bold text-white/40 uppercase">Voice Hub</span>
                         </div>
-                        <div className="text-sm font-medium leading-relaxed">
-                            {aiReply ? (
-                                <span className="text-white drop-shadow-sm">{aiReply}</span>
-                            ) : (
-                                <span className="text-white/70 italic">"{transcript}"</span>
+
+                        <div className="space-y-3">
+                            {transcript && (
+                                <div className="text-xs text-white/60 font-medium italic animate-in fade-in transition-all">
+                                    "{transcript}"
+                                </div>
+                            )}
+
+                            {aiReply && (
+                                <div className="text-sm font-bold leading-relaxed text-white drop-shadow-sm animate-in slide-in-from-left-2 transition-all">
+                                    {aiReply}
+                                </div>
+                            )}
+
+                            {!aiReply && isListening && !transcript.includes('...') && (
+                                <div className="flex gap-1 justify-start items-center h-4 opacity-50">
+                                    <span className="w-1 h-2 bg-white animate-[bounce_1s_infinite_100ms] rounded-full"></span>
+                                    <span className="w-1 h-3 bg-white animate-[bounce_1s_infinite_200ms] rounded-full"></span>
+                                    <span className="w-1 h-2 bg-white animate-[bounce_1s_infinite_300ms] rounded-full"></span>
+                                </div>
                             )}
                         </div>
                     </div>
