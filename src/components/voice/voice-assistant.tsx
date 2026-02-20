@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 
 interface VoiceAssistantProps {
     onCommand: (text: string) => Promise<any>;
+    autoStart?: boolean;
 }
 
-export function VoiceAssistant({ onCommand }: VoiceAssistantProps) {
+export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantProps) {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -75,6 +76,14 @@ export function VoiceAssistant({ onCommand }: VoiceAssistantProps) {
 
                 recognitionRef.current = recognition;
                 setIsSupported(true);
+
+                if (autoStart) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        // ignore if already started
+                    }
+                }
             } else {
                 console.warn('Web Speech API not supported');
                 setIsSupported(false);

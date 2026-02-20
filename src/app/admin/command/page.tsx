@@ -38,6 +38,12 @@ export default function CommandCenterPage() {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            document.body.style.overflowX = 'hidden';
+            return () => { document.body.style.overflowX = ''; };
+        }
+    }, []);
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -134,7 +140,7 @@ export default function CommandCenterPage() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] max-w-2xl mx-auto bg-white dark:bg-slate-900 border-x border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden rounded-xl relative">
+        <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] w-full max-w-md md:max-w-2xl mx-auto bg-white dark:bg-slate-900 border-x border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden rounded-xl relative">
             {/* Voice Overlay */}
             {showVoice && (
                 <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
@@ -145,7 +151,7 @@ export default function CommandCenterPage() {
                         <X className="w-8 h-8" />
                     </button>
                     <h2 className="text-2xl font-bold text-white mb-8">AI 음성 대화</h2>
-                    <VoiceAssistant onCommand={handleVoiceCommand} />
+                    <VoiceAssistant onCommand={handleVoiceCommand} autoStart={true} />
                     <p className="text-slate-400 mt-8 text-sm">말씀하시면 AI가 듣고 대답합니다.</p>
                 </div>
             )}
@@ -247,7 +253,7 @@ export default function CommandCenterPage() {
 
                                     {/* Fallback for generic details */}
                                     {msg.actionData.details && !['profit_analysis', 'sales_summary', 'system_status'].includes(msg.actionData.type) && (
-                                        <pre className="text-[10px] bg-slate-100 dark:bg-slate-900 p-3 rounded-lg overflow-x-auto text-slate-600 font-mono">
+                                        <pre className="text-[10px] bg-slate-100 dark:bg-slate-900 p-3 rounded-lg overflow-x-auto max-w-full text-slate-600 font-mono whitespace-pre-wrap break-all">
                                             {JSON.stringify(msg.actionData.details, null, 2)}
                                         </pre>
                                     )}
