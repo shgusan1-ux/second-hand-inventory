@@ -1023,6 +1023,8 @@ export async function getInventoryForExport(searchParams: any) {
             sqlConditions.push('np.seller_management_code IS NULL');
         } else if (smartstoreParam === 'registered') {
             sqlConditions.push('np.seller_management_code IS NOT NULL');
+        } else if (smartstoreParam === 'suspended') {
+            sqlConditions.push("np.status_type = 'SUSPENSION'");
         }
     }
 
