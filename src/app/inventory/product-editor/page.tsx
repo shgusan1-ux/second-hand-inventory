@@ -96,6 +96,7 @@ export default function ProductEditorPage() {
     const [zoomImage, setZoomImage] = useState<string | null>(null); // 이미지 확대 모달
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null); // 전체 AI 배치 진행
     const batchAbortRef = useRef(false); // 배치 중단 플래그
+    const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview'); // 새 상세페이지 미리보기 모드
 
     // cleanup: 디바운스 타이머 해제 + 좌우 스크롤 방지
     useEffect(() => {
@@ -174,7 +175,7 @@ export default function ProductEditorPage() {
     // 선택된 상품
     const selectedProduct = useMemo(() =>
         products.find(p => p.id === selectedId) || null
-    , [products, selectedId]);
+        , [products, selectedId]);
 
     // 공급사 원본 데이터 자동 조회
     useEffect(() => {
@@ -182,9 +183,9 @@ export default function ProductEditorPage() {
         if (supplierData.has(selectedProduct.id)) return; // 이미 조회됨
         const brand = selectedProduct.brand;
         const name = selectedProduct.name;
-        if (!brand && !name) return;
         setIsSupplierLoading(true);
         const params = new URLSearchParams();
+        params.set('id', selectedProduct.id); // product_code 직접 매칭용
         if (brand) params.set('brand', brand);
         if (name) params.set('name', name);
         if (selectedProduct.size) params.set('size', selectedProduct.size);
@@ -195,28 +196,60 @@ export default function ProductEditorPage() {
                     setSupplierData(prev => new Map(prev).set(selectedProduct.id, data.data));
                 }
             })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setIsSupplierLoading(false));
     }, [selectedProduct, supplierData]);
 
     // 현재 상품의 공급사 데이터
     const currentSupplier = selectedId ? supplierData.get(selectedId) : null;
 
-    // 공급사 기본원칙 사이즈 자동 적용 (AI 적용 전 기본값)
+    // 공급사 기본원칙 사이즈 + 이미지 자동 적용 (AI 적용 전 기본값)
     useEffect(() => {
         if (!selectedId) return;
         const supplier = supplierData.get(selectedId);
-        if (!supplier?.labeled_size) return;
+        if (!supplier) return;
         const product = products.find(p => p.id === selectedId);
         if (!product) return;
-        const draft = drafts.get(selectedId);
-        const currentSize = draft?.size || product.size;
+        const draft = drafts.get(selectedId) || getCurrentDraft(product);
+
         // 사이즈가 비어있을 때만 공급사 라벨사이즈 자동 적용
-        if (!currentSize) {
-            updateDraft(selectedId, 'size', supplier.labeled_size);
-            setFormKey(k => k + 1);
+        if (supplier.labeled_size) {
+            const currentSize = draft.size || product.size;
+            if (!currentSize) {
+                updateDraft(selectedId, 'size', supplier.labeled_size);
+                setFormKey(k => k + 1);
+            }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+        // 공급사 이미지 자동 병합 (에디터 이미지가 1개 이하이고 공급사에 이미지가 있을 때)
+        if (supplier.image_urls) {
+            try {
+                const supplierImages: string[] = JSON.parse(supplier.image_urls).filter(Boolean);
+                if (supplierImages.length > 0 && draft.images.filter(Boolean).length <= 1) {
+                    const currentImages = draft.images.filter(Boolean);
+                    const mergedImages = [...currentImages];
+                    for (const img of supplierImages) {
+                        if (!mergedImages.includes(img)) {
+                            mergedImages.push(img);
+                        }
+                    }
+                    // 라벨 이미지도 추가
+                    if (supplier.label_image) {
+                        const labelImgs = supplier.label_image.split('|').map((u: string) => u.trim()).filter(Boolean);
+                        for (const img of labelImgs) {
+                            if (!mergedImages.includes(img)) {
+                                mergedImages.push(img);
+                            }
+                        }
+                    }
+                    if (mergedImages.length > currentImages.length) {
+                        updateDraft(selectedId, 'images', mergedImages);
+                        setFormKey(k => k + 1);
+                    }
+                }
+            } catch { }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId, supplierData]);
 
     // 카테고리 ID → 이름 변환 헬퍼 (AI 요청 시 이름으로 전달용)
@@ -876,13 +909,14 @@ export default function ProductEditorPage() {
         toast.info('대표이미지 원본 복원됨');
     };
 
-    // 공급사 실측 데이터를 상품에 병합하는 헬퍼
+    // 공급사 실측 + 이미지 데이터를 상품에 병합하는 헬퍼
     const mergeSupplierMeasurements = useCallback((product: any): any => {
         const supplier = supplierData.get(product.id);
         if (!supplier) return product;
-        // 공급사 실측 데이터가 있으면 product 필드에 병합 (기존 값 우선)
-        return {
+
+        const merged: any = {
             ...product,
+            // 실측 사이즈
             shoulder: product.shoulder || supplier.shoulder,
             chest: product.chest || supplier.chest,
             waist: product.waist || supplier.waist,
@@ -893,10 +927,37 @@ export default function ProductEditorPage() {
             thigh: product.thigh || supplier.thigh,
             inseam: product.inseam || supplier.length2,
             hip: product.hip || supplier.hip,
-            // 원단 정보도 빈 경우 채움
+            // 원단 정보
             fabric: product.fabric || (supplier.fabric1 ? `${supplier.fabric1}${supplier.fabric2 ? ', ' + supplier.fabric2 : ''}` : product.fabric),
             size: product.size || supplier.recommended_size,
         };
+
+        // 공급사 상품 이미지 병합 (에디터 이미지 뒤에 공급사 이미지 추가)
+        if (supplier.image_urls) {
+            try {
+                const supplierImages: string[] = JSON.parse(supplier.image_urls).filter(Boolean);
+                if (supplierImages.length > 0) {
+                    const currentImages = product.image_url
+                        ? product.image_url.split(',').map((s: string) => s.trim()).filter(Boolean)
+                        : [];
+                    // 중복 제거하며 공급사 이미지 추가
+                    const allImages = [...currentImages];
+                    for (const img of supplierImages) {
+                        if (!allImages.some((existing: string) => existing === img)) {
+                            allImages.push(img);
+                        }
+                    }
+                    merged.image_url = allImages.join(', ');
+                }
+            } catch { }
+        }
+
+        // 라벨/케어태그 이미지 병합
+        if (supplier.label_image && !product.label_images) {
+            merged.label_images = supplier.label_image.split('|').map((u: string) => u.trim()).filter(Boolean);
+        }
+
+        return merged;
     }, [supplierData]);
 
     // 미리보기 HTML
@@ -919,7 +980,7 @@ export default function ProductEditorPage() {
             image_url: draft.images.join(', '),
         });
         return generateProductDetailHTML(previewProduct);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProduct, selectedId, deferredDrafts, mergeSupplierMeasurements]);
 
     const saveStatus = selectedId ? (saveStatuses.get(selectedId) || 'idle') : 'idle';
@@ -938,7 +999,7 @@ export default function ProductEditorPage() {
                     className={`flex md:flex-row flex-col items-center gap-1.5 md:gap-2.5 p-2 md:p-2.5 rounded-xl border cursor-pointer transition-all flex-shrink-0 snap-start min-w-[80px] md:min-w-0 ${isSelected
                         ? 'bg-emerald-600/20 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
                         : 'bg-slate-900/50 border-white/5 hover:bg-slate-800/50'
-                    }`}
+                        }`}
                 >
                     <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-800 flex-shrink-0">
                         {imgs[0] && <img src={imgs[0]} alt="" className="w-full h-full object-cover" loading="lazy" />}
@@ -956,7 +1017,7 @@ export default function ProductEditorPage() {
                 </div>
             );
         })
-    , [products, selectedId, saveStatuses, hasDraft, parseImages]);
+        , [products, selectedId, saveStatuses, hasDraft, parseImages]);
 
     // 레이스 컨디션 방지용 ref
     const selectedIdRef = useRef<string | null>(null);
@@ -1020,7 +1081,7 @@ export default function ProductEditorPage() {
                 else if (g === '키즈' || g === '아동') setSelectedGender('KIDS');
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId]);
 
     // MD 소개글 독립 AI 생성
@@ -1318,7 +1379,7 @@ export default function ProductEditorPage() {
                                                     <span className="text-[10px] text-cyan-400 font-bold">신뢰도 {aiResult.confidence}% — 체크된 항목만 적용됩니다</span>
                                                     <div className="flex gap-2">
                                                         <button onClick={() => {
-                                                            const allFields = ['name','brand','condition','size','fabric','price_sell','price_consumer','category','gender','md_comment'];
+                                                            const allFields = ['name', 'brand', 'condition', 'size', 'fabric', 'price_sell', 'price_consumer', 'category', 'gender', 'md_comment'];
                                                             setAiChecked(aiChecked.size === allFields.length ? new Set() : new Set(allFields));
                                                         }} className="text-slate-400 hover:text-white text-[10px]">{aiChecked.size > 0 ? '전체해제' : '전체선택'}</button>
                                                         <button onClick={() => setAiResult(null)} className="text-slate-500 hover:text-white text-[10px]">닫기</button>
@@ -1333,11 +1394,11 @@ export default function ProductEditorPage() {
                                                         if (aiResult.grade) items.push({ key: 'condition', label: '등급', current: d.condition || '-', ai: `${aiResult.grade}${aiResult.gradeReason ? ` (${aiResult.gradeReason})` : ''}` });
                                                         if (aiResult.suggestedSize) items.push({ key: 'size', label: '사이즈', current: d.size || '-', ai: aiResult.suggestedSize });
                                                         if (aiResult.suggestedFabric) items.push({ key: 'fabric', label: '원단', current: d.fabric || '-', ai: aiResult.suggestedFabric });
-                                                        if (aiResult.suggestedConsumerPrice > 0) items.push({ key: 'price_consumer', label: '소비자가', current: `${(d.price_consumer||0).toLocaleString()}원`, ai: `${aiResult.suggestedConsumerPrice.toLocaleString()}원` });
-                                                        if (aiResult.suggestedPrice > 0) items.push({ key: 'price_sell', label: '판매가', current: `${(d.price_sell||0).toLocaleString()}원`, ai: `${aiResult.suggestedPrice.toLocaleString()}원${aiResult.priceReason ? ` (${aiResult.priceReason})` : ''}` });
+                                                        if (aiResult.suggestedConsumerPrice > 0) items.push({ key: 'price_consumer', label: '소비자가', current: `${(d.price_consumer || 0).toLocaleString()}원`, ai: `${aiResult.suggestedConsumerPrice.toLocaleString()}원` });
+                                                        if (aiResult.suggestedPrice > 0) items.push({ key: 'price_sell', label: '판매가', current: `${(d.price_sell || 0).toLocaleString()}원`, ai: `${aiResult.suggestedPrice.toLocaleString()}원${aiResult.priceReason ? ` (${aiResult.priceReason})` : ''}` });
                                                         if (aiResult.suggestedCategory) items.push({ key: 'category', label: '카테고리', current: categories.find(c => c.id === d.category)?.name || d.category || '-', ai: aiResult.suggestedCategory });
                                                         if (aiResult.suggestedGender) items.push({ key: 'gender', label: '성별', current: selectedGender || '-', ai: aiResult.suggestedGender });
-                                                        if (aiResult.mdDescription) items.push({ key: 'md_comment', label: 'MD설명', current: d.md_comment ? `${d.md_comment.substring(0,30)}...` : '-', ai: `${aiResult.mdDescription.substring(0,30)}...` });
+                                                        if (aiResult.mdDescription) items.push({ key: 'md_comment', label: 'MD설명', current: d.md_comment ? `${d.md_comment.substring(0, 30)}...` : '-', ai: `${aiResult.mdDescription.substring(0, 30)}...` });
                                                         return items.map(item => {
                                                             const isChecked = aiChecked.has(item.key);
                                                             const isDiff = item.current !== item.ai.split(' (')[0]; // 간단 비교
@@ -1434,7 +1495,7 @@ export default function ProductEditorPage() {
                                                                 className={`px-2 py-2 md:py-1.5 text-[11px] md:text-[10px] font-bold rounded-lg border transition-all ${selectedGender === g
                                                                     ? colorMap[g] || 'bg-emerald-600 border-emerald-500 text-white'
                                                                     : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 {g}<span className="ml-0.5 text-[8px] opacity-70">({count})</span>
                                                             </button>
@@ -1505,7 +1566,7 @@ export default function ProductEditorPage() {
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between">
                                                     <label className="text-[10px] text-slate-500 uppercase font-bold">소비자가</label>
-                                                    {aiResult?.suggestedConsumerPrice > 0 && (
+                                                    {aiResult && aiResult.suggestedConsumerPrice > 0 && (
                                                         <button onClick={() => applyAI('price_consumer', aiResult.suggestedConsumerPrice)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
                                                             AI: {aiResult.suggestedConsumerPrice.toLocaleString()}원 [적용]
                                                         </button>
@@ -1517,7 +1578,7 @@ export default function ProductEditorPage() {
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between">
                                                     <label className="text-[10px] text-slate-500 uppercase font-bold">판매가</label>
-                                                    {aiResult?.suggestedPrice && (
+                                                    {aiResult && aiResult.suggestedPrice > 0 && (
                                                         <button onClick={() => applyAI('price_sell', aiResult.suggestedPrice)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
                                                             AI: {aiResult.suggestedPrice.toLocaleString()}원 [적용]
                                                         </button>
@@ -1531,7 +1592,7 @@ export default function ProductEditorPage() {
                                         <div className="space-y-1">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-[10px] text-slate-500 uppercase font-bold">원단</label>
-                                                {aiResult?.suggestedFabric && (
+                                                {aiResult && aiResult.suggestedFabric && (
                                                     <button onClick={() => applyAI('fabric', aiResult.suggestedFabric)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
                                                         AI: {aiResult.suggestedFabric} [적용]
                                                     </button>
@@ -1644,13 +1705,12 @@ export default function ProductEditorPage() {
                                                 <button
                                                     key={key}
                                                     onClick={() => setFittingModel(key)}
-                                                    className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
-                                                        fittingModel === key
-                                                            ? key === 'flash'
-                                                                ? 'bg-blue-600 border-blue-500 text-white'
-                                                                : 'bg-amber-600 border-amber-500 text-white'
-                                                            : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
-                                                    }`}
+                                                    className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${fittingModel === key
+                                                        ? key === 'flash'
+                                                            ? 'bg-blue-600 border-blue-500 text-white'
+                                                            : 'bg-amber-600 border-amber-500 text-white'
+                                                        : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
+                                                        }`}
                                                 >
                                                     {label}
                                                 </button>
@@ -1690,9 +1750,31 @@ export default function ProductEditorPage() {
 
                                     {/* 새 상세페이지 미리보기 */}
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">새 상세페이지 미리보기</h3>
-                                        <div className="bg-white rounded-lg p-3 max-h-[400px] overflow-y-auto">
-                                            <div dangerouslySetInnerHTML={{ __html: newHTML }} className="text-black text-xs" />
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">새 상세페이지 미리보기</h3>
+                                            <div className="flex gap-1">
+                                                <button
+                                                    onClick={() => setViewMode('preview')}
+                                                    className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-colors ${viewMode === 'preview' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                                                >
+                                                    미리보기
+                                                </button>
+                                                <button
+                                                    onClick={() => setViewMode('code')}
+                                                    className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-colors ${viewMode === 'code' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                                                >
+                                                    HTML 코드
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className={`rounded-lg overflow-y-auto ${viewMode === 'preview' ? 'bg-white p-3 max-h-[400px]' : 'bg-slate-950 p-4 max-h-[400px]'}`}>
+                                            {viewMode === 'preview' ? (
+                                                <div dangerouslySetInnerHTML={{ __html: newHTML }} className="text-black text-xs" />
+                                            ) : (
+                                                <pre className="text-emerald-400 text-[10px] font-mono whitespace-pre-wrap break-all leading-normal selection:bg-emerald-500 selection:text-white">
+                                                    <code>{newHTML}</code>
+                                                </pre>
+                                            )}
                                         </div>
                                     </div>
 
@@ -1712,7 +1794,7 @@ export default function ProductEditorPage() {
                                                         <img src={badgePreview} alt="Badge" className="w-full h-full object-contain cursor-pointer" onClick={() => setZoomImage(badgePreview)} />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-600 text-[9px] text-center px-1">
-                                                            뱃지 생성<br/>버튼 클릭
+                                                            뱃지 생성<br />버튼 클릭
                                                         </div>
                                                     )}
                                                 </div>
@@ -1730,7 +1812,7 @@ export default function ProductEditorPage() {
                                                         <div key={i} className="flex flex-col items-center gap-0.5">
                                                             {i === 0 && <span className="text-[8px] text-emerald-400 font-black">뱃지원본</span>}
                                                             <div className={`w-[60px] h-[60px] rounded-lg overflow-hidden bg-slate-800 border-2 flex-shrink-0 relative group ${i === 0 ? 'border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 'border-white/10'}`}>
-                                                                <img src={img} alt={`img-${i+1}`} className="w-full h-full object-cover cursor-pointer" onClick={() => setZoomImage(img)} />
+                                                                <img src={img} alt={`img-${i + 1}`} className="w-full h-full object-cover cursor-pointer" onClick={() => setZoomImage(img)} />
                                                                 <button onClick={() => removeImage(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-[8px] rounded-bl opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">✕</button>
                                                             </div>
                                                             <div className="flex gap-0.5">
