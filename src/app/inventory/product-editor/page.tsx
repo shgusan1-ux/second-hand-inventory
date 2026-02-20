@@ -37,6 +37,7 @@ interface DraftData {
     md_comment: string;
     master_reg_date: string;
     images: string[];
+    customHTML?: string;
 }
 
 interface CategoryItem {
@@ -318,6 +319,7 @@ export default function ProductEditorPage() {
             md_comment: product.md_comment || '',
             master_reg_date: product.master_reg_date || '',
             images: parseImages(product),
+            customHTML: (product as any).customHTML || '',
         };
     }, [drafts, parseImages]);
 
@@ -339,6 +341,7 @@ export default function ProductEditorPage() {
         md_comment: product.md_comment || '',
         master_reg_date: product.master_reg_date || '',
         images: parseImages(product),
+        customHTML: (product as any).customHTML || '',
     }), [parseImages]);
 
     // pending 업데이트를 state에 반영
@@ -974,6 +977,7 @@ export default function ProductEditorPage() {
         if (!selectedProduct || !selectedId) return '';
         const draft = deferredDrafts.get(selectedId) || (currentDraft ? currentDraft : null);
         if (!draft) return '';
+        if (draft.customHTML) return draft.customHTML;
         const previewProduct = mergeSupplierMeasurements({
             ...selectedProduct,
             ...draft,
@@ -1774,7 +1778,17 @@ export default function ProductEditorPage() {
                                     {/* 새 상세페이지 미리보기 */}
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
-                                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">새 상세페이지 미리보기</h3>
+                                            <div className="flex flex-col gap-1">
+                                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">새 상세페이지 미리보기</h3>
+                                                {currentDraft?.customHTML && (
+                                                    <button
+                                                        onClick={() => updateDraft(selectedId!, 'customHTML', '')}
+                                                        className="text-[9px] text-red-400 hover:text-red-300 transition-colors w-fit underline font-bold"
+                                                    >
+                                                        사용자 정의 HTML 초기화
+                                                    </button>
+                                                )}
+                                            </div>
                                             <div className="flex gap-1">
                                                 <button
                                                     onClick={() => setViewMode('preview')}
@@ -1792,11 +1806,26 @@ export default function ProductEditorPage() {
                                         </div>
                                         <div className={`rounded-lg overflow-y-auto ${viewMode === 'preview' ? 'bg-white p-3 max-h-[400px]' : 'bg-slate-950 p-4 max-h-[400px]'}`}>
                                             {viewMode === 'preview' ? (
-                                                <div dangerouslySetInnerHTML={{ __html: newHTML }} className="text-black text-xs" />
+                                                <div
+                                                    contentEditable
+                                                    suppressContentEditableWarning
+                                                    onBlur={(e) => {
+                                                        const newVal = e.currentTarget.innerHTML;
+                                                        if (newVal !== newHTML) {
+                                                            updateDraft(selectedId!, 'customHTML', newVal);
+                                                            toast.info('미리보기 수정사항이 저장되었습니다.');
+                                                        }
+                                                    }}
+                                                    dangerouslySetInnerHTML={{ __html: newHTML }}
+                                                    className="text-black text-xs outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg p-1"
+                                                />
                                             ) : (
-                                                <pre className="text-emerald-400 text-[10px] font-mono whitespace-pre-wrap break-all leading-normal selection:bg-emerald-500 selection:text-white">
-                                                    <code>{newHTML}</code>
-                                                </pre>
+                                                <textarea
+                                                    className="w-full bg-transparent text-emerald-400 text-[10px] font-mono whitespace-pre-wrap break-all leading-normal min-h-[300px] outline-none border-none resize-none selection:bg-emerald-500 selection:text-white"
+                                                    value={newHTML}
+                                                    onChange={(e) => updateDraftDebounced(selectedId!, 'customHTML', e.target.value)}
+                                                    spellCheck={false}
+                                                />
                                             )}
                                         </div>
                                     </div>
