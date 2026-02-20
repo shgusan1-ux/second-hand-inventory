@@ -29,7 +29,10 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  // Fetch Data in parallel for performance optimization
+  // 1. Sync System updates first (essential for tasks display)
+  await checkSystemUpdates().catch(console.error);
+
+  // 2. Fetch Data in parallel for performance optimization
   const [stats, weather, tasks, orgUsers, attendanceRecords, meetings] = await Promise.all([
     getDashboardStats(),
     getMarketWeather(),
@@ -38,9 +41,6 @@ export default async function DashboardPage() {
     getAllTodayAttendance(),
     getMeetings(3)
   ]);
-
-  // Non-blocking background check
-  checkSystemUpdates().catch(console.error);
 
   const currentDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 

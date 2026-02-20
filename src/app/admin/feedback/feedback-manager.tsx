@@ -27,6 +27,7 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
     });
 
     const [feedbacks, setFeedbacks] = useState(initialFeedbacks);
+    const [filterStatus, setFilterStatus] = useState<'ALL' | FeedbackStatus>('ALL');
     const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
     const [commentMap, setCommentMap] = useState<Record<string, string>>(
         initialFeedbacks.reduce((acc, f) => ({ ...acc, [f.id]: f.admin_comment || '' }), {})
@@ -107,12 +108,63 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
         }
     };
 
+    const filteredFeedbacks = filterStatus === 'ALL'
+        ? feedbacks
+        : feedbacks.filter(f => f.status === filterStatus);
+
     return (
         <div className="space-y-4">
-            <div className="flex justify-end mb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 self-start">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilterStatus('ALL')}
+                        className={cn(
+                            "text-xs h-8 px-4",
+                            filterStatus === 'ALL' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                        )}
+                    >
+                        전체 ({feedbacks.length})
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilterStatus('PENDING')}
+                        className={cn(
+                            "text-xs h-8 px-4",
+                            filterStatus === 'PENDING' ? "bg-slate-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-400"
+                        )}
+                    >
+                        처리 전 ({feedbacks.filter(f => f.status === 'PENDING').length})
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilterStatus('IN_PROGRESS')}
+                        className={cn(
+                            "text-xs h-8 px-4",
+                            filterStatus === 'IN_PROGRESS' ? "bg-blue-600/20 text-blue-400 shadow-sm" : "text-slate-500 hover:text-blue-400/50"
+                        )}
+                    >
+                        처리 중 ({feedbacks.filter(f => f.status === 'IN_PROGRESS').length})
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilterStatus('COMPLETED')}
+                        className={cn(
+                            "text-xs h-8 px-4",
+                            filterStatus === 'COMPLETED' ? "bg-emerald-600/20 text-emerald-400 shadow-sm" : "text-slate-500 hover:text-emerald-400/50"
+                        )}
+                    >
+                        완료 ({feedbacks.filter(f => f.status === 'COMPLETED').length})
+                    </Button>
+                </div>
+
                 <Button
                     onClick={() => setIsCreateOpen(true)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10"
                 >
                     <Plus className="w-4 h-4" />
                     직접 등록하기
@@ -173,13 +225,15 @@ export function FeedbackManager({ initialFeedbacks }: { initialFeedbacks: any[] 
                 </DialogContent>
             </Dialog>
 
-            {feedbacks.length === 0 ? (
+            {filteredFeedbacks.length === 0 ? (
                 <div className="text-center py-20 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
                     <MessageSquare className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                    <p className="text-slate-500">등록된 개선 요청이 없습니다.</p>
+                    <p className="text-slate-500">
+                        {filterStatus === 'ALL' ? '등록된 개선 요청이 없습니다.' : '해당 상태의 요청이 없습니다.'}
+                    </p>
                 </div>
             ) : (
-                feedbacks.map((f) => (
+                filteredFeedbacks.map((f) => (
                     <Card key={f.id} className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
                         <div className={cn(
                             "h-1 w-full",

@@ -182,12 +182,23 @@ async function initTables() {
     `);
 
     await client.execute(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        user_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.execute(`
       CREATE TABLE IF NOT EXISTS chat_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sender_id TEXT NOT NULL,
-        sender_name TEXT NOT NULL,
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL, -- 'user', 'assistant'
         content TEXT NOT NULL,
-        attachment TEXT,
+        type TEXT DEFAULT 'text',
+        action_data TEXT, -- JSON string
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);

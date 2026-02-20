@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Send, Mic, Play, Radio, Loader2, Sparkles, AlertCircle, Bot, X, Share2, Zap, Star, Plus, History } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,7 +17,7 @@ interface Message {
     actionData?: any;
 }
 
-export default function CommandCenterPage() {
+function CommandCenterContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const sessionIdFromUrl = searchParams.get('sessionId');
@@ -89,7 +89,7 @@ export default function CommandCenterPage() {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [messages, loading]);
+    }, [messages, loading, liveTranscript]);
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -360,5 +360,17 @@ export default function CommandCenterPage() {
                 </form>
             </div>
         </div >
+    );
+}
+
+export default function CommandCenterPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            </div>
+        }>
+            <CommandCenterContent />
+        </Suspense>
     );
 }
