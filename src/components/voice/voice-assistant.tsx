@@ -158,6 +158,37 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
 
 
+    const playBeep = () => {
+        try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+
+            // Resume context if suspended (common in Safari)
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.2);
+        } catch (e) {
+            console.error('Audio beep failed', e);
+        }
+    };
+
     const toggleListening = () => {
         if (!recognitionRef.current) return;
 
@@ -169,7 +200,9 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
             setIsListening(false);
             setTranscript('');
         } else {
-            // Start session
+            // Start session with beep to wake up Bluetooth
+            playBeep();
+
             setIsSessionActive(true);
             setTranscript('듣고 있어요...');
             try {
