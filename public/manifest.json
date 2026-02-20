@@ -1,5 +1,5 @@
 {
-    "name": "Inventory AI",
+    "name": "Inventory AI Command Center",
     "short_name": "InventoryAI",
     "start_url": "/admin/command",
     "display": "standalone",
