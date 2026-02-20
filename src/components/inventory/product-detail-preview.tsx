@@ -45,7 +45,7 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
               <DialogTitle className="text-sm">상품 정보</DialogTitle>
             </DialogHeader>
 
-            <div className="flex-1 overflow-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
               {/* Main Product Image */}
               <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-white border">
                 {imageUrls.length > 0 ? (
@@ -148,13 +148,13 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
               {viewMode === 'preview' ? (
-                <div className="p-6 bg-white">
-                  <div dangerouslySetInnerHTML={{ __html: htmlCode }} />
+                <div className="p-6 bg-white min-h-full">
+                  <div dangerouslySetInnerHTML={{ __html: htmlCode }} className="bg-white shadow-sm ring-1 ring-slate-200" />
                 </div>
               ) : (
-                <pre className="bg-slate-900 text-slate-100 p-6 text-xs h-full overflow-auto">
+                <pre className="bg-slate-900 text-slate-100 p-6 text-xs min-h-full overflow-auto">
                   <code>{htmlCode}</code>
                 </pre>
               )}
