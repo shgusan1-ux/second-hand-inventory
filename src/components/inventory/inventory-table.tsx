@@ -263,21 +263,21 @@ export function InventoryTable({
                                 />
                             </th>
                             <th className="h-12 px-4 align-middle w-[60px]">이미지</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('id')}>
+                            <th className="h-12 px-2 md:px-4 align-middle font-medium text-muted-foreground cursor-pointer hidden md:table-cell" onClick={() => handleHeaderClick('id')}>
                                 <div className="flex items-center hover:text-slate-900">
                                     자체상품코드 <SortIcon col="id" />
                                 </div>
                             </th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('name')}>
+                            <th className="h-12 px-2 md:px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('name')}>
                                 <div className="flex items-center hover:text-slate-900">
                                     상품명 <SortIcon col="name" />
                                 </div>
                             </th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">브랜드</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">등급</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">사이즈</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden lg:table-cell">브랜드</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden sm:table-cell">등급</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden sm:table-cell">사이즈</th>
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden md:table-cell">카테고리</th>
-                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground">마스터등록일</th>
+                            <th className="h-12 px-4 align-middle font-medium text-muted-foreground hidden lg:table-cell">마스터등록일</th>
 
                             <th className="h-12 px-4 align-middle font-medium text-muted-foreground cursor-pointer" onClick={() => handleHeaderClick('price_sell')}>
                                 <div className="flex items-center hover:text-slate-900">
@@ -345,12 +345,12 @@ export function InventoryTable({
                                             )}
                                         </div>
                                     </td>
-                                    <td className="p-3 align-middle">
+                                    <td className="p-3 align-middle hidden md:table-cell">
                                         <span className="font-mono text-emerald-700 font-medium">
                                             {product.id}
                                         </span>
                                     </td>
-                                    <td className="p-3 align-middle font-medium max-w-[200px]" title={product.name}>
+                                    <td className="p-2 md:p-3 align-middle font-medium max-w-[150px] md:max-w-[200px]" title={product.name}>
                                         <div className="flex items-center gap-2">
                                             <span className="truncate">
                                                 <button onClick={() => {
@@ -374,8 +374,8 @@ export function InventoryTable({
                                             </Button>
                                         </div>
                                     </td>
-                                    <td className="p-3 align-middle text-slate-600">{product.brand}</td>
-                                    <td className="p-3 align-middle text-center">
+                                    <td className="p-3 align-middle text-slate-600 hidden lg:table-cell">{product.brand}</td>
+                                    <td className="p-3 align-middle text-center hidden sm:table-cell">
                                         <span className={
                                             product.condition === 'S급' ? 'bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-purple-200' :
                                                 product.condition === 'A급' ? 'bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold border border-blue-200' :
@@ -384,7 +384,7 @@ export function InventoryTable({
                                             {product.condition || 'A급'}
                                         </span>
                                     </td>
-                                    <td className="p-3 align-middle text-slate-500 text-xs">{product.size}</td>
+                                    <td className="p-3 align-middle text-slate-500 text-xs hidden sm:table-cell">{product.size}</td>
                                     <td className="p-3 align-middle hidden md:table-cell">
                                         {(() => {
                                             // 1. Use joined data from DB (Preferred)
@@ -443,7 +443,7 @@ export function InventoryTable({
                                             );
                                         })()}
                                     </td>
-                                    <td className="p-3 align-middle text-slate-500 text-xs">
+                                    <td className="p-3 align-middle text-slate-500 text-xs hidden lg:table-cell">
                                         {product.master_reg_date ? new Date(product.master_reg_date).toLocaleDateString('ko-KR') : '-'}
                                     </td>
                                     <td className="p-3 align-middle font-semibold text-slate-700">₩{product.price_sell.toLocaleString()}</td>

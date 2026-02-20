@@ -1,6 +1,6 @@
 // Shared HTML generation functions for product detail pages
 export function generateProductDetailHTML(product: any): string {
-  const imageUrls = product.image_url ? product.image_url.split(',').map((url: string) => url.trim()) : [];
+  const imageUrls = product.image_url ? [...new Set(product.image_url.split(',').map((url: string) => url.trim()).filter(Boolean))] : [];
   const mainImage = imageUrls[0] || '';
 
   const measurements = parseMeasurements(product);
@@ -77,17 +77,31 @@ export function generateProductDetailHTML(product: any): string {
         if (vertImage) detailImages.push(vertImage);
       } else {
         // Rule 1: 대표이미지(1번)은 상단에 이미 표시되므로 DETAIL VIEW에서는 2번부터 출력
-        // Rule 2: 요약 및 생략 금지 - 2번 이후 이미지를 하나도 누락 없이 출력
+        // Rule 2: 요약 및 생략 금지 - 2번 이후 이미지를 하나도 누락 없이 전부 출력
         detailImages = imageUrls.length > 1 ? imageUrls.slice(1) : imageUrls;
       }
 
       // Rule 5: 태그 형식 유지 - 정확한 형식으로 한 줄에 하나씩 출력
-      // [FINAL CHECK] 출력 전 검수: detailImages.length 확인
       return detailImages.map((url: string) => `
     <img alt="" src="${url}" style="width:100%; height:auto; display:block; margin:0 auto 18px;" />
     `).join('');
     })()}
   </div>
+
+  ${(() => {
+    // LABEL / CARE TAG 섹션 — 브랜드택, 세탁택 이미지 (supplier_products.label_image)
+    const labelImages: string[] = product.label_images
+      ? (Array.isArray(product.label_images) ? product.label_images : product.label_images.split('|').map((u: string) => u.trim()).filter(Boolean))
+      : [];
+    if (labelImages.length === 0) return '';
+    return `
+  <div style="text-align: center; margin-bottom: 60px;">
+    <h3 style="font-size: 18px; font-weight: bold; color: #1A4D3E; margin-bottom: 25px; letter-spacing: 1px;">LABEL / CARE TAG</h3>
+    ${labelImages.map((url: string) => `
+    <img alt="label" src="${url}" style="width:100%; max-width:600px; height:auto; display:block; margin:0 auto 18px; border-radius:6px; border:1px solid #EAE8DF;" />
+    `).join('')}
+  </div>`;
+  })()}
 
   <div style="padding:35px 18px; background:#F8F7F2; margin:0 0 60px; text-align:center; border-radius:12px; border:1px solid #EAE8DF;">
     <h3 style="font-size:18px; font-weight:900; margin:0 0 22px; color:#1A4D3E;">✨ CONDITION CHECK</h3>

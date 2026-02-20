@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from './sidebar';
-import { Menu, X, Search, ArrowLeft } from 'lucide-react';
+import { NotificationCenter } from './notification-center';
+import { Menu, X, Search, ArrowLeft, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeatherLogo } from '@/components/ui/weather-logo';
 import { cn } from '@/lib/utils';
@@ -122,6 +123,19 @@ export function MobileHeader({ user }: { user?: any }) {
                                 <WeatherLogo className="h-4 invert opacity-90 relative z-10" />
                             </div>
                             <span className="text-white/80 text-[10px] font-semibold tracking-tight uppercase">Access v2.1</span>
+                        </div>
+
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => router.push('/admin/command')}
+                            className="text-indigo-400 hover:text-indigo-300 hover:bg-white/10 active:bg-white/20 shrink-0 mr-1 animate-pulse"
+                        >
+                            <Bot className="h-5 w-5" />
+                        </Button>
+
+                        <div className="mr-1">
+                            <NotificationCenter />
                         </div>
 
                         <Button variant="ghost" size="icon" onClick={() => setIsSearchOpen(true)} className="text-white hover:bg-white/10 active:bg-white/20 shrink-0">

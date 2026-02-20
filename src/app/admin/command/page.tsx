@@ -1,0 +1,289 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Send, Mic, Play, Radio, Loader2, Sparkles, AlertCircle, Bot, X, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { VoiceAssistant } from '@/components/voice/voice-assistant';
+import { ProfitInsightWidget } from '@/components/profit-insight/widget';
+import { SystemMonitorWidget } from '@/components/dashboard/system-monitor-widget';
+
+interface Message {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+    type?: 'text' | 'action' | 'status' | 'error';
+    actionData?: any;
+}
+
+export default function CommandCenterPage() {
+    const [messages, setMessages] = useState<Message[]>([
+        {
+            id: 'welcome',
+            role: 'assistant',
+            content: '안녕하세요! AI 명령 센터입니다. 무엇을 도와드릴까요? (예: "오늘 들어온 제품 분석해줘", "네이버 연동 상태 확인해")',
+            timestamp: new Date().toISOString(),
+            type: 'text'
+        }
+    ]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [showVoice, setShowVoice] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!input.trim() || loading) return;
+
+        const userMsg: Message = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: input,
+            timestamp: new Date().toISOString()
+        };
+
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setLoading(true);
+
+        try {
+            const res = await fetch('/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: userMsg.content })
+            });
+
+            if (!res.ok) throw new Error('Failed to process command');
+
+            const data = await res.json();
+
+            const aiResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: data.message,
+                timestamp: new Date().toISOString(),
+                type: data.type || 'text',
+                actionData: data.actionData
+            };
+
+            setMessages(prev => [...prev, aiResponse]);
+
+            if (data.actionRequired) {
+                // Automatically perform action if simple, or show button
+                // For now, let's assume the API already performed the action or returned a confirmation needed
+            }
+
+        } catch (error) {
+            setMessages(prev => [...prev, {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: '죄송합니다. 명령을 처리하는 중 오류가 발생했습니다.',
+                timestamp: new Date().toISOString(),
+                type: 'error'
+            }]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVoiceCommand = async (text: string) => {
+        // Determine user message
+        const userMsg: Message = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: text,
+            timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setLoading(true);
+
+        try {
+            const res = await fetch('/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: text })
+            });
+
+            if (!res.ok) throw new Error('Failed to process command');
+
+            const data = await res.json();
+
+            const aiResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: data.message,
+                timestamp: new Date().toISOString(),
+                type: data.type || 'text',
+                actionData: data.actionData
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            setLoading(false);
+            return data; // Return for TTS
+        } catch (e) {
+            setLoading(false);
+            return { message: '오류가 발생했습니다.' };
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] max-w-2xl mx-auto bg-white dark:bg-slate-900 border-x border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden rounded-xl relative">
+            {/* Voice Overlay */}
+            {showVoice && (
+                <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
+                    <button
+                        onClick={() => setShowVoice(false)}
+                        className="absolute top-4 right-4 p-2 text-white/50 hover:text-white"
+                    >
+                        <X className="w-8 h-8" />
+                    </button>
+                    <h2 className="text-2xl font-bold text-white mb-8">AI 음성 대화</h2>
+                    <VoiceAssistant onCommand={handleVoiceCommand} />
+                    <p className="text-slate-400 mt-8 text-sm">말씀하시면 AI가 듣고 대답합니다.</p>
+                </div>
+            )}
+
+            {/* Header */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur flex items-center justify-between z-10">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20">
+                        <Bot className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="font-black text-slate-900 dark:text-white tracking-tight">AI Command Center</h1>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">System Online</span>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            if (typeof window !== 'undefined') {
+                                navigator.clipboard.writeText(window.location.href);
+                                toast.success('주소가 복사되었습니다. 카카오톡으로 보내서 접속하세요!');
+                            }
+                        }}
+                        className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
+                        title="주소 복사"
+                    >
+                        <Share2 className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950 scroll-smooth" ref={scrollRef}>
+                {messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                            className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${msg.role === 'user'
+                                ? 'bg-indigo-600 text-white rounded-tr-none'
+                                : msg.type === 'error'
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-100 rounded-tl-none'
+                                    : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-700 rounded-tl-none'
+                                }`}
+                        >
+                            <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                            {msg.actionData && (
+                                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 w-full animate-in fade-in slide-in-from-bottom-2">
+                                    {msg.actionData.type === 'profit_analysis' && (
+                                        <div className="max-w-sm">
+                                            <ProfitInsightWidget
+                                                sellPrice={msg.actionData.data.revenue}
+                                                purchasePrice={msg.actionData.data.cost}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {msg.actionData.type === 'sales_summary' && (
+                                        <div className="grid grid-cols-2 gap-4 max-w-sm">
+                                            <div className="bg-indigo-50 dark:bg-slate-900 p-4 rounded-xl text-center border border-indigo-100 dark:border-slate-700">
+                                                <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">오늘 판매량</div>
+                                                <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{msg.actionData.data.count}건</div>
+                                            </div>
+                                            <div className="bg-emerald-50 dark:bg-slate-900 p-4 rounded-xl text-center border border-emerald-100 dark:border-slate-700">
+                                                <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">총 매출</div>
+                                                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{((msg.actionData.data?.total || 0) / 10000).toFixed(1)}만원</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(msg.actionData.status === 'running' || msg.actionData.type === 'system_status') && (
+                                        <div className="max-w-full">
+                                            <SystemMonitorWidget />
+                                        </div>
+                                    )}
+
+                                    {/* Fallback for generic details */}
+                                    {msg.actionData.details && !['profit_analysis', 'sales_summary', 'system_status'].includes(msg.actionData.type) && (
+                                        <pre className="text-[10px] bg-slate-100 dark:bg-slate-900 p-3 rounded-lg overflow-x-auto text-slate-600 font-mono">
+                                            {JSON.stringify(msg.actionData.details, null, 2)}
+                                        </pre>
+                                    )}
+                                </div>
+                            )}
+                            <div className={`text-[10px] mt-1.5 flex items-center justify-end gap-1 opacity-60 ${msg.role === 'user' ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {loading && (
+                    <div className="flex justify-start">
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Input Area */}
+            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                <form onSubmit={handleSubmit} className="flex items-end gap-2 relative">
+                    <div className="flex-1 relative">
+                        <textarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSubmit();
+                                }
+                            }}
+                            placeholder="명령어 입력..."
+                            className="w-full bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[44px] max-h-[120px]"
+                            rows={1}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowVoice(true)}
+                            className="absolute right-2 bottom-2 p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"
+                            title="음성 대화 모드"
+                        >
+                            <Mic className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={!input.trim() || loading}
+                        className="p-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl shadow-lg shadow-indigo-500/30 transition-all active:scale-95"
+                    >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                    </button>
+                </form>
+                <p className="text-[10px] text-center text-slate-400 mt-2">
+                    "오늘 매출 어때?", "네이버 동기화 시작해줘" 등으로 명령해보세요.
+                </p>
+            </div>
+        </div>
+    );
+}

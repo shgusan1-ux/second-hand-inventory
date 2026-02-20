@@ -7,7 +7,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 // 모델 이름: flash=빠르고 저렴, pro=나노바나나 Pro (디테일 최고)
 const MODELS = {
     flash: 'gemini-2.5-flash-image',
-    pro: 'nano-banana-pro-preview',
+    pro: 'gemini-3-pro-image-preview',
 } as const;
 
 export interface FittingRequest {
@@ -19,6 +19,7 @@ export interface FittingRequest {
     modelChoice: 'flash' | 'pro';
     productName?: string;
     variationSeed?: number;         // 다른 코디 생성용 시드
+    customPrompt?: string;          // 사용자 수정 요청 (예: "벨트 빼줘")
 }
 
 export interface FittingResult {
@@ -160,7 +161,7 @@ RULE 4 — MINIMAL COORDINATION: Keep other items extremely simple and subdued.
 - Keep it minimal — the product garment is the ONLY visual focus
 
 [PHOTO SPECIFICATIONS]
-1. SQUARE 1:1 aspect ratio
+1. ★★★ MANDATORY: SQUARE 1:1 aspect ratio (1200x1200 pixels). NEVER generate portrait/vertical or landscape images. The output MUST be a perfect square. ★★★
 2. PURE WHITE (#FFFFFF) infinite studio background — no shadows, no floor line, no props
 3. FULL BODY: head to toe with exactly 10% white margin on all sides. The person should fill most of the frame
 4. Soft diffused studio lighting, minimal shadows
@@ -257,19 +258,21 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
     }
 
     const modelName = MODELS[request.modelChoice] || MODELS.flash;
-    const prompt = await buildPrompt(
+    let prompt = await buildPrompt(
         request.gender,
         request.archiveCategory,
         request.productName,
         request.variationSeed
     );
 
+    // 사용자 커스텀 수정 요청 추가
+    if (request.customPrompt) {
+        prompt += `\n\n★★★ USER CORRECTION REQUEST (MUST FOLLOW) ★★★\n${request.customPrompt}\nApply the above user request to the generated image. This overrides any conflicting rules above.`;
+    }
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    const requestBody = JSON.stringify({
             contents: [
                 {
                     role: 'user',
@@ -293,19 +296,67 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
             ],
             generationConfig: {
                 responseModalities: ['TEXT', 'IMAGE'],
-                temperature: 1.0,
+                // Pro 모델은 temperature 파라미터 비호환 가능성 → 제거
+                ...(request.modelChoice === 'pro' ? {} : { temperature: 1.0 }),
                 imageConfig: {
                     aspectRatio: '1:1',
                 },
             },
-        }),
-    });
+        });
 
-    const data = await response.json();
+    // Pro 모델은 Preview 상태로 불안정 → 재시도 횟수 증가
+    const MAX_RETRIES = request.modelChoice === 'pro' ? 4 : 2;
+    let response: Response | null = null;
+    let data: any = null;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: requestBody,
+        });
+        data = await response.json();
+        if (response.ok) break;
+        const errMsg = data.error?.message || '';
+        // high demand 등 재시도 가능한 오류면 대기 후 재시도
+        const isRetryable = errMsg.includes('high demand') || errMsg.includes('overloaded') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('UNAVAILABLE') || errMsg.includes('INVALID_ARGUMENT') || response.status === 429 || response.status === 503 || response.status === 500;
+        if (isRetryable) {
+            const delay = request.modelChoice === 'pro' ? 5000 * (attempt + 1) : 3000 * (attempt + 1);
+            console.log(`[Fitting] 재시도 ${attempt + 1}/${MAX_RETRIES} (${request.modelChoice}): ${errMsg}`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+        }
+        break; // 재시도 불가능한 오류
+    }
 
-    if (!response.ok) {
+    if (!response!.ok) {
         const errMsg = data.error?.message || JSON.stringify(data);
-        throw new Error(`Gemini API 오류: ${errMsg}`);
+        // Pro 모델 실패 시 Flash로 자동 폴백
+        if (request.modelChoice === 'pro') {
+            console.warn(`[Fitting] Pro 모델 실패, Flash로 폴백: ${errMsg}`);
+            const flashUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.flash}:generateContent?key=${GEMINI_API_KEY}`;
+            const flashBody = JSON.stringify({
+                contents: JSON.parse(requestBody).contents,
+                generationConfig: {
+                    responseModalities: ['TEXT', 'IMAGE'],
+                    temperature: 1.0,
+                    imageConfig: { aspectRatio: '1:1' },
+                },
+            });
+            const flashRes = await fetch(flashUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: flashBody,
+            });
+            if (flashRes.ok) {
+                data = await flashRes.json();
+                response = flashRes;
+                console.log('[Fitting] Flash 폴백 성공');
+            } else {
+                throw new Error(`Gemini Pro 오류: ${errMsg} (Flash 폴백도 실패)`);
+            }
+        } else {
+            throw new Error(`Gemini API 오류: ${errMsg}`);
+        }
     }
 
     // 응답에서 이미지 추출
@@ -338,7 +389,8 @@ export async function generateFittingImage(request: FittingRequest): Promise<Fit
     };
 }
 
-// 이미지를 정사각형으로 변환 (흰색 패딩 추가)
+// 이미지를 1200x1200 정사각형으로 변환 (흰색 패딩 + 리사이즈)
+const TARGET_SIZE = 1200;
 async function ensureSquareImage(base64: string, inputMimeType: string): Promise<{ base64: string; mimeType: string }> {
     try {
         const inputBuffer = Buffer.from(base64, 'base64');
@@ -346,26 +398,33 @@ async function ensureSquareImage(base64: string, inputMimeType: string): Promise
         const w = metadata.width || 1024;
         const h = metadata.height || 1024;
 
-        // 이미 정사각형이면 그대로 반환
+        // 정사각형이 아니면 흰색 패딩으로 정사각형 만들기
+        let squareBuffer: Buffer;
         if (Math.abs(w - h) <= 2) {
-            return { base64, mimeType: inputMimeType };
+            squareBuffer = inputBuffer;
+        } else {
+            const size = Math.max(w, h);
+            squareBuffer = await sharp(inputBuffer)
+                .resize(w, h, { fit: 'inside', withoutEnlargement: true })
+                .extend({
+                    top: Math.floor((size - h) / 2),
+                    bottom: Math.ceil((size - h) / 2),
+                    left: Math.floor((size - w) / 2),
+                    right: Math.ceil((size - w) / 2),
+                    background: { r: 255, g: 255, b: 255, alpha: 1 },
+                })
+                .flatten({ background: { r: 255, g: 255, b: 255 } })
+                .toBuffer();
         }
 
-        const size = Math.max(w, h);
-        const outputBuffer = await sharp(inputBuffer)
-            .resize(w, h, { fit: 'inside', withoutEnlargement: true })
-            .extend({
-                top: Math.floor((size - h) / 2),
-                bottom: Math.ceil((size - h) / 2),
-                left: Math.floor((size - w) / 2),
-                right: Math.ceil((size - w) / 2),
-                background: { r: 255, g: 255, b: 255, alpha: 1 },
-            })
+        // 최종 1200x1200으로 리사이즈
+        const outputBuffer = await sharp(squareBuffer)
+            .resize(TARGET_SIZE, TARGET_SIZE, { fit: 'cover' })
             .flatten({ background: { r: 255, g: 255, b: 255 } })
             .jpeg({ quality: 95 })
             .toBuffer();
 
-        console.log(`[FittingImage] 정사각형 변환: ${w}x${h} → ${size}x${size} (JPEG)`);
+        console.log(`[FittingImage] 정사각형 변환: ${w}x${h} → ${TARGET_SIZE}x${TARGET_SIZE} (JPEG)`);
         return { base64: outputBuffer.toString('base64'), mimeType: 'image/jpeg' };
     } catch (e) {
         console.warn('[FittingImage] 정사각형 변환 실패, 원본 반환:', e);

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Download } from 'lucide-react';
 import { ProductForm } from './product-form';
 import { BulkProductForm } from './bulk-product-form';
 import { CornerLogisImportForm } from './corner-logis-import';
@@ -254,6 +254,48 @@ export function InventoryManager({
                             </div>
                         </DialogContent>
                     </Dialog>
+
+                    <Button
+                        variant="outline"
+                        className="flex-1 sm:flex-none border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 h-10 sm:h-11"
+                        onClick={async () => {
+                            const ids = products.map((p: any) => p.id);
+                            if (ids.length === 0) {
+                                toast.error('다운로드할 상품이 없습니다.');
+                                return;
+                            }
+                            toast.info(`플레이오토 엑셀 생성 중... (${ids.length}건)`);
+                            try {
+                                const res = await fetch('/api/inventory/export', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ ids }),
+                                });
+                                if (!res.ok) {
+                                    const err = await res.json();
+                                    toast.error(err.error || '엑셀 생성 실패');
+                                    return;
+                                }
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                const disposition = res.headers.get('Content-Disposition') || '';
+                                const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/);
+                                a.download = filenameMatch ? decodeURIComponent(filenameMatch[1]) : 'playauto_export.xlsx';
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                URL.revokeObjectURL(url);
+                                toast.success(`플레이오토 엑셀 다운로드 완료! (${ids.length}건)`);
+                            } catch (err: any) {
+                                toast.error(`다운로드 실패: ${err.message}`);
+                            }
+                        }}
+                    >
+                        <Download className="h-4 w-4" />
+                        <span className="whitespace-nowrap">플레이오토 엑셀 ({products.length}건)</span>
+                    </Button>
                 </div>
             </div>
 

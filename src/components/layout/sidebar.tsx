@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { AttendanceClockWidget } from './attendance-clock-widget';
 import { ChatWidget } from './chat-widget';
-import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Database } from 'lucide-react';
+import { FeedbackWidget } from './feedback-widget';
+import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Database, MessageSquare, Bot } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,9 +25,11 @@ const salesHub = [
 // 2. Management Hub (관리 사이트)
 const managementHub = [
     { name: 'MANAGEMENT HUB', href: '/sales', icon: CreditCard },
+    { name: 'AI 명령 센터', href: '/admin/command', icon: Bot },
     { name: '임직원 소통', href: '/members', icon: Users },
     { name: '경영지원', href: '/business', icon: Briefcase },
     { name: '보안/계정관리', href: '/security', icon: Lock },
+    { name: '개선/버그 관리', href: '/admin/feedback', icon: MessageSquare, adminOnly: true },
 ];
 
 // 3. Manuals
@@ -81,6 +84,7 @@ export function Sidebar({ user }: { user?: any }) {
                 <div className="pt-4 pb-2 border-t border-slate-800/50">
                     <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Management Hub (관리 사이트)</div>
                     {managementHub.map((item) => {
+                        if (item.adminOnly && !isAdmin) return null;
                         const isActive = pathname.startsWith(item.href);
                         return (
                             <Link
@@ -154,6 +158,7 @@ export function Sidebar({ user }: { user?: any }) {
                 </div>
             </nav>
             <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+                <FeedbackWidget />
                 <AttendanceClockWidget userId={user?.id} />
                 {user && <ChatWidget currentUser={user} />}
 

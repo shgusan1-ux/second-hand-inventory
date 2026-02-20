@@ -13,14 +13,16 @@ interface ProductInput {
     name: string;
     imageUrl: string;
     archiveCategory?: string;
+    gender?: string;  // MAN | WOMAN | KIDS — 에디터에서 선택한 성별
 }
 
 export async function POST(request: NextRequest) {
-    const { products, modelChoice = 'flash', syncToNaver = false, variationSeed } = await request.json() as {
+    const { products, modelChoice = 'flash', syncToNaver = false, variationSeed, customPrompt } = await request.json() as {
         products: ProductInput[];
         modelChoice: 'flash' | 'pro';
         syncToNaver: boolean;
         variationSeed?: number;
+        customPrompt?: string;
     };
 
     await ensureDbInitialized();
@@ -62,7 +64,8 @@ export async function POST(request: NextRequest) {
                 const batch = products.slice(i, i + CONCURRENCY);
 
                 const batchResults = await Promise.allSettled(batch.map(async (product) => {
-                    const gender = extractGender(product.name);
+                    // 에디터에서 명시적으로 보낸 gender 우선, 없으면 상품명에서 추출
+                    const gender = product.gender || extractGender(product.name);
                     const model = modelMap[gender] || modelMap['MAN'] || models[0];
 
                     if (!model) {
@@ -105,6 +108,7 @@ export async function POST(request: NextRequest) {
                         modelChoice,
                         productName: product.name,
                         variationSeed,
+                        customPrompt,
                     });
 
                     send({

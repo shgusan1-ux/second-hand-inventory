@@ -20,6 +20,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: '(주)에이치엠이커머스 온라인 재고관리 시스템',
   description: '(주)에이치엠이커머스 중고의류 재고 관리 시스템',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'InventoryAI',
+  },
 };
 
 export default async function RootLayout({

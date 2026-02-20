@@ -117,6 +117,8 @@ export function ProductForm({ categories }: { categories: Category[] }) {
                                         <Input
                                             placeholder="번류 번호"
                                             className="w-24"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             value={categoryNum}
                                             onChange={handleCategoryNumChange}
                                         />

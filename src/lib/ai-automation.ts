@@ -40,7 +40,7 @@ export interface AIAnalysisResult {
  * 1. 이미지 종합 분석 (등급, 상품명, 브랜드, 사이즈, 원단)
  * 이미지를 분석하여 상품의 상세 정보를 추출합니다.
  */
-export async function analyzeProductImage(imageUrl: string, currentName: string): Promise<{
+export async function analyzeProductImage(imageUrl: string, currentName: string, labelImageUrls?: string[]): Promise<{
     grade: 'S급' | 'A급' | 'B급';
     reason: string;
     confidence: number;
@@ -53,10 +53,20 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
     suggestedConsumerPrice: number;
 }> {
     try {
+        const hasLabels = labelImageUrls && labelImageUrls.length > 0;
         const prompt = `
-당신은 중고 의류 전문 감정사입니다.
+당신은 세계 최고의 빈티지/중고 의류 전문 감정사입니다.
 이미지를 정밀하게 분석하여 다음 정보를 JSON 형식으로 추출해주세요.
 
+${hasLabels ? `★ 중요: 첫 번째 이미지는 상품 사진이고, 이후 이미지는 브랜드 라벨/세탁택(케어라벨) 사진입니다.
+라벨/세탁택에서 반드시 다음을 읽어내세요:
+- 브랜드명 (영문/일문/한글)
+- 소재/원단 구성 (예: COTTON 100%, POLYESTER 65% COTTON 35%)
+- 사이즈 표기
+- 생산국
+- 세탁 방법
+이 정보를 suggestedFabric, suggestedBrand, suggestedSize에 정확히 반영하세요.
+` : ''}
 입력된 상품명 참고: ${currentName}
 
 추출 항목:
@@ -66,11 +76,38 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
    - B급 (사용감 있음): 눈에 띄는 사용감, 오염/손상 존재
 2. reason: 등급 판정 근거 (구체적)
 3. confidence: 신뢰도 (0-100)
-4. suggestedName: 상품명 (반드시 "영문브랜드 한글브랜드 특징 카테고리종류 성별-사이즈" 형식, 예: "NIKE 나이키 스우시 로고 후드티 MAN-L", "BURBERRY 버버리 노바체크 머플러 WOMAN-FREE"). 성별은 MAN/WOMAN/KIDS/UNISEX 중 하나, 사이즈는 라벨 표기 기준.
+4. suggestedName: 상품명 (45자 이내, SEO 최적화 필수)
+   형식: "영문브랜드 한글브랜드 [핵심특징/디테일] [카테고리] 성별-사이즈"
+   ★ 단순 나열 금지! 검색에 잡히는 핵심 키워드를 포함해야 함
+   ★ 특징 예시: 색상, 패턴, 소재감, 핏, 연도/시즌, 로고 위치, 라인명, 길이(7부/크롭 등)
+   ★ 바지 길이: 7부/크롭은 반드시 "7부"를 상품명에 포함. 반바지는 "1/2" 또는 "숏" 표기.
+   좋은 예:
+   - "NIKE 나이키 빈티지 스우시 자수 그레이 후드티 MAN-L"
+   - "BURBERRY 버버리 노바체크 캐시미어 머플러 UNISEX-FREE"
+   - "UNIQLO 유니클로 베이지 카고 7부 코튼 팬츠 MAN-M"
+   - "POLO 폴로랄프로렌 스트라이프 옥스포드 BD셔츠 MAN-L"
+   나쁜 예 (너무 단순):
+   - "UNIQLO 유니클로 치노 팬츠 MAN-M" ← 특징이 없음, 색상/소재 없음
+   - "NIKE 나이키 후드티 MAN-L" ← 색상/디테일 없음
+   성별은 MAN/WOMAN/KIDS/UNISEX 중 하나, 사이즈는 라벨 표기 기준.
 5. suggestedBrand: 브랜드명 (로고나 텍스트로 식별, 식별 불가시 "Generic" 또는 공란)
-6. suggestedSize: 사이즈 (라벨에 적힌 표기 "M", "95", "100" 등, 식별 불가시 공란)
-7. suggestedFabric: 원단/소재 (라벨 텍스트 또는 재질감 추정, 예: "면 100%", "폴리에스터 혼방")
-8. suggestedCategory: 카테고리 (다음 중 하나: 코트, 자켓, 패딩, 점퍼, 셔츠, 블라우스, 니트, 맨투맨, 후드티, 티셔츠, 원피스, 스커트, 바지, 청바지, 가방, 지갑, 모자, 신발, 머플러, 넥타이, 벨트, 악세서리, 기타)
+6. suggestedSize: 사이즈 - **반드시 아래 규칙 준수**
+   ★ 최우선: 라벨/태그에 적힌 표기 그대로 사용 (예: "L", "M", "95", "100")
+   ★ 라벨이 안 보이면: 상품명에 이미 포함된 사이즈 표기 그대로 사용
+   ★ 실측 치수(허리, 어깨 등)로 사이즈를 추측하지 마세요! 실측은 참고만.
+
+   [한국 남성 의류 사이즈 기준 - 절대로 실측으로 업사이징 금지]
+   - 밴딩(고무줄) 바지: 허리 실측은 늘어나기 전 치수이므로 실제 착용 사이즈보다 작게 나옴
+     → 28~29인치 실측 = M, 30~31인치 실측 = L, 32~33인치 실측 = XL
+     → 밴딩 바지 허리 30인치는 L이지 XXL이 아님!
+   - 일반 바지: 허리 30=M, 32=L, 34=XL, 36=XXL
+   - 상의: 95=M, 100=L, 105=XL, 110=XXL (한국식)
+   - 유럽/미국/영국 사이즈가 표기되어 있으면 그 표기를 한국식으로 변환하여 표기
+
+   ★ 식별 불가시 공란
+
+7. suggestedFabric: 원단/소재 ${hasLabels ? '(★ 라벨/세탁택 이미지에서 읽은 정확한 소재 구성을 기재. 예: "면 100%", "폴리에스터 65% 면 35%", "울 80% 나일론 20%")' : '(라벨 텍스트 또는 재질감 추정, 예: "면 100%", "폴리에스터 혼방")'}
+8. suggestedCategory: 카테고리 (다음 중 하나: 코트, 재킷, 블레이저, 패딩, 사파리, 아우터, 셔츠, 데님셔츠, 블라우스, 니트, 가디건, 니트/가디건, 맨투맨, 맨투맨/후드맨투맨, 후드/맨투맨, 후드집업/후리스, 티셔츠, 반팔 티셔츠, 1/2 티셔츠, 1/2 셔츠, 원피스, 스커트, 팬츠, 데님팬츠, 1/2 팬츠, 스포츠, 가방, 모자, 신발, 머플러,스카프,행거치프, 넥타이, 벨트 및 기타, 양말, 타월, 악세사리)
 9. suggestedGender: 성별 판별 (MAN / WOMAN / KIDS / UNISEX 중 하나. 옷의 디자인, 핏, 라벨 표기 등으로 판별)
 10. suggestedConsumerPrice: 소비자가 추천 (새제품 정가의 약 70% 가격을 추천. 브랜드와 카테고리를 고려하여 이 상품이 새것일 때의 정상판매가를 추정하고, 그것의 70%를 원 단위로 반올림하여 제시. 예: 새제품 정가 100,000원이면 소비자가 70,000원)
 
@@ -89,6 +126,33 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
 }
 `;
 
+        // 이미지 parts 구성: 상품 사진 + label 이미지들
+        const imageParts: any[] = [
+            {
+                inline_data: {
+                    mime_type: 'image/jpeg',
+                    data: await fetchImageAsBase64(imageUrl)
+                }
+            }
+        ];
+
+        // label 이미지 추가 (브랜드택, 세탁택)
+        if (hasLabels) {
+            for (const labelUrl of labelImageUrls!) {
+                try {
+                    const labelB64 = await fetchImageAsBase64(labelUrl);
+                    imageParts.push({
+                        inline_data: {
+                            mime_type: 'image/jpeg',
+                            data: labelB64
+                        }
+                    });
+                } catch (labelErr) {
+                    console.warn('Label 이미지 로드 실패:', labelUrl, labelErr);
+                }
+            }
+        }
+
         const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -96,12 +160,7 @@ export async function analyzeProductImage(imageUrl: string, currentName: string)
                 contents: [{
                     parts: [
                         { text: prompt },
-                        {
-                            inline_data: {
-                                mime_type: 'image/jpeg',
-                                data: await fetchImageAsBase64(imageUrl)
-                            }
-                        }
+                        ...imageParts
                     ]
                 }]
             })
@@ -183,18 +242,18 @@ export async function suggestPrice(product: {
             console.log('Database query failed, using fallback pricing');
         }
 
-        // 2. 통계 계산
+        // 2. 통계 계산 (아카이브/큐레이티드 할인 여유 반영하여 초기 판매가를 넉넉하게 설정)
         const avgPrice = soldPrices.length > 0
             ? soldPrices.reduce((a: number, b: number) => a + b, 0) / soldPrices.length
-            : (product.price_consumer || 50000) * 0.3;
+            : (product.price_consumer || 50000) * 0.5;
 
-        const minPrice = soldPrices.length > 0 ? Math.min(...soldPrices) : avgPrice * 0.7;
-        const maxPrice = soldPrices.length > 0 ? Math.max(...soldPrices) : avgPrice * 1.3;
+        const minPrice = soldPrices.length > 0 ? Math.min(...soldPrices) : avgPrice * 0.8;
+        const maxPrice = soldPrices.length > 0 ? Math.max(...soldPrices) : avgPrice * 1.4;
 
-        // 3. 등급 보정
-        let gradeMultiplier = 1.0;
-        if (product.condition === 'S급') gradeMultiplier = 1.2;
-        else if (product.condition === 'B급') gradeMultiplier = 0.8;
+        // 3. 등급 보정 (향후 할인 단계 고려하여 초기가 여유있게)
+        let gradeMultiplier = 1.15;
+        if (product.condition === 'S급') gradeMultiplier = 1.35;
+        else if (product.condition === 'B급') gradeMultiplier = 0.95;
 
         const suggestedPrice = Math.round(avgPrice * gradeMultiplier / 1000) * 1000;
 
@@ -227,10 +286,10 @@ export async function suggestPrice(product: {
         };
     } catch (error) {
         console.error('Price suggestion error:', error);
-        const fallbackPrice = (product.price_consumer || 50000) * 0.3;
+        const fallbackPrice = (product.price_consumer || 50000) * 0.5;
         return {
             suggestedPrice: Math.round(fallbackPrice / 1000) * 1000,
-            reason: '유사 상품 데이터 부족 - 소비자가 기준 30% 적용',
+            reason: '유사 상품 데이터 부족 - 소비자가 기준 50% 적용 (할인 여유 포함)',
             priceRange: { min: fallbackPrice * 0.7, max: fallbackPrice * 1.3 }
         };
     }
@@ -248,10 +307,11 @@ export async function generateMDDescription(product: {
     size?: string;
     fabric?: string;
     imageUrl?: string;
+    labelImageUrls?: string[];
 }): Promise<string> {
     try {
         const prompt = `# 역할 정의
-당신은 세계 최고의 중고 의류 패션 큐레이터 **'MD 소개'**입니다. 단순히 옷을 파는 것이 아니라, 옷에 담긴 역사적 가치를 발굴하여 컬렉터들에게 전달하는 아카이브 전문가이자 자산 가치 평가사입니다.
+당신은 세계 최고의 빈티지/중고 의류 전문가이자 패션 큐레이터 **'MD 소개'**입니다. 단순히 옷을 파는 것이 아니라, 옷에 담긴 역사적 가치를 발굴하여 컬렉터들에게 전달하는 아카이브 전문가이자 자산 가치 평가사입니다. 수십 년간 빈티지 의류를 다뤄온 경험으로 소재의 질감, 봉제 기법, 연대별 디테일 차이를 정확히 감별합니다.
 
 # 핵심 미션
 1. **브랜드 헤리티지 우선**: 모든 설명은 브랜드의 역사적 기원, 패션사 내 위상, 특정 라인의 희소성부터 서술합니다.
@@ -288,7 +348,7 @@ export async function generateMDDescription(product: {
 [Collector's Comment]
 (감성적인 한 줄 평)`;
 
-        // 이미지 Vision 분석 (이미지 직접 확인)
+        // 이미지 Vision 분석 (상품 사진 + label 이미지 직접 확인)
         const parts: any[] = [{ text: prompt }];
         if (product.imageUrl) {
             try {
@@ -302,6 +362,22 @@ export async function generateMDDescription(product: {
                 });
             } catch (imgErr) {
                 console.warn('MD소개글: 이미지 로드 실패, 텍스트만으로 생성', imgErr);
+            }
+        }
+        // label 이미지 추가 (브랜드택/세탁택 → 소재 분석 정확도 향상)
+        if (product.labelImageUrls && product.labelImageUrls.length > 0) {
+            for (const labelUrl of product.labelImageUrls) {
+                try {
+                    const labelB64 = await fetchImageAsBase64(labelUrl);
+                    parts.push({
+                        inline_data: {
+                            mime_type: 'image/jpeg',
+                            data: labelB64
+                        }
+                    });
+                } catch (labelErr) {
+                    console.warn('MD소개글: label 이미지 로드 실패', labelErr);
+                }
             }
         }
 
@@ -428,16 +504,17 @@ export async function analyzeProductComplete(product: {
     imageUrl: string;
     price_consumer?: number;
     size?: string;
+    labelImageUrls?: string[];
 }): Promise<AIAnalysisResult> {
-    console.log(`🤖 AI 분석 시작: ${product.id}`);
+    console.log(`🤖 AI 분석 시작: ${product.id}${product.labelImageUrls?.length ? ` (label ${product.labelImageUrls.length}장 포함)` : ''}`);
 
-    // 1. 이미지 분석 (Grade + Metadata Extraction)
-    const imageAnalysisResult = await analyzeProductImage(product.imageUrl, product.name);
+    // 1. 이미지 분석 (Grade + Metadata Extraction) — label 이미지 포함
+    const imageAnalysisResult = await analyzeProductImage(product.imageUrl, product.name, product.labelImageUrls);
 
     // 2. 가격 및 MD Desc 병렬 생성 (이미지 분석 결과를 일부 활용 가능하지만, 속도를 위해 병렬 처리하되, 가격은 나중에 보정)
     // 하지만 정확도를 위해 먼저 이미지 분석을 끝내고 가격을 산정하는 것이 좋음.
 
-    // MD Description
+    // MD Description (label 이미지 포함 → 소재 정밀 분석)
     const mdDescriptionPromise = generateMDDescription({
         name: imageAnalysisResult.suggestedName || product.name,
         brand: imageAnalysisResult.suggestedBrand || product.brand,
@@ -445,7 +522,8 @@ export async function analyzeProductComplete(product: {
         condition: imageAnalysisResult.grade,
         size: imageAnalysisResult.suggestedSize || product.size,
         fabric: imageAnalysisResult.suggestedFabric,
-        imageUrl: product.imageUrl
+        imageUrl: product.imageUrl,
+        labelImageUrls: product.labelImageUrls,
     });
 
     // Price Suggestion

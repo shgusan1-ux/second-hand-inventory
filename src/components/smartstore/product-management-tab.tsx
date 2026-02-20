@@ -95,6 +95,47 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentTemp, setCurrentTemp] = useState<number>(20);
 
+  const [estimatingSizeId, setEstimatingSizeId] = useState<string | null>(null);
+  const [sizeEstimationResult, setSizeEstimationResult] = useState<{ length: number; shoulder: number; chest: number; sleeve: number; reason: string; confidence: number } | null>(null);
+  const [showSizeModal, setShowSizeModal] = useState(false);
+  const [selectedProductForSize, setSelectedProductForSize] = useState<Product | null>(null);
+  const [hangerWidth, setHangerWidth] = useState(42);
+
+  const handleEstimateSize = async (product: any) => {
+    if (!product.thumbnailUrl) {
+      toast.error('분석할 이미지가 없습니다.');
+      return;
+    }
+    setEstimatingSizeId(product.originProductNo);
+    try {
+      const res = await fetch('/api/smartstore/estimate-size', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: product.thumbnailUrl, referenceWidth: hangerWidth }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSizeEstimationResult(data.result);
+        setSelectedProductForSize(product);
+        setShowSizeModal(true);
+      } else {
+        toast.error(data.error || '사이즈 측정 실패');
+      }
+    } catch (e) {
+      toast.error('사이즈 측정 중 오류가 발생했습니다.');
+    } finally {
+      setEstimatingSizeId(null);
+    }
+  };
+
+  const applyEstimatedSize = () => {
+    if (!sizeEstimationResult || !selectedProductForSize) return;
+    const sizeStr = `실측(cm) - 총장:${sizeEstimationResult.length}, 어깨:${sizeEstimationResult.shoulder}, 가슴:${sizeEstimationResult.chest}, 소매:${sizeEstimationResult.sleeve}`;
+    navigator.clipboard.writeText(sizeStr);
+    toast.success('사이즈 정보가 클립보드에 복사되었습니다. 상품 설명에 붙여넣어 주세요!');
+    setShowSizeModal(false);
+  };
+
   // 실시간 날씨/온도 가져오기
   useEffect(() => {
     getMarketWeather().then(weather => {
@@ -1819,6 +1860,7 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                 <th className="px-3 py-3.5 text-center">등급</th>
                 <th className="px-3 py-3.5 text-center">등록일</th>
                 <th className="px-3 py-3.5 text-center">경과일</th>
+                <th className="px-3 py-3.5 text-center">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/60">
@@ -2015,6 +2057,24 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                         D+{p.lifecycle?.daysSince || 0}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setDetailProduct(p)}
+                          className="px-2 py-1 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-600 hover:bg-slate-200 active:scale-95 transition-all"
+                        >
+                          상세
+                        </button>
+                        <button
+                          onClick={() => handleEstimateSize(p)}
+                          disabled={estimatingSizeId === p.originProductNo}
+                          className={`p-1.5 rounded-lg border transition-all active:scale-95 ${estimatingSizeId === p.originProductNo ? 'bg-amber-100 border-amber-200 text-amber-600 animate-pulse' : 'bg-white border-slate-200 text-slate-400 hover:text-amber-600 hover:border-amber-200'}`}
+                          title="AI 사이즈 측정"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -2158,6 +2218,14 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
                       className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                     >
                       상세
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleEstimateSize(p); }}
+                      disabled={estimatingSizeId === p.originProductNo}
+                      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${estimatingSizeId === p.originProductNo ? 'bg-amber-100 border-amber-200 text-amber-700 animate-pulse' : 'bg-white border-slate-200 text-slate-400 hover:text-amber-600 hover:border-amber-200'}`}
+                    >
+                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                      치수
                     </button>
                   </div>
                 </div>
@@ -2320,6 +2388,97 @@ export function ProductManagementTab({ products, onRefresh, onSyncGrades, syncin
           onRefresh();
         }}
       />
+      {/* 사이즈 측정 모달 */}
+      {showSizeModal && selectedProductForSize && sizeEstimationResult && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col ag-float-1">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">AI 실측 사이즈 예측</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Size Estimation Powered by AI</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSizeModal(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* 이미지 및 기준 설정 */}
+              <div className="flex gap-4">
+                <div className="w-24 h-32 rounded-2xl overflow-hidden border border-slate-100 shrink-0 shadow-inner">
+                  <img src={selectedProductForSize.thumbnailUrl!} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <p className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug">{selectedProductForSize.name}</p>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">기준 옷걸이 너비 (cm)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={hangerWidth}
+                        onChange={(e) => setHangerWidth(Number(e.target.value))}
+                        className="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                      />
+                      <span className="text-xs font-bold text-slate-500">cm</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 측정 결과 */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: '총장', value: sizeEstimationResult.length, unit: 'cm', color: 'bg-blue-50 text-blue-700' },
+                  { label: '어깨너비', value: sizeEstimationResult.shoulder, unit: 'cm', color: 'bg-emerald-50 text-emerald-700' },
+                  { label: '가슴너비', value: sizeEstimationResult.chest, unit: 'cm', color: 'bg-indigo-50 text-indigo-700' },
+                  { label: '소매길이', value: sizeEstimationResult.sleeve, unit: 'cm', color: 'bg-purple-50 text-purple-700' },
+                ].map((item) => (
+                  <div key={item.label} className={`${item.color} rounded-2xl p-4 border border-current/10 shadow-sm`}>
+                    <p className="text-[10px] font-black uppercase opacity-60 mb-1">{item.label}</p>
+                    <p className="text-2xl font-black">{item.value}<span className="text-xs ml-0.5 opacity-60">{item.unit}</span></p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 분석 근거 */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">AI 분석 근거</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black text-emerald-600">{sizeEstimationResult.confidence}% 확신</span>
+                    <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${sizeEstimationResult.confidence}%` }} />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                  {sizeEstimationResult.reason}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
+              <button
+                onClick={() => setShowSizeModal(false)}
+                className="flex-1 py-3.5 bg-white text-slate-500 rounded-2xl text-sm font-bold border border-slate-200 hover:bg-slate-100 transition-all active:scale-95"
+              >
+                닫기
+              </button>
+              <button
+                onClick={applyEstimatedSize}
+                className="flex-[2] py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-900/20"
+              >
+                결과 복사 및 적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

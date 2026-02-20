@@ -218,6 +218,16 @@ export async function initDatabase() {
     `);
 
 
+    // 플레이오토 카테고리 테이블 (성별별 분류)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        classification TEXT DEFAULT 'MAN'
+      )
+    `);
+
     // products 테이블 마이그레이션 (누락 가능한 컬럼)
     const productMigrations = [
       'ALTER TABLE products ADD COLUMN images TEXT DEFAULT \'[]\'',
@@ -293,12 +303,21 @@ export async function initDatabase() {
         term TEXT NOT NULL,
         parent_id TEXT,
         content TEXT NOT NULL,
+        status TEXT DEFAULT 'TODO',
         color TEXT,
         sort_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    try {
+      await db.query(`ALTER TABLE business_roadmap ADD COLUMN status TEXT DEFAULT 'TODO'`);
+    } catch (e) { /* Column likely exists */ }
+
+    try {
+      await db.query(`ALTER TABLE business_roadmap ADD COLUMN detailed_plan TEXT`);
+    } catch (e) { /* Column likely exists */ }
 
     // 가상피팅 모델 테이블
     await db.query(`
@@ -402,6 +421,19 @@ export async function initDatabase() {
       )
     `);
 
+    // AI 사용 로그 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ai_usage_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        feature TEXT, -- 'image_analysis', 'price_suggestion', 'md_description'
+        model TEXT, -- 'gemini-2.0-flash', etc.
+        token_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'success',
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 인덱스 생성
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_status ON naver_products(status_type)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_product_overrides_category ON product_overrides(internal_category)`);
@@ -412,6 +444,24 @@ export async function initDatabase() {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON account_transactions(transaction_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_product ON fitting_results(product_no)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_status ON fitting_results(status)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at)`);
+
+    // 알림 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT, -- NULL for system-wide
+        type TEXT NOT NULL, -- info, warning, error, deployment, success
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        link_url TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP -- For temporary alerts like deployment
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read)`);
 
     console.log('✅ DB 초기화 완료');
     isInitialized = true;

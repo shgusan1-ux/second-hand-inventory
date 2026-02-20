@@ -190,8 +190,8 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
 
     return (
         <Card className="mb-6 bg-slate-50 border-slate-200">
-            <CardContent className="p-4 space-y-4">
-                <div className="flex flex-col md:flex-row gap-4">
+            <CardContent className="p-2 sm:p-4 space-y-3 sm:space-y-4">
+                <div className="flex flex-col md:flex-row gap-2 sm:gap-4">
                     {/* Main Search */}
                     <div className="flex-1 relative flex flex-wrap md:flex-nowrap gap-2 items-center">
                         {/* Search Field Select */}
@@ -224,7 +224,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                             </Select>
                         </div>
 
-                        <div className="relative flex-1 min-w-[200px] w-full md:w-auto">
+                        <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] w-full md:w-auto">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                             <Input
                                 value={query}
@@ -256,9 +256,9 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                 </div>
 
                 {/* Additional Filters (Row 2) */}
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
                     {/* Status */}
-                    <div className="w-full sm:w-[120px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[120px]">
                         <Select value={selectedStatuses.join(',')} onValueChange={(val) => setSelectedStatuses(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="상태" />
@@ -275,7 +275,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* SmartStore */}
-                    <div className="w-full sm:w-[130px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[130px]">
                         <Select value={smartstoreFilter} onValueChange={setSmartstoreFilter}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="스마트스토어" />
@@ -289,7 +289,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* AI Work */}
-                    <div className="w-full sm:w-[120px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[120px]">
                         <Select value={aiFilter} onValueChange={setAiFilter}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="AI작업" />
@@ -303,7 +303,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* Category */}
-                    <div className="w-full sm:w-[120px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[120px]">
                         <Select value={selectedCategories.join(',')} onValueChange={(val) => setSelectedCategories(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="카테고리" />
@@ -317,7 +317,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* Condition (Grade) */}
-                    <div className="w-[100px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[100px]">
                         <Select value={selectedConditions.join(',')} onValueChange={(val) => setSelectedConditions(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="등급" />
@@ -331,7 +331,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* Size */}
-                    <div className="w-[100px]">
+                    <div className="w-[calc(50%-4px)] sm:w-[100px]">
                         <Select value={selectedSizes.join(',')} onValueChange={(val) => setSelectedSizes(val ? [val] : [])}>
                             <SelectTrigger className="bg-white h-9 text-xs">
                                 <SelectValue placeholder="사이즈" />
@@ -349,7 +349,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                     </div>
 
                     {/* Date Type + Presets */}
-                    <div className="flex gap-1 border-l pl-2 ml-2 items-center">
+                    <div className="flex flex-wrap sm:flex-nowrap gap-1 border-l-0 sm:border-l pl-0 sm:pl-2 ml-0 sm:ml-2 items-center w-full sm:w-auto">
                         <div className="flex bg-slate-200 rounded-md p-0.5 mr-1">
                             <button onClick={() => setDateType('created')} className={`h-7 px-2 text-[10px] font-bold rounded ${dateType === 'created' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>등록일</button>
                             <button onClick={() => setDateType('updated')} className={`h-7 px-2 text-[10px] font-bold rounded ${dateType === 'updated' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>수정일</button>
@@ -361,11 +361,11 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                         <Button variant="ghost" size="sm" onClick={() => applyDatePreset('month')} className="h-9 text-xs px-2 text-slate-500">1개월</Button>
                     </div>
 
-                    <div className="flex items-center gap-2 ml-auto">
-                        <span className="text-xs text-slate-500">제외할 코드:</span>
+                    <div className="flex items-center gap-2 ml-0 sm:ml-auto w-full sm:w-auto">
+                        <span className="text-xs text-slate-500 hidden sm:inline">제외할 코드:</span>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant="outline" className={`h-9 text-xs justify-between w-[160px] ${excludeCode ? 'border-red-300 bg-red-50 text-red-700' : 'bg-white text-slate-500'}`}>
+                                <Button variant="outline" className={`h-9 text-xs justify-between w-full sm:w-[160px] ${excludeCode ? 'border-red-300 bg-red-50 text-red-700' : 'bg-white text-slate-500'}`}>
                                     {excludeCode
                                         ? `${excludeCode.split(/[\n,\s\t]+/).filter(Boolean).length}개 제외 설정됨`
                                         : '제외 코드 입력 (클릭)'}

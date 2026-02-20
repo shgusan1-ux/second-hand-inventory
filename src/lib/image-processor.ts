@@ -42,9 +42,12 @@ export async function processImageWithBadge({ imageUrl, grade, quickMode = false
         let imgBitmap: ImageBitmap;
 
         if (quickMode) {
-            // 빠른 모드: 배경제거 없이 원본 이미지에 뱃지만 합성
+            // 빠른 모드: 배경제거 없이 원본 이미지에 뱃지만 합성 (CORS 프록시 경유)
             console.log('[Processor] 빠른 모드: 배경제거 건너뜀');
-            const img = await loadImage(imageUrl);
+            const proxiedUrl = imageUrl.startsWith('http') && !imageUrl.includes(origin)
+                ? `${origin}/api/proxy/image?url=${encodeURIComponent(imageUrl)}`
+                : imageUrl;
+            const img = await loadImage(proxiedUrl);
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = img.naturalWidth;
             tempCanvas.height = img.naturalHeight;

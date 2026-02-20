@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, X, Edit3, ChevronDown, ChevronRight, Target, Rocket, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -9,6 +10,7 @@ interface RoadmapNode {
   term: string; // short, mid, long
   parent_id: string | null;
   content: string;
+  status: string; // TODO, IN_PROGRESS, DONE
   color: string | null;
   sort_order: number;
 }
@@ -26,6 +28,7 @@ interface Props {
 }
 
 export function RoadmapMindmap({ isAdmin }: Props) {
+  const router = useRouter();
   const [nodes, setNodes] = useState<RoadmapNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingTo, setAddingTo] = useState<{ term: string; parentId: string | null } | null>(null);
@@ -64,19 +67,41 @@ export function RoadmapMindmap({ isAdmin }: Props) {
     } catch { toast.error('추가 실패'); }
   };
 
-  const updateNode = async (id: string) => {
-    if (!editContent.trim()) return;
+  const updateNode = async (id: string, updates: { content?: string; color?: string; status?: string }) => {
     try {
       const node = nodes.find(n => n.id === id);
+      if (!node) return;
+
+      const body = {
+        id,
+        content: updates.content !== undefined ? updates.content : node.content,
+        color: updates.color !== undefined ? updates.color : node.color,
+        status: updates.status !== undefined ? updates.status : node.status
+      };
+
       const res = await fetch('/api/roadmap', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, content: editContent.trim(), color: node?.color })
+        body: JSON.stringify(body)
       });
+
       if (!res.ok) { const d = await res.json(); toast.error(d.error); return; }
-      setEditingId(null);
+
+      if (updates.content === undefined) {
+        // If not content update (e.g. status), just refresh silently or toast
+        // toast.success('상태 변경'); 
+      } else {
+        setEditingId(null);
+      }
       fetchNodes();
     } catch { toast.error('수정 실패'); }
+  };
+
+  const toggleStatus = (e: React.MouseEvent, node: RoadmapNode) => {
+    e.stopPropagation();
+    const map: Record<string, string> = { 'TODO': 'IN_PROGRESS', 'IN_PROGRESS': 'DONE', 'DONE': 'TODO' };
+    const next = map[node.status || 'TODO'] || 'IN_PROGRESS';
+    updateNode(node.id, { status: next });
   };
 
   const deleteNode = async (id: string) => {
@@ -108,64 +133,81 @@ export function RoadmapMindmap({ isAdmin }: Props) {
     const isAddingChild = addingTo?.parentId === node.id && addingTo?.term === node.term;
 
     return (
-      <div key={node.id} className={`${depth > 0 ? 'ml-5' : ''}`}>
-        <div className="flex items-start gap-1.5 group py-1">
-          {/* 연결선 + 토글 */}
-          <div className="flex items-center mt-1.5 shrink-0">
-            {depth > 0 && (
-              <div className={`w-3 h-px ${termConfig.border} border-t border-dashed`}></div>
-            )}
+      <div key={node.id} className="relative">
+        <div className="flex items-start gap-2 group py-1">
+          {/* 토글/아이콘 */}
+          <div className="flex items-center mt-1 shrink-0 w-4 justify-center z-10">
             {hasChildren ? (
-              <button onClick={() => toggleCollapse(node.id)} className="p-0.5 hover:bg-slate-100 rounded transition-colors">
+              <button onClick={() => toggleCollapse(node.id)} className="p-0.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">
                 {isCollapsed
-                  ? <ChevronRight className="w-3 h-3 text-slate-400" />
-                  : <ChevronDown className="w-3 h-3 text-slate-400" />
+                  ? <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 }
               </button>
             ) : (
-              <div className="w-3 h-3 flex items-center justify-center">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: node.color || '#94a3b8' }}></div>
-              </div>
+              <button
+                onClick={(e) => toggleStatus(e, node)}
+                className={`w-3 h-3 flex items-center justify-center rounded-full transition-all ring-1 dark:ring-0 ${node.status === 'DONE' ? 'bg-emerald-500 ring-emerald-500' :
+                  node.status === 'IN_PROGRESS' ? 'bg-blue-500 ring-blue-500 animate-pulse' :
+                    'bg-white dark:bg-slate-800 ring-slate-300 dark:ring-slate-600'
+                  }`}
+              >
+                {node.status === 'DONE' && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>}
+                {node.status === 'IN_PROGRESS' && <div className="w-1 h-1 bg-white rounded-full"></div>}
+                {(!node.status || node.status === 'TODO') && <div className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></div>}
+              </button>
             )}
           </div>
 
           {/* 노드 내용 */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200">
                 <input
                   autoFocus
                   value={editContent}
                   onChange={e => setEditContent(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') updateNode(node.id); if (e.key === 'Escape') setEditingId(null); }}
-                  className="flex-1 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') updateNode(node.id, { content: editContent.trim() });
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  className="flex-1 text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
-                <button onClick={() => updateNode(node.id)} className="text-[10px] px-1.5 py-0.5 bg-slate-800 text-white rounded font-bold">저장</button>
-                <button onClick={() => setEditingId(null)} className="text-[10px] px-1.5 py-0.5 text-slate-400 hover:text-slate-600">취소</button>
+                <button onClick={() => updateNode(node.id, { content: editContent.trim() })} className="text-[10px] whitespace-nowrap px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold transition-colors">저장</button>
+                <button onClick={() => setEditingId(null)} className="text-[10px] whitespace-nowrap px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 rounded font-bold transition-colors">취소</button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
-                <span className={`text-xs font-semibold text-slate-700 ${depth === 0 ? 'font-bold text-[13px]' : ''}`}>
+              <div className="flex items-start justify-between group/item">
+                <span
+                  className={`text-sm cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline decoration-slate-400 underline-offset-2 ${depth === 0 ? 'font-bold' : 'font-medium'} ${node.status === 'DONE' ? 'text-slate-400 line-through decoration-slate-300' :
+                    node.status === 'IN_PROGRESS' ? 'text-blue-600 dark:text-blue-400 font-bold' :
+                      'text-slate-700 dark:text-slate-300'
+                    }`}
+                  onClick={() => router.push(`/admin/roadmap/detail?id=${node.id}`)}
+                >
                   {node.content}
                 </span>
+
                 {isAdmin && (
-                  <div className="hidden group-hover:flex items-center gap-0.5">
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
                     <button
                       onClick={() => { setEditingId(node.id); setEditContent(node.content); }}
-                      className="p-0.5 text-slate-300 hover:text-slate-600 transition-colors"
+                      className="p-1 text-slate-300 hover:text-blue-500 transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
+                      title="수정"
                     >
                       <Edit3 className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => { setAddingTo({ term: node.term, parentId: node.id }); setNewContent(''); }}
-                      className="p-0.5 text-slate-300 hover:text-emerald-600 transition-colors"
-                      title="하위 항목 추가"
+                      className="p-1 text-slate-300 hover:text-emerald-500 transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
+                      title="하도록(하위) 추가"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => deleteNode(node.id)}
-                      className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"
+                      className="p-1 text-slate-300 hover:text-rose-500 transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
+                      title="삭제"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -176,30 +218,36 @@ export function RoadmapMindmap({ isAdmin }: Props) {
           </div>
         </div>
 
-        {/* 자식 추가 입력 */}
-        {isAddingChild && (
-          <div className="ml-8 py-1">
-            <div className="flex items-center gap-1">
-              <input
-                autoFocus
-                value={newContent}
-                onChange={e => setNewContent(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addNode(node.term, node.id); if (e.key === 'Escape') setAddingTo(null); }}
-                placeholder="하위 항목 입력..."
-                className="flex-1 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
-              />
-              <button onClick={() => addNode(node.term, node.id)} className="text-[10px] px-1.5 py-0.5 bg-slate-800 text-white rounded font-bold">추가</button>
-              <button onClick={() => setAddingTo(null)} className="text-[10px] px-1.5 py-0.5 text-slate-400">취소</button>
+        {/* 자식 컨테이너 */}
+        <div className="ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
+          {/* 자식 추가 입력폼 */}
+          {isAddingChild && (
+            <div className="py-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 shrink-0 flex justify-center"><div className="w-1 h-1 bg-slate-300 rounded-full"></div></div>
+                <input
+                  autoFocus
+                  value={newContent}
+                  onChange={e => setNewContent(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') addNode(node.term, node.id);
+                    if (e.key === 'Escape') setAddingTo(null);
+                  }}
+                  placeholder="하위 항목 입력..."
+                  className="flex-1 text-xs px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                />
+                <button onClick={() => addNode(node.term, node.id)} className="text-[10px] whitespace-nowrap px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold transition-colors">추가</button>
+                <button onClick={() => setAddingTo(null)} className="text-[10px] whitespace-nowrap px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 rounded font-bold transition-colors">취소</button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 하위 노드 */}
-        {hasChildren && !isCollapsed && (
-          <div className={`${depth === 0 ? 'border-l border-dashed ' + termConfig.border + ' ml-[9px]' : 'border-l border-dashed border-slate-200 ml-[9px]'}`}>
-            {children.map(child => renderNode(child, depth + 1, termConfig))}
-          </div>
-        )}
+          {hasChildren && !isCollapsed && (
+            <div className="mt-0.5 space-y-0.5">
+              {children.map(child => renderNode(child, depth + 1, termConfig))}
+            </div>
+          )}
+        </div>
       </div>
     );
   };

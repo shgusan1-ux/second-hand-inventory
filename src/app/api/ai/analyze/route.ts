@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
-        const { id, name, brand, category, imageUrl, price_consumer, size } = body;
+        const { id, name, brand, category, imageUrl, price_consumer, size, labelImageUrls } = body;
 
         if (!imageUrl || !name) {
             return NextResponse.json(
@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
             category: category || '기타',
             imageUrl,
             price_consumer: price_consumer || 0,
-            size: size || ''
+            size: size || '',
+            labelImageUrls: labelImageUrls || [],
         });
 
         return NextResponse.json(result);

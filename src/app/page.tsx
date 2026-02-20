@@ -11,11 +11,13 @@ import {
 } from 'lucide-react';
 import { UpdateLogWidget } from '@/components/dashboard/update-log-widget';
 import { AttendanceClockWidget } from '@/components/layout/attendance-clock-widget';
+import { FeedbackWidget } from '@/components/layout/feedback-widget';
 import { OrgChart } from '@/components/dashboard/org-chart';
 import { AttendanceSummaryWidget } from '@/components/dashboard/attendance-summary-widget';
 import { getMeetings } from '@/lib/meeting-actions';
 import { getAllTodayAttendance } from '@/lib/member-actions';
 import { RoadmapMindmap } from '@/components/dashboard/roadmap-mindmap';
+import { SystemMonitorWidget } from '@/components/dashboard/system-monitor-widget';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -110,6 +112,9 @@ export default async function DashboardPage() {
           <p className="text-xs font-semibold text-slate-400">성장 추세</p>
         </div>
       </div>
+
+      {/* 2.5 System Monitor Widget */}
+      <SystemMonitorWidget />
 
       {/* 3. Main Grid Section */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -258,6 +263,23 @@ export default async function DashboardPage() {
             <div className="p-2">
               <UpdateLogWidget tasks={tasks} />
             </div>
+          </div>
+
+          {/* Bug Report / Feedback CTA */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl ag-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">시스템 개선 제안</h3>
+                <p className="text-[10px] text-slate-400">버그 신고 및 기능 제안을 남겨주세요.</p>
+              </div>
+            </div>
+            <FeedbackWidget />
+            <p className="text-[9px] text-slate-500 mt-2 text-center italic">
+              여러분의 의견이 더 나은 시스템을 만듭니다.
+            </p>
           </div>
 
 

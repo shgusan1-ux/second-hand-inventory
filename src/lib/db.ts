@@ -250,6 +250,21 @@ async function initTables() {
         )
     `);
 
+    await client.execute(`
+        CREATE TABLE IF NOT EXISTS app_feedback (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            user_name TEXT,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            status TEXT DEFAULT 'PENDING',
+            admin_comment TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // 3. Naver & Vision Tables
     await client.execute(`
       CREATE TABLE IF NOT EXISTS naver_categories (
@@ -329,7 +344,30 @@ async function initTables() {
       )
     `);
 
-    // 4. Indexes
+    // 4. Migrations (Ensure columns exist for older tables)
+    const migrations = [
+      'ALTER TABLE attendance_logs ADD COLUMN late_reason TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN work_date TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN check_in TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN check_out TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN correction_status TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN correction_data TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN check_in_location TEXT',
+      'ALTER TABLE attendance_logs ADD COLUMN score_impact INTEGER DEFAULT 0',
+      'ALTER TABLE attendance_logs ADD COLUMN note TEXT',
+      'ALTER TABLE users ADD COLUMN allowed_locations TEXT',
+      'ALTER TABLE users ADD COLUMN attendance_score INTEGER DEFAULT 100',
+      'ALTER TABLE app_feedback ADD COLUMN user_name TEXT'
+    ];
+    for (const m of migrations) {
+      try {
+        await client.execute(m);
+      } catch (e) {
+        // Silence "Duplicate column" errors
+      }
+    }
+
+    // 5. Indexes
     const indexes = [
       'CREATE INDEX IF NOT EXISTS idx_naver_product_status ON naver_product_map(status_type)',
       'CREATE INDEX IF NOT EXISTS idx_vision_status ON product_vision_analysis(analysis_status)',
@@ -337,7 +375,8 @@ async function initTables() {
       'CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_logs(work_date)',
       'CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)',
       'CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)',
-      'CREATE INDEX IF NOT EXISTS idx_exhibition_sync_product ON exhibition_sync_logs(product_no)'
+      'CREATE INDEX IF NOT EXISTS idx_exhibition_sync_product ON exhibition_sync_logs(product_no)',
+      'CREATE INDEX IF NOT EXISTS idx_feedback_user ON app_feedback(user_id)'
     ];
     for (const idxSql of indexes) {
       await client.execute(idxSql);
