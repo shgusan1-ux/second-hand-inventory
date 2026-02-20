@@ -17,6 +17,11 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
 
     const [isSupported, setIsSupported] = useState(false);
 
+    const onCommandRef = useRef(onCommand);
+    useEffect(() => {
+        onCommandRef.current = onCommand;
+    }, [onCommand]);
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -29,20 +34,18 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
 
                 recognition.onstart = () => {
                     setIsListening(true);
-                    setTranscript('듣고 있어요...'); // Update transcript to show listening state
+                    setTranscript('듣고 있어요...');
                 };
 
                 recognition.onresult = async (event: any) => {
                     const text = event.results[0][0].transcript;
                     setTranscript(text);
-                    setIsListening(false); // Stop animation immediately on result
+                    setIsListening(false);
 
-                    // Call handler
                     setIsProcessing(true);
                     try {
-                        const result = await onCommand(text);
+                        const result = await onCommandRef.current(text);
                         if (result && result.message) {
-                            // Speak response
                             if ('speechSynthesis' in window) {
                                 const utterance = new SpeechSynthesisUtterance(result.message);
                                 utterance.lang = 'ko-KR';
@@ -50,7 +53,7 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                             }
                         }
                     } catch (error) {
-                        // Error handling
+                        // Error
                     } finally {
                         setIsProcessing(false);
                     }
@@ -59,14 +62,13 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                 recognition.onerror = (event: any) => {
                     console.error('Speech recognition error', event.error);
                     setIsListening(false);
-
                     if (event.error === 'not-allowed') {
                         toast.error('마이크 권한이 필요합니다.');
-                        setTranscript('마이크 권한 거부됨');
+                        setTranscript('권한 거부됨');
                     } else if (event.error === 'no-speech') {
-                        setTranscript('말씀이 없으셔서 종료합니다');
+                        // Silent fail
                     } else {
-                        setTranscript('오류가 발생했습니다');
+                        toast.error('오류가 발생했습니다: ' + event.error);
                     }
                 };
 
@@ -81,7 +83,7 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                     try {
                         recognition.start();
                     } catch (e) {
-                        // ignore if already started
+                        console.log('Auto-start failed', e);
                     }
                 }
             } else {
@@ -89,10 +91,8 @@ export function VoiceAssistant({ onCommand, autoStart = false }: VoiceAssistantP
                 setIsSupported(false);
             }
         }
-    }, [onCommand]); // Re-create if onCommand changes, though expensive. Better to use ref for onCommand.
+    }, [autoStart]);
 
-    // handleCommand moved into useEffect to safely capture closure or just simply inline
-    // Keeping this empty or removing as logic is now in useEffect
 
     const speak = (text: string) => {
         if ('speechSynthesis' in window) {

@@ -7,6 +7,7 @@ const client = createClient({
     url: 'libsql://second-hand-inventory-shgusan1-ux.aws-ap-northeast-1.turso.io',
     authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE4MDIyNjYwNDQsImlhdCI6MTc3MDczMDA0NCwiaWQiOiI5NWQ2ZWVmNC05MGQ2LTQ3ZDYtYTNlZi0wMzFmYTkzOGYyNGMiLCJyaWQiOiJmYWUyYjI4Yy0zM2I5LTQ2OGItYmEwOS1lMmY3NTQxYjQ5ODYifQ.l1mNE_w5wXuLTm5OhVrG-YI4gBlYHTL-D4BZxMbnsT_z4kqeKHAspRbPThXRnXL6kH-wcy5n5fUmjvROKjGIDA'
 });
+
 function printTable(title, rows) {
     console.log('');
     console.log('='.repeat(72));
@@ -29,3 +30,22 @@ function printTable(title, rows) {
         console.log('  ' + line);
     });
 }
+
+function printSummary(title, items) {
+    console.log('');
+    console.log('='.repeat(72));
+    console.log('  ' + title);
+    console.log('='.repeat(72));
+    const maxL = Math.max(...items.map(x => x[0].length), 10);
+    items.forEach(([label, value]) => {
+        const v = typeof value === 'number' ? value.toLocaleString() : String(value);
+        console.log('  ' + label.padEnd(maxL) + '  :  ' + v);
+    });
+}
+
+async function q(sql) { return (await client.execute(sql)).rows; }
+async function qVal(sql) {
+    const r = await client.execute(sql);
+    return r.rows[0] ? Object.values(r.rows[0])[0] : 0;
+}
+
