@@ -37,15 +37,15 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1400px] h-[95vh] md:h-[90vh] p-0 !gap-0 [display:flex] flex-col overflow-hidden [&>button]:z-50">
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
+      <DialogContent className="max-w-[98vw] md:max-w-[95vw] w-full lg:w-[1400px] h-[95vh] md:h-[90vh] p-0 !gap-0 flex flex-col overflow-hidden [&>button]:z-50 border-none">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden h-full">
           {/* Left Panel - Product Info & Controls */}
-          <div className="w-full lg:w-[320px] lg:border-r bg-slate-50 flex flex-col min-h-0">
+          <div className="w-full lg:w-[320px] lg:border-r bg-slate-50 flex flex-col h-1/2 lg:h-full min-h-0 shrink-0">
             <DialogHeader className="p-4 border-b bg-white">
               <DialogTitle className="text-sm">상품 정보</DialogTitle>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 overscroll-contain touch-pan-y">
               {/* Main Product Image */}
               <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-white border">
                 {imageUrls.length > 0 ? (
@@ -148,7 +148,7 @@ export function ProductDetailPreview({ open, onClose, product }: ProductDetailPr
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30 overscroll-contain touch-pan-y">
               {viewMode === 'preview' ? (
                 <div className="p-6 bg-white min-h-full">
                   <div dangerouslySetInnerHTML={{ __html: htmlCode }} className="bg-white shadow-sm ring-1 ring-slate-200" />
