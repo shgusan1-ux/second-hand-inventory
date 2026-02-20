@@ -41,8 +41,12 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 recognition.interimResults = true; // Changed to true to see partial results
                 recognition.lang = 'ko-KR';
 
-                // Prevent GC
                 (window as any).recognition = recognition;
+
+                // Pre-load voices
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.getVoices();
+                }
 
                 recognition.onstart = () => {
                     setIsListening(true);
@@ -135,48 +139,81 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
         }
     }, [autoStart]);
 
-    const speak = (text: string) => {
-        if ('speechSynthesis' in window) {
-            // Cancel any ongoing speech
+    const speak = async (text: string) => {
+        setIsSpeaking(true);
+
+        let success = false;
+        try {
+            // 1. Try OpenAI TTS for natural voice
+            const response = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, voice: 'nova' }) // 'nova' is very clear/natural
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+
+                audio.onended = () => {
+                    setIsSpeaking(false);
+                    URL.revokeObjectURL(url);
+                    // Auto-restart mic if session is active
+                    if (isSessionActiveRef.current) {
+                        setTimeout(() => {
+                            if (isSessionActiveRef.current) {
+                                try { recognitionRef.current.start(); } catch (e) { }
+                            }
+                        }, 200);
+                    }
+                };
+
+                audio.onerror = () => {
+                    setIsSpeaking(false);
+                    URL.revokeObjectURL(url);
+                };
+
+                await audio.play();
+                success = true;
+            }
+        } catch (e) {
+            console.warn('OpenAI TTS failed, falling back to System Speech:', e);
+        }
+
+        // 2. Fallback to System Speech (window.speechSynthesis)
+        if (!success && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
-            window.speechSynthesis.resume(); // Wake up!
+            window.speechSynthesis.resume();
 
             const utterance = new SpeechSynthesisUtterance(text);
-
-            // Explicitly find Korean voice
             const voices = window.speechSynthesis.getVoices();
-            const koVoice = voices.find(v => v.lang === 'ko-KR' || v.lang.startsWith('ko'));
-            if (koVoice) {
-                utterance.voice = koVoice;
-            }
+            const preferredVoice = voices.find(v => (v.lang === 'ko-KR' || v.lang.startsWith('ko')) &&
+                (v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Google')))
+                || voices.find(v => v.lang === 'ko-KR' || v.lang.startsWith('ko'));
+
+            if (preferredVoice) utterance.voice = preferredVoice;
 
             utterance.lang = 'ko-KR';
             utterance.pitch = 1;
-            utterance.rate = 1.1; // Slightly faster for natural feel
+            utterance.rate = 1.1;
             utterance.volume = 1;
 
             utterance.onstart = () => setIsSpeaking(true);
             utterance.onend = () => {
                 setIsSpeaking(false);
-                // Auto-restart mic if session is active
                 if (isSessionActiveRef.current) {
                     setTimeout(() => {
                         if (isSessionActiveRef.current) {
-                            try {
-                                recognitionRef.current.start();
-                            } catch (e) { /* ignore */ }
+                            try { recognitionRef.current.start(); } catch (e) { }
                         }
                     }, 200);
                 }
             };
             utterance.onerror = () => setIsSpeaking(false);
-
             window.speechSynthesis.speak(utterance);
-
-            // Chrome bug fix: resume if paused (sometimes happens)
-            if (window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
-            }
+        } else if (!success) {
+            setIsSpeaking(false);
         }
     };
 
