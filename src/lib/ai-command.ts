@@ -1,7 +1,14 @@
 import { db } from '@/lib/db';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+const MODELS = {
+    'flash': 'gemini-2.0-flash',
+    'pro': 'gemini-1.5-pro',
+    'ultra': 'gemini-1.5-pro' // Fallback or distinct if available
+};
+
+type ModelType = keyof typeof MODELS;
 
 export interface CommandResult {
     reply: string;
@@ -10,7 +17,13 @@ export interface CommandResult {
     intent?: string;
 }
 
-export async function processUserCommand(command: string, userInfo: { id: string, name: string, role: string }): Promise<CommandResult> {
+export async function processUserCommand(
+    command: string,
+    userInfo: { id: string, name: string, role: string },
+    model: ModelType = 'flash'
+): Promise<CommandResult> {
+    const modelName = MODELS[model] || MODELS['flash'];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
     const tools = [
         { name: 'get_sales_summary', description: 'Get today sales summary (count, total amount)' },
         { name: 'check_profit', description: 'Analyze profit margin for a product or overall today' },
@@ -41,7 +54,7 @@ export async function processUserCommand(command: string, userInfo: { id: string
   `;
 
     try {
-        const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        const geminiRes = await fetch(`${url}?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })

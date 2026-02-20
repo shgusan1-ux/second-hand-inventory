@@ -14,57 +14,76 @@ export function VoiceAssistant({ onCommand }: VoiceAssistantProps) {
     const [isProcessing, setIsProcessing] = useState(false);
     const recognitionRef = useRef<any>(null);
 
+    const [isSupported, setIsSupported] = useState(false);
+
     useEffect(() => {
-        if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-            const SpeechRecognition = (window as any).webkitSpeechRecognition;
-            const recognition = new SpeechRecognition();
-            recognition.continuous = false; // Stop after one sentence
-            recognition.interimResults = false;
-            recognition.lang = 'ko-KR';
+        if (typeof window !== 'undefined') {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-            recognition.onstart = () => {
-                setIsListening(true);
-                setTranscript('듣고 있어요...');
-            };
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'ko-KR';
 
-            recognition.onresult = (event: any) => {
-                const text = event.results[0][0].transcript;
-                setTranscript(text);
-                handleCommand(text);
-            };
+                recognition.onstart = () => {
+                    setIsListening(true);
+                    setTranscript('듣고 있어요...'); // Update transcript to show listening state
+                };
 
-            recognition.onerror = (event: any) => {
-                console.error('Speech recognition error', event.error);
-                setIsListening(false);
-                setTranscript('다시 시도해주세요');
-                toast.error('음성 인식 오류가 발생했습니다.');
-            };
+                recognition.onresult = async (event: any) => {
+                    const text = event.results[0][0].transcript;
+                    setTranscript(text);
+                    setIsListening(false); // Stop animation immediately on result
 
-            recognition.onend = () => {
-                setIsListening(false);
-            };
+                    // Call handler
+                    setIsProcessing(true);
+                    try {
+                        const result = await onCommand(text);
+                        if (result && result.message) {
+                            // Speak response
+                            if ('speechSynthesis' in window) {
+                                const utterance = new SpeechSynthesisUtterance(result.message);
+                                utterance.lang = 'ko-KR';
+                                window.speechSynthesis.speak(utterance);
+                            }
+                        }
+                    } catch (error) {
+                        // Error handling
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                };
 
-            recognitionRef.current = recognition;
-        } else {
-            console.warn('Web Speech API not supported');
-        }
-    }, []);
+                recognition.onerror = (event: any) => {
+                    console.error('Speech recognition error', event.error);
+                    setIsListening(false);
 
-    const handleCommand = async (text: string) => {
-        setIsProcessing(true);
-        try {
-            const result = await onCommand(text);
+                    if (event.error === 'not-allowed') {
+                        toast.error('마이크 권한이 필요합니다.');
+                        setTranscript('마이크 권한 거부됨');
+                    } else if (event.error === 'no-speech') {
+                        setTranscript('말씀이 없으셔서 종료합니다');
+                    } else {
+                        setTranscript('오류가 발생했습니다');
+                    }
+                };
 
-            // Text to Speech
-            if (result && result.message) {
-                speak(result.message);
+                recognition.onend = () => {
+                    setIsListening(false);
+                };
+
+                recognitionRef.current = recognition;
+                setIsSupported(true);
+            } else {
+                console.warn('Web Speech API not supported');
+                setIsSupported(false);
             }
-        } catch (error) {
-            speak('죄송합니다. 오류가 발생했습니다.');
-        } finally {
-            setIsProcessing(false);
         }
-    };
+    }, [onCommand]); // Re-create if onCommand changes, though expensive. Better to use ref for onCommand.
+
+    // handleCommand moved into useEffect to safely capture closure or just simply inline
+    // Keeping this empty or removing as logic is now in useEffect
 
     const speak = (text: string) => {
         if ('speechSynthesis' in window) {
@@ -77,16 +96,30 @@ export function VoiceAssistant({ onCommand }: VoiceAssistantProps) {
     };
 
     const toggleListening = () => {
+        if (!recognitionRef.current) return;
+
         if (isListening) {
-            recognitionRef.current?.stop();
+            recognitionRef.current.stop();
         } else {
             setTranscript('듣고 있어요...');
-            recognitionRef.current?.start();
+            try {
+                recognitionRef.current.start();
+            } catch (e) {
+                console.error(e);
+                // Sometimes it throws if already started
+                recognitionRef.current.stop();
+                setTimeout(() => recognitionRef.current.start(), 100);
+            }
         }
     };
 
-    if (!recognitionRef.current) {
-        return null; // Don't render if not supported? Or render disabled button.
+    if (!isSupported) {
+        return (
+            <div className="text-rose-500 text-sm p-4 bg-rose-50 rounded-lg text-center">
+                이 브라우저는 음성 인식을 지원하지 않습니다.<br />
+                (Chrome, Safari, Edge 사용 권장)
+            </div>
+        );
     }
 
     return (

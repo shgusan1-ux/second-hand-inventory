@@ -6,14 +6,14 @@ export async function POST(req: Request) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { command } = await req.json();
+    const { command, model } = await req.json();
 
     try {
         const result = await processUserCommand(command, {
             id: session.id,
             name: session.name,
             role: session.role
-        });
+        }, model);
 
         return NextResponse.json({
             message: result.reply,
