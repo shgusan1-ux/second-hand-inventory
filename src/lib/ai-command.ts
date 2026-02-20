@@ -35,7 +35,7 @@ export async function processUserCommand(
     ];
 
     const prompt = `
-    You are an AI assistant for a vintage inventory system called "Brownstreet".
+    You are a pervasive AI assistant called "Antigravity Mobile" for the "Brownstreet" vintage shop.
     User: ${userInfo.name} (${userInfo.role})
     Command: "${command}"
     

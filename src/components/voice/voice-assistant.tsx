@@ -16,6 +16,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [isSessionActive, setIsSessionActive] = useState(autoStart);
+    const [aiReply, setAiReply] = useState('');
     const recognitionRef = useRef<any>(null);
     const isSessionActiveRef = useRef(false);
 
@@ -82,6 +83,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                         try {
                             const result = await onCommandRef.current(finalTranscript);
                             if (result && result.message) {
+                                setAiReply(result.message);
                                 speak(result.message);
                             }
                         } catch (error) {
@@ -273,6 +275,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
             setIsSessionActive(true);
             setTranscript('듣고 있어요...');
+            setAiReply(''); // Clear previous reply
             try {
                 recognitionRef.current.start();
             } catch (e) {
@@ -357,13 +360,23 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 )}
             </button>
 
-            {transcript && (
+            {(transcript || aiReply) && (
                 <div className={minimal
                     ? "fixed bottom-20 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-xl pointer-events-none z-50 text-center"
                     : "fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md pointer-events-none z-50"
                 }>
-                    <div className="bg-black/70 backdrop-blur-md text-white px-4 py-3 rounded-2xl text-base font-medium shadow-2xl animate-in fade-in slide-in-from-bottom-2 leading-relaxed">
-                        {transcript}
+                    <div className="bg-black/80 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 border border-white/10">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Antigravity Mobile</span>
+                        </div>
+                        <div className="text-sm font-medium leading-relaxed">
+                            {aiReply ? (
+                                <span className="text-white drop-shadow-sm">{aiReply}</span>
+                            ) : (
+                                <span className="text-white/70 italic">"{transcript}"</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

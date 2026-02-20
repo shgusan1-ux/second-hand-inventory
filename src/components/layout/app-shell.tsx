@@ -8,6 +8,7 @@ import { NotificationCenter } from './notification-center';
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { GlobalVoiceAssistant } from '@/components/voice/global-voice-assistant';
 
 export function AppShell({ children, user }: { children: React.ReactNode, user: any }) {
     const pathname = usePathname();
@@ -66,6 +67,9 @@ export function AppShell({ children, user }: { children: React.ReactNode, user: 
                     {children}
                 </div>
             </main>
+
+            {/* Global Antigravity AI */}
+            <GlobalVoiceAssistant />
         </div>
     );
 }
