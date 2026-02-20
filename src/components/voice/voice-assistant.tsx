@@ -15,7 +15,7 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
     const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
-    const [isSessionActive, setIsSessionActive] = useState(false);
+    const [isSessionActive, setIsSessionActive] = useState(autoStart);
     const recognitionRef = useRef<any>(null);
     const isSessionActiveRef = useRef(false);
 
@@ -106,6 +106,16 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
 
                 recognition.onend = () => {
                     setIsListening(false);
+                    // Continuous session logic: restart if session is active and not speaking/processing
+                    if (isSessionActiveRef.current && !isProcessing && !window.speechSynthesis.speaking) {
+                        setTimeout(() => {
+                            if (isSessionActiveRef.current) {
+                                try {
+                                    recognitionRef.current.start();
+                                } catch (e) { /* ignore */ }
+                            }
+                        }, 300);
+                    }
                 };
 
                 recognitionRef.current = recognition;
@@ -140,9 +150,13 @@ export function VoiceAssistant({ onCommand, autoStart = false, minimal = false }
                 setIsSpeaking(false);
                 // Auto-restart mic if session is active
                 if (isSessionActiveRef.current) {
-                    try {
-                        recognitionRef.current.start();
-                    } catch (e) { /* ignore */ }
+                    setTimeout(() => {
+                        if (isSessionActiveRef.current) {
+                            try {
+                                recognitionRef.current.start();
+                            } catch (e) { /* ignore */ }
+                        }
+                    }, 200);
                 }
             };
             utterance.onerror = () => setIsSpeaking(false);

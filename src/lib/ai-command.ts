@@ -53,7 +53,7 @@ export async function processUserCommand(
     Output ONLY a JSON object with:
     {
       "intent": "intent_name",
-      "reply": "A helpful response...",
+      "reply": "한국어로 짤막하고 명확하게 답변하세요. 음성용이므로 '전해드립니다', '~입니다' 보다는 자연스럽게 대화하듯 답변하세요.",
       "args": { "keyword": "...", "price": 1000, "status": "..." } // Only if needed
     }
   `;

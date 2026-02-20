@@ -22,14 +22,13 @@ export default function CommandCenterPage() {
         {
             id: 'welcome',
             role: 'assistant',
-            content: '안녕하세요! AI 명령 센터입니다. 무엇을 도와드릴까요? (예: "오늘 들어온 제품 분석해줘", "네이버 연동 상태 확인해")',
+            content: '안녕하세요! Brownstreet AI입니다. 재고 관리와 매출 분석을 도와드릴게요. 말씀만 하세요!',
             timestamp: new Date().toISOString(),
             type: 'text'
         }
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [showVoice, setShowVoice] = useState(false);
     const [model, setModel] = useState<'flash' | 'pro' | 'v3.1'>('v3.1');
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -144,31 +143,28 @@ export default function CommandCenterPage() {
 
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur flex items-center justify-between z-10">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-lg overflow-hidden">
                         <Bot className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="font-black text-slate-900 dark:text-white tracking-tight">AI Command Center</h1>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">System Online</span>
-                        </div>
+                        <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none">Brownstreet AI</h1>
+                        <p className="text-[10px] text-slate-500 font-medium">Command Center</p>
                     </div>
-
-                    <button
-                        onClick={() => {
-                            if (typeof window !== 'undefined') {
-                                navigator.clipboard.writeText(window.location.href);
-                                toast.success('주소가 복사되었습니다. 카카오톡으로 보내서 접속하세요!');
-                            }
-                        }}
-                        className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
-                        title="주소 복사"
-                    >
-                        <Share2 className="w-5 h-5" />
-                    </button>
                 </div>
+
+                <button
+                    onClick={() => {
+                        if (typeof window !== 'undefined') {
+                            navigator.clipboard.writeText(window.location.href);
+                            toast.success('주소가 복사되었습니다. 카카오톡으로 보내서 접속하세요!');
+                        }
+                    }}
+                    className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
+                    title="주소 복사"
+                >
+                    <Share2 className="w-5 h-5" />
+                </button>
             </div>
 
             {/* Model Selector (Sticky or just below header) */}
@@ -288,7 +284,7 @@ export default function CommandCenterPage() {
                             rows={1}
                         />
                         <div className="absolute right-2 bottom-2">
-                            <VoiceAssistant onCommand={handleVoiceCommand} minimal={true} />
+                            <VoiceAssistant onCommand={handleVoiceCommand} minimal={true} autoStart={true} />
                         </div>
                     </div>
                     <button
@@ -303,6 +299,6 @@ export default function CommandCenterPage() {
                     "오늘 매출 어때?", "네이버 동기화 시작해줘" 등으로 명령해보세요.
                 </p>
             </div>
-        </div>
+        </div >
     );
 }
