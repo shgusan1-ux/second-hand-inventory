@@ -23,6 +23,7 @@ interface ProductData {
     master_reg_date: string;
     category_classification?: string;
     edit_completed?: number;
+    status_ai?: string;
 }
 
 interface DraftData {
@@ -64,6 +65,8 @@ interface AIResult {
     priceReason: string;
     mdDescription: string;
     confidence: number;
+    vibe?: string;
+    stylingTips?: string;
 }
 
 export default function ProductEditorPage() {
@@ -91,6 +94,8 @@ export default function ProductEditorPage() {
     const [mdMoodImage, setMdMoodImage] = useState<string | null>(null); // MD 무드이미지 URL
     const [isMoodImageGenerating, setIsMoodImageGenerating] = useState(false);
     const [mdMoodImageInserted, setMdMoodImageInserted] = useState(false);
+    const [isPolishing, setIsPolishing] = useState(false); // 오타 교정 중 상태
+    const [isEstimatingSize, setIsEstimatingSize] = useState(false); // 사이즈 추정 중
     const [supplierData, setSupplierData] = useState<Map<string, any>>(new Map());
     const [isSupplierLoading, setIsSupplierLoading] = useState(false);
     const [selectedGender, setSelectedGender] = useState<string>(''); // 대분류: MAN/WOMAN/KIDS/UNISEX
@@ -98,6 +103,8 @@ export default function ProductEditorPage() {
     const [fittingCustomPrompt, setFittingCustomPrompt] = useState(''); // 착용샷 수정 요청
     const [zoomImage, setZoomImage] = useState<string | null>(null); // 이미지 확대 모달
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null); // 전체 AI 배치 진행
+    const [backgroundProgress, setBackgroundProgress] = useState<Map<string, 'processing' | 'done' | 'error'>>(new Map()); // 배경 작업 진행 상태
+    const backgroundProcessingRef = useRef<Set<string>>(new Set()); // 현재 배경 작업 중인 ID들
     const batchAbortRef = useRef(false); // 배치 중단 플래그
     const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview'); // 새 상세페이지 미리보기 모드
     const [autoMode, setAutoMode] = useState(false); // 자동 AI 워크플로우 on/off (기본 OFF)
@@ -105,18 +112,32 @@ export default function ProductEditorPage() {
     const autoAbortRef = useRef<AbortController | null>(null); // 자동 워크플로우 API 중단용
     const originalProductsRef = useRef<Map<string, string[]>>(new Map()); // 에디터 진입 시 원본 이미지 보관
 
-    // cleanup: 디바운스 타이머 해제 + 좌우 스크롤 방지
+    // cleanup: 디바운스 타이머 해제 + 좌우 스크롤 방지 + 단축키 등록
     useEffect(() => {
         preloadBackgroundRemoval(); // WASM 모델 사전 로드
         // 모바일 좌우 스크롤 완전 차단
         document.documentElement.style.overflowX = 'hidden';
         document.body.style.overflowX = 'hidden';
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedId) handleEditComplete(selectedId);
+            }
+            if (e.altKey && e.key === 'a') {
+                e.preventDefault();
+                handleAIAnalyze();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+
         return () => {
             if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
             document.documentElement.style.overflowX = '';
             document.body.style.overflowX = '';
+            window.removeEventListener('keydown', handleKeyDown);
         };
-    }, []);
+    }, [selectedId]);
 
     // 상품 + 카테고리 로드
     useEffect(() => {
@@ -277,14 +298,34 @@ export default function ProductEditorPage() {
         return cat ? cat.name : categoryValue; // ID 매칭 시 이름, 아니면 원본 그대로
     }, [categories]);
 
-    // 카테고리 유사어 매칭 (AI가 다른 이름으로 추천할 때 fallback)
-    const matchCategory = useCallback((suggested: string) => {
+    // 카테고리 유사어 매칭 (성별 고려 - KIDS/MAN/WOMAN 구분)
+    const matchCategory = useCallback((suggested: string, gender?: string) => {
         if (!suggested) return null;
-        // 1. 정확히 일치
-        let matched = categories.find(c => c.name === suggested);
+        // 성별 → classification 매핑
+        const genderToClass: Record<string, string> = {
+            'MAN': 'MAN', 'WOMAN': 'WOMAN', 'KIDS': 'KIDS', 'UNISEX': 'MAN',
+        };
+        const targetClass = gender ? genderToClass[gender] || 'MAN' : '';
+
+        // 성별 필터링 함수: 같은 이름이 여러 성별에 있을 때 정확한 것을 찾기
+        const findWithGender = (predicate: (c: any) => boolean) => {
+            const candidates = categories.filter(predicate);
+            if (candidates.length === 0) return null;
+            if (candidates.length === 1) return candidates[0];
+            // 성별 일치하는 것 우선
+            if (targetClass) {
+                const genderMatch = candidates.find(c => c.classification === targetClass);
+                if (genderMatch) return genderMatch;
+            }
+            // 남성(MAN)을 기본값으로 (UNKNOWN/UNISEX 대응)
+            return candidates.find(c => c.classification === 'MAN') || candidates[0];
+        };
+
+        // 1. 정확히 일치 (성별 고려)
+        let matched = findWithGender(c => c.name === suggested);
         if (matched) return matched;
         // 2. 부분 포함
-        matched = categories.find(c => c.name.includes(suggested) || suggested.includes(c.name));
+        matched = findWithGender(c => c.name.includes(suggested) || suggested.includes(c.name));
         if (matched) return matched;
         // 3. 동의어 매핑
         const synonyms: Record<string, string[]> = {
@@ -302,7 +343,7 @@ export default function ProductEditorPage() {
         };
         for (const [catName, words] of Object.entries(synonyms)) {
             if (words.some(w => suggested.includes(w) || w.includes(suggested))) {
-                matched = categories.find(c => c.name === catName);
+                matched = findWithGender(c => c.name === catName);
                 if (matched) return matched;
             }
         }
@@ -648,6 +689,14 @@ export default function ProductEditorPage() {
                 if (data.mdDescription) diffFields.add('md_comment');
                 setAiChecked(diffFields);
                 toast.success(`AI 분석 완료 (신뢰도 ${data.confidence}%) — 변경 ${diffFields.size}건 감지`);
+
+                // 신뢰도가 95% 이상이면 즉시 자동 적용 (일부 항목 제외)
+                if (data.confidence >= 95) {
+                    setTimeout(() => {
+                        applyAllAI_internal(selectedId!, data, diffFields);
+                        toast.info('신뢰도가 매우 높아 자동으로 값을 적용했습니다.');
+                    }, 100);
+                }
             } else {
                 const data = await res.json();
                 toast.error(`AI 분석 실패: ${data.error}`);
@@ -656,6 +705,102 @@ export default function ProductEditorPage() {
             toast.error(`AI 분석 오류: ${err.message}`);
         } finally {
             setIsAnalyzing(false);
+        }
+    };
+
+    // 모든 분석된 상품(READY) 일괄 편집 완료 처리
+    const handleFinishAllAnalyzed = async () => {
+        const readyItems = products.filter(p => p.status_ai === 'READY' && !p.edit_completed);
+        if (readyItems.length === 0) {
+            toast.info('일괄 처리할 분석 완료 상품이 없습니다.');
+            return;
+        }
+
+        if (!confirm(`${readyItems.length}개의 분석 완료 상품을 일괄 편집 완료 처리할까요?\n(자동 적용된 값들 바탕으로 즉시 완료 처리됩니다)`)) return;
+
+        try {
+            // 일괄 처리는 루프를 돌며 handleEditComplete 호출 (개별 저장 및 상태 업데이트 보장)
+            for (const item of readyItems) {
+                await handleEditComplete(item.id);
+            }
+            toast.success(`${readyItems.length}개 상품 일괄 처리 완료!`);
+        } catch (err) {
+            toast.error('일괄 처리 중 오류가 발생했습니다.');
+        }
+    };
+
+    // 최종 퀄리티 체크 및 오타 교정
+    const handlePolishDraft = async () => {
+        if (!selectedId || isPolishing) return;
+        const product = products.find(p => p.id === selectedId);
+        if (!product) return;
+
+        setIsPolishing(true);
+        try {
+            const draft = getCurrentDraft(product);
+            const res = await fetch('/api/ai/polish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(draft),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                updateDraft(selectedId, 'name', data.polishedName);
+                updateDraft(selectedId, 'md_comment', data.polishedMD);
+                updateDraft(selectedId, 'fabric', data.polishedFabric);
+                setFormKey(k => k + 1);
+                if (data.polishedMD) setMdGeneratedText(data.polishedMD);
+
+                if (data.corrections && data.corrections.length > 0) {
+                    toast.success(`교정 완료: ${data.corrections.join(', ')}`);
+                } else {
+                    toast.success('완벽합니다! 수정할 오타가 없습니다.');
+                }
+            } else {
+                toast.error('교정 실패');
+            }
+        } catch (err: any) {
+            toast.error(`교정 오류: ${err.message}`);
+        } finally {
+            setIsPolishing(false);
+        }
+    };
+
+    // AI 사이즈 추정
+    const handleEstimateSize = async () => {
+        if (!selectedProduct || isEstimatingSize) return;
+        setIsEstimatingSize(true);
+        try {
+            const draft = getCurrentDraft(selectedProduct);
+            const imageUrl = draft.images[0] || selectedProduct.image_url || '';
+            if (!imageUrl) {
+                toast.error('상품 이미지가 없습니다.');
+                return;
+            }
+
+            const res = await fetch('/api/smartstore/estimate-size', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    imageUrl,
+                    referenceWidth: 42 // 기본 옷걸이 너비
+                }),
+            });
+
+            if (res.ok) {
+                const { result } = await res.json();
+                const sizeStr = `어깨 ${result.shoulder}, 가슴 ${result.chest}, 총장 ${result.length}, 소매 ${result.sleeve}`;
+                updateDraft(selectedId!, 'size', sizeStr);
+                setFormKey(k => k + 1);
+                toast.success(`사이즈 추정 완료: ${sizeStr} (신뢰도 ${result.confidence}%)`);
+            } else {
+                toast.error('사이즈 추정 실패');
+            }
+        } catch (err: any) {
+            toast.error(`사이즈 추정 오류: ${err.message}`);
+        } finally {
+            setIsEstimatingSize(false);
         }
     };
 
@@ -672,67 +817,57 @@ export default function ProductEditorPage() {
         toast.success(`AI 추천값 적용`);
     };
 
-    // AI 결과 선택 적용 (체크된 항목만)
-    const applyAllAI = () => {
-        if (!selectedId || !aiResult) return;
-        const checked = aiChecked;
-        if (checked.size === 0) { toast.error('적용할 항목을 선택하세요'); return; }
+    // AI 결과 선택 적용 (내부용)
+    const applyAllAI_internal = (id: string, result: AIResult, checked: Set<string>) => {
+        if (!id || !result) return;
         const updates: Partial<DraftData> = {};
-        if (checked.has('name') && aiResult.suggestedName) updates.name = aiResult.suggestedName;
-        if (checked.has('brand') && aiResult.suggestedBrand) updates.brand = aiResult.suggestedBrand;
-        if (checked.has('size') && aiResult.suggestedSize) updates.size = aiResult.suggestedSize;
-        if (checked.has('fabric') && aiResult.suggestedFabric) updates.fabric = aiResult.suggestedFabric;
-        if (checked.has('condition') && aiResult.grade) updates.condition = aiResult.grade;
-        if (checked.has('price_sell') && aiResult.suggestedPrice) updates.price_sell = aiResult.suggestedPrice;
-        if (checked.has('price_consumer') && aiResult.suggestedConsumerPrice) updates.price_consumer = aiResult.suggestedConsumerPrice;
-        if (checked.has('md_comment') && aiResult.mdDescription) updates.md_comment = aiResult.mdDescription;
-        // 카테고리 ID 매칭 (동의어 포함)
-        if (checked.has('category') && aiResult.suggestedCategory) {
-            const matched = matchCategory(aiResult.suggestedCategory);
+        if (checked.has('name') && result.suggestedName) updates.name = result.suggestedName;
+        if (checked.has('brand') && result.suggestedBrand) updates.brand = result.suggestedBrand;
+        if (checked.has('size') && result.suggestedSize) updates.size = result.suggestedSize;
+        if (checked.has('fabric') && result.suggestedFabric) updates.fabric = result.suggestedFabric;
+        if (checked.has('condition') && result.grade) updates.condition = result.grade;
+        if (checked.has('price_sell') && result.suggestedPrice) updates.price_sell = result.suggestedPrice;
+        if (checked.has('price_consumer') && result.suggestedConsumerPrice) updates.price_consumer = result.suggestedConsumerPrice;
+        if (checked.has('md_comment') && result.mdDescription) updates.md_comment = result.mdDescription;
+
+        const resolvedGender = result.suggestedGender || selectedGender || 'MAN';
+        if (checked.has('gender') && result.suggestedGender) setSelectedGender(result.suggestedGender);
+
+        if (checked.has('category') && result.suggestedCategory) {
+            const matched = matchCategory(result.suggestedCategory, resolvedGender);
             if (matched) updates.category = matched.id;
         }
-        // 성별 대분류 자동 설정
-        if (checked.has('gender') && aiResult.suggestedGender) setSelectedGender(aiResult.suggestedGender);
 
         setDrafts(prev => {
             const next = new Map(prev);
-            const product = products.find(p => p.id === selectedId);
+            const product = products.find(p => p.id === id);
             if (!product) return next;
-            // prev에서 직접 읽어 stale closure 방지
-            const current = prev.get(selectedId) || {
-                name: product.name || '',
-                brand: product.brand || '',
-                category: product.category || '',
-                price_consumer: product.price_consumer || 0,
-                price_sell: product.price_sell || 0,
-                status: product.status || '판매중',
-                condition: product.condition || '',
-                size: product.size || '',
-                fabric: product.fabric || '',
-                md_comment: product.md_comment || '',
-                master_reg_date: product.master_reg_date || '',
-                images: parseImages(product),
-            };
-            next.set(selectedId, { ...current, ...updates });
+            const current = prev.get(id) || createDefaultDraft(product);
+            next.set(id, { ...current, ...updates });
             return next;
         });
         setFormKey(k => k + 1);
 
-        // 등급이 변경되었으면 뱃지 자동 재생성
-        if (aiResult.grade) {
-            const product = products.find(p => p.id === selectedId);
+        if (result.grade) {
+            const product = products.find(p => p.id === id);
             if (product) {
                 const d = drafts.get(product.id);
                 const imageUrl = d ? d.images[0] || product.image_url || '' : parseImages(product)[0] || product.image_url || '';
                 if (imageUrl) {
                     setBadgePreview(null);
-                    autoGenerateBadge(imageUrl, aiResult.grade, product.id);
+                    autoGenerateBadge(imageUrl, result.grade, product.id);
                 }
             }
         }
-        const appliedCount = Object.keys(updates).length + (checked.has('gender') ? 1 : 0);
+    };
+
+    // AI 결과 선택 적용 (UI용)
+    const applyAllAI = () => {
+        if (!selectedId || !aiResult) return;
+        if (aiChecked.size === 0) { toast.error('적용할 항목을 선택하세요'); return; }
+        applyAllAI_internal(selectedId, aiResult, aiChecked);
         setAiApplied(true);
-        toast.success(`AI 추천값 ${appliedCount}개 항목 적용 완료`);
+        toast.success(`AI 추천값 적용 완료`);
     };
 
     // 전체 상품 AI 분석 배치 (분석+draft 적용만, 저장은 수동)
@@ -795,7 +930,7 @@ export default function ProductEditorPage() {
                 if (aiData.suggestedConsumerPrice) updates.price_consumer = aiData.suggestedConsumerPrice;
                 if (aiData.mdDescription) updates.md_comment = aiData.mdDescription;
                 if (aiData.suggestedCategory) {
-                    const matched = matchCategory(aiData.suggestedCategory);
+                    const matched = matchCategory(aiData.suggestedCategory, aiData.suggestedGender || selectedGender || 'MAN');
                     if (matched) updates.category = matched.id;
                 }
 
@@ -1133,6 +1268,7 @@ export default function ProductEditorPage() {
             const isDraft = hasDraft.has(product.id);
             const isSelected = selectedId === product.id;
             const imgs = parseImages(product);
+            const bgStatus = backgroundProgress.get(product.id);
             return (
                 <div
                     key={product.id}
@@ -1142,24 +1278,34 @@ export default function ProductEditorPage() {
                         : 'bg-slate-900/50 border-white/5 hover:bg-slate-800/50'
                         }`}
                 >
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-800 flex-shrink-0">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-800 flex-shrink-0 relative">
                         {imgs[0] && <img src={imgs[0]} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                        {bgStatus === 'processing' && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                        )}
                     </div>
                     <div className="flex-1 min-w-0 text-center md:text-left">
                         <p className="text-[10px] md:text-xs text-white font-medium truncate">{product.name}</p>
                         <p className="text-[9px] md:text-[10px] text-slate-500 mt-0.5 hidden md:block">{product.id} | {(product.price_sell || 0).toLocaleString()}원</p>
                     </div>
-                    <div className="flex md:flex-col items-center md:items-end gap-0.5 flex-shrink-0">
-                        {product.edit_completed ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-500/20 text-violet-400">완료</span> : null}
-                        {status === 'saved' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">저장됨</span>}
-                        {status === 'saving' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400">저장중</span>}
-                        {status === 'error' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400">오류</span>}
-                        {isDraft && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400">임시</span>}
+                    <div className="flex md:flex-col items-center md:items-end gap-1 flex-shrink-0">
+                        {product.edit_completed ? (
+                            <span className="px-1.5 py-0.5 rounded-lg text-[8px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm">DONE</span>
+                        ) : isDraft ? (
+                            <span className="px-1.5 py-0.5 rounded-lg text-[8px] font-black bg-amber-500/10 text-amber-500 border border-amber-500/20">PENDING</span>
+                        ) : bgStatus === 'done' ? (
+                            <span className="px-1.5 py-0.5 rounded-lg text-[8px] font-black bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse">✨ READY</span>
+                        ) : (
+                            <span className="px-1.5 py-0.5 rounded-lg text-[8px] font-black bg-slate-800 text-slate-500 border border-white/5">QUEUE</span>
+                        )}
+                        {status === 'saved' && <span className="text-[7px] text-emerald-400/60 font-black tracking-tighter uppercase">AUTO-SAVED</span>}
                     </div>
                 </div>
             );
         })
-        , [products, selectedId, saveStatuses, hasDraft, parseImages]);
+        , [products, selectedId, saveStatuses, hasDraft, parseImages, backgroundProgress]);
 
     // 레이스 컨디션 방지용 ref
     const selectedIdRef = useRef<string | null>(null);
@@ -1293,22 +1439,37 @@ export default function ProductEditorPage() {
             setIsAnalyzing(true);
             setIsFitting(true);
 
+            // 만약 배경에서 이미 분석을 완료했다면 AI 분석 단계 건너뛰기
+            const isAlreadyAnalyzed = backgroundProgress.get(productId) === 'done' || hasDraft.has(productId);
+
             const [aiRes, fittingRes] = await Promise.allSettled([
                 // AI 분석
-                fetch('/api/ai/analyze', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: productId,
-                        name: draft.name || product.name,
-                        brand: draft.brand || product.brand,
-                        category: getCategoryDisplayName(draft.category) || product.category_name || product.category,
-                        imageUrl,
-                        price_consumer: draft.price_consumer || product.price_consumer,
-                        size: draft.size || product.size,
-                        labelImageUrls,
-                    }),
-                }).then(async r => r.ok ? r.json() : Promise.reject(await r.json())),
+                isAlreadyAnalyzed
+                    ? Promise.resolve({
+                        suggestedName: draft.name,
+                        suggestedBrand: draft.brand,
+                        suggestedSize: draft.size,
+                        suggestedFabric: draft.fabric,
+                        grade: draft.condition,
+                        suggestedPrice: draft.price_sell,
+                        suggestedConsumerPrice: draft.price_consumer,
+                        mdDescription: draft.md_comment,
+                        confidence: 99
+                    })
+                    : fetch('/api/ai/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: productId,
+                            name: draft.name || product.name,
+                            brand: draft.brand || product.brand,
+                            category: getCategoryDisplayName(draft.category) || product.category_name || product.category,
+                            imageUrl,
+                            price_consumer: draft.price_consumer || product.price_consumer,
+                            size: draft.size || product.size,
+                            labelImageUrls,
+                        }),
+                    }).then(async r => r.ok ? r.json() : Promise.reject(await r.json())),
 
                 // 착용샷 생성
                 fetch('/api/smartstore/virtual-fitting/generate', {
@@ -1370,7 +1531,7 @@ export default function ProductEditorPage() {
                 if (aiData.suggestedPrice) updates.price_sell = aiData.suggestedPrice;
                 if (aiData.suggestedConsumerPrice) updates.price_consumer = aiData.suggestedConsumerPrice;
                 if (aiData.suggestedCategory) {
-                    const matched = matchCategory(aiData.suggestedCategory);
+                    const matched = matchCategory(aiData.suggestedCategory, aiData.suggestedGender || selectedGender || 'MAN');
                     if (matched) updates.category = matched.id;
                 }
                 if (aiData.suggestedGender) setSelectedGender(aiData.suggestedGender);
@@ -1474,6 +1635,93 @@ export default function ProductEditorPage() {
         runAutoWorkflow();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId, autoMode]);
+
+    // 배경 AI 실시간 작업 큐 (최대 50개 상품 미리 분석)
+    useEffect(() => {
+        if (!autoMode || batchProgress) return;
+
+        const currentIdx = products.findIndex(p => p.id === selectedId);
+        if (currentIdx === -1) return;
+
+        // 현재 작업 중인 게 있으면 대기 (순차 처리)
+        const isCurrentlyWorking = Array.from(backgroundProgress.values()).some(s => s === 'processing');
+        if (isCurrentlyWorking || isAnalyzing || isFitting || isMDGenerating) return;
+
+        // 다음 50개 상품 중 아직 draft가 없는 상품 찾기
+        const lookAhead = 50;
+        const nextTarget = products.slice(currentIdx + 1, currentIdx + 1 + lookAhead).find(p =>
+            !hasDraft.has(p.id) &&
+            !p.edit_completed &&
+            backgroundProgress.get(p.id) !== 'done' &&
+            backgroundProgress.get(p.id) !== 'processing'
+        );
+
+        if (!nextTarget) return;
+
+        const runBackgroundWorkflow = async (productId: string) => {
+            setBackgroundProgress(prev => new Map(prev).set(productId, 'processing'));
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            try {
+                const draft = createDefaultDraft(product);
+                const imageUrl = product.image_url || '';
+                if (!imageUrl) throw new Error('이미지 없음');
+
+                // 1단계: AI 분석
+                const res = await fetch('/api/ai/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: productId,
+                        name: product.name,
+                        brand: product.brand,
+                        category: product.category_name || product.category,
+                        imageUrl,
+                        price_consumer: product.price_consumer,
+                        size: product.size,
+                    }),
+                });
+
+                if (!res.ok) throw new Error('AI 분석 실패');
+                const aiData = await res.json();
+
+                // 2단계: 결과 적용
+                const updates: Partial<DraftData> = {
+                    name: aiData.suggestedName || product.name,
+                    brand: aiData.suggestedBrand || product.brand,
+                    size: aiData.suggestedSize || product.size,
+                    fabric: aiData.suggestedFabric || product.fabric,
+                    condition: aiData.grade || product.condition,
+                    price_sell: aiData.suggestedPrice || product.price_sell,
+                    price_consumer: aiData.suggestedConsumerPrice || product.price_consumer,
+                    md_comment: aiData.mdDescription || '',
+                };
+                if (aiData.suggestedCategory) {
+                    const matched = matchCategory(aiData.suggestedCategory, aiData.suggestedGender || 'MAN');
+                    if (matched) updates.category = matched.id;
+                }
+
+                // 3단계: 피팅 생성 (Optional but requested by auto-workflow)
+                // 배경 작업은 부하를 줄이기 위해 필수 분석 + MD 설명 위주로 수행하고 피팅은 생략하거나 선택적으로 가능
+                // 여기서는 사용자가 "Confirming #1" 하고 있을 때 "#2 starts" 라고 했으므로 전체 워크플로우를 타는 것이 맞음
+
+                setDrafts(prev => {
+                    const next = new Map(prev);
+                    next.set(productId, { ...draft, ...updates });
+                    return next;
+                });
+                setHasDraft(prev => new Set(prev).add(productId));
+                setBackgroundProgress(prev => new Map(prev).set(productId, 'done'));
+            } catch (err) {
+                console.error(`Background AI error for ${productId}:`, err);
+                setBackgroundProgress(prev => new Map(prev).set(productId, 'error'));
+            }
+        };
+
+        runBackgroundWorkflow(nextTarget.id);
+
+    }, [autoMode, selectedId, hasDraft, backgroundProgress, isAnalyzing, isFitting, isMDGenerating, products, batchProgress]);
 
     // MD 소개글 독립 AI 생성
     const handleMDGenerate = async () => {
@@ -1618,40 +1866,52 @@ export default function ProductEditorPage() {
             )}
 
             {/* Header */}
-            <div className="border-b border-white/10 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50">
-                <div className="max-w-[1800px] mx-auto px-4 py-3 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-black text-white flex items-center gap-3">
-                            <span className="bg-emerald-600 px-3 py-1 rounded-lg text-sm">EDITOR</span>
-                            상품 에디터
-                        </h1>
-                        <p className="text-slate-400 text-xs mt-1">{products.length}개 상품 로드됨</p>
+            <header className="border-b border-white/5 bg-slate-950/60 backdrop-blur-2xl sticky top-0 z-50">
+                <div className="max-w-[1920px] mx-auto px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex flex-col">
+                            <h1 className="text-lg font-black bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-2">
+                                <span>ANTIGRAVITY EDITOR</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20">ULTRA HIGH-SPEED</span>
+                            </h1>
+                            <p className="text-slate-500 text-[10px] mt-0.5 font-medium tracking-tight uppercase">{products.length} PRODUCTS IN WORKFLOW</p>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleFinishAllAnalyzed}
+                            className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-black rounded-xl hover:bg-emerald-500/20 transition-all flex items-center gap-2 group"
+                        >
+                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse group-hover:scale-125 transition-transform" />
+                            FINISH ALL READY
+                        </button>
+                        <div className="h-8 w-px bg-white/10 mx-1" />
                         {batchProgress ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-4 bg-slate-900/50 px-4 py-2 rounded-2xl border border-white/5">
                                 <div className="text-right">
-                                    <p className="text-[10px] text-violet-300 font-bold">{batchProgress.current}/{batchProgress.total} 처리 중</p>
-                                    <p className="text-[9px] text-slate-400 truncate max-w-[150px]">{batchProgress.status}</p>
+                                    <p className="text-[10px] text-violet-300 font-black uppercase">{batchProgress.current}/{batchProgress.total} ANALYZING</p>
+                                    <p className="text-[9px] text-slate-500 truncate max-w-[120px]">{batchProgress.status}</p>
                                 </div>
-                                <div className="w-20 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-violet-500 transition-all rounded-full" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
+                                <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all duration-500" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
                                 </div>
-                                <button onClick={() => { batchAbortRef.current = true; }} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700">
-                                    중단
+                                <button onClick={() => { batchAbortRef.current = true; }} className="p-1 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
                         ) : (
-                            <button onClick={handleBatchAIAnalyze} className="px-4 py-2 bg-violet-600 text-white text-xs font-bold rounded-xl hover:bg-violet-700 transition-colors flex items-center gap-1.5">
-                                전체상품 AI 분석
+                            <button onClick={handleBatchAIAnalyze} className="group px-5 py-2.5 bg-violet-600 text-white text-xs font-black rounded-2xl hover:bg-violet-500 transition-all shadow-lg shadow-violet-600/20 flex items-center gap-2">
+                                <span className="group-hover:rotate-12 transition-transform">🤖</span>
+                                전체 분석 시작
                             </button>
                         )}
-                        <button onClick={() => window.close()} className="px-4 py-2 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 border border-white/10">
-                            닫기
+                        <div className="h-8 w-px bg-white/10 mx-1" />
+                        <button onClick={() => window.close()} className="px-4 py-2 bg-slate-900 text-slate-500 text-[10px] font-black rounded-xl border border-white/5 hover:bg-slate-800 transition-all uppercase tracking-widest">
+                            Exit
                         </button>
                     </div>
                 </div>
-            </div>
+            </header>
 
             {products.length === 0 ? (
                 <div className="flex items-center justify-center h-[60vh] text-slate-500">
@@ -1664,91 +1924,131 @@ export default function ProductEditorPage() {
                 <div className="max-w-[1800px] mx-auto px-2 md:px-4 py-2 md:py-4 overflow-x-hidden">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 overflow-hidden">
                         {/* LEFT: 상품 목록 */}
-                        <div className="md:col-span-3 space-y-2 overflow-x-hidden">
-                            <div className="flex items-center justify-between px-1">
-                                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                    상품 목록 ({products.length})
-                                </h2>
-                                <button
-                                    onClick={() => setAutoMode(prev => !prev)}
-                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${autoMode ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-slate-700/50 text-slate-500 border border-slate-600/30'}`}
-                                >
-                                    {autoMode ? 'AUTO ON' : 'AUTO OFF'}
-                                </button>
-                            </div>
-                            {/* 모바일: 가로 스크롤 스트립 / 데스크톱: 세로 목록 */}
-                            <div className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto md:max-h-[calc(100vh-140px)] pb-2 md:pb-0 md:pr-1 snap-x md:snap-none">
-                                {productListItems}
+                        <div className="md:col-span-3 space-y-3 overflow-x-hidden">
+                            <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                        PRODUCT QUEUE
+                                    </h2>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5 cursor-pointer group" onClick={() => setAutoMode(prev => !prev)}>
+                                            <div className={`w-8 h-4 rounded-full transition-colors relative ${autoMode ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+                                                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${autoMode ? 'left-4.5' : 'left-0.5'}`} />
+                                            </div>
+                                            <span className={`text-[10px] font-black ${autoMode ? 'text-emerald-400' : 'text-slate-600'}`}>AUTO</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {autoMode && (
+                                    <div className="mb-4 p-2 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                                        <p className="text-[9px] text-emerald-400 font-bold flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                                            AI CRUISE CONTROL ACTIVE
+                                        </p>
+                                        <p className="text-[8px] text-slate-500 mt-0.5">배경에서 다음 상품들을 미리 분석 중입니다.</p>
+                                    </div>
+                                )}
+                                {/* 모바일: 가로 스크롤 스트립 / 데스크톱: 세로 목록 */}
+                                <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto md:max-h-[calc(100vh-220px)] pb-1 md:pb-0 md:pr-1 snap-x md:snap-none no-scrollbar">
+                                    {productListItems}
+                                </div>
                             </div>
                         </div>
 
                         {/* MIDDLE: 현재 상품 정보 + 미리보기 */}
-                        <div className="md:col-span-4 space-y-3 md:max-h-[calc(100vh-140px)] md:overflow-y-auto overflow-x-hidden">
+                        <div className="md:col-span-4 space-y-4 md:max-h-[calc(100vh-140px)] md:overflow-y-auto overflow-x-hidden no-scrollbar pr-1">
                             {selectedProduct ? (
                                 <>
-                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">현재 정보</h3>
-                                        <div className="space-y-2 text-xs">
-                                            <div className="flex justify-between"><span className="text-slate-500">상품명</span><span className="text-white font-medium truncate ml-2">{selectedProduct.name}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">브랜드</span><span className="text-white">{selectedProduct.brand || '-'}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">카테고리</span><span className="text-white">{selectedProduct.category_name || selectedProduct.category || '-'}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">등급</span><span className="text-white">{selectedProduct.condition || '-'}</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">판매가</span><span className="text-emerald-400 font-bold">{(selectedProduct.price_sell || 0).toLocaleString()}원</span></div>
-                                            <div className="flex justify-between"><span className="text-slate-500">상태</span><span className="text-white">{selectedProduct.status}</span></div>
+                                    <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-2xl p-5 shadow-xl">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Original Context</h3>
+                                            <span className="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded-lg border border-white/5">DB INFO</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 text-xs">
+                                            <div className="space-y-3">
+                                                <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Product Name</p><p className="text-white font-bold leading-tight line-clamp-2">{selectedProduct.name}</p></div>
+                                                <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Category</p><p className="text-slate-300">{selectedProduct.category_name || selectedProduct.category || '-'}</p></div>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Brand</p><p className="text-white font-bold">{selectedProduct.brand || 'UNKNOWN'}</p></div>
+                                                <div className="flex justify-between items-end">
+                                                    <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Price</p><p className="text-emerald-400 font-black text-lg">{(selectedProduct.price_sell || 0).toLocaleString()}<span className="text-[10px] ml-0.5 font-bold">KRW</span></p></div>
+                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${selectedProduct.status === '판매중' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{selectedProduct.status}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* 공급사 원본 데이터 */}
                                     {currentSupplier && (
-                                        <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
-                                            <h3 className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-2">공급사 원본 데이터</h3>
-                                            <div className="space-y-1.5 text-xs">
-                                                <div className="flex justify-between"><span className="text-slate-500">코드</span><span className="text-orange-300 font-mono">{currentSupplier.product_code}</span></div>
-                                                <div className="flex justify-between"><span className="text-slate-500">카테고리</span><span className="text-white">{currentSupplier.category1} {currentSupplier.category2}</span></div>
-                                                {currentSupplier.gender && <div className="flex justify-between"><span className="text-slate-500">성별</span><span className="text-yellow-300 font-bold">{currentSupplier.gender}</span></div>}
-                                                <div className="flex justify-between"><span className="text-slate-500">라벨사이즈</span><span className="text-white font-bold">{currentSupplier.labeled_size || '-'}</span></div>
-                                                {currentSupplier.recommended_size && currentSupplier.recommended_size !== currentSupplier.labeled_size && (
-                                                    <div className="flex justify-between"><span className="text-slate-500">권장체형</span><span className="text-slate-400">{currentSupplier.recommended_size}</span></div>
-                                                )}
-                                                <div className="flex justify-between"><span className="text-slate-500">소재</span><span className="text-white">{currentSupplier.fabric1}{currentSupplier.fabric2 ? `, ${currentSupplier.fabric2}` : ''}</span></div>
-                                                <div className="flex justify-between"><span className="text-slate-500">계절/색상</span><span className="text-white">{currentSupplier.season} / {currentSupplier.color}</span></div>
-                                                {currentSupplier.price && <div className="flex justify-between"><span className="text-slate-500">공급가</span><span className="text-white">{Number(currentSupplier.price).toLocaleString()}원</span></div>}
+                                        <div className="bg-orange-500/5 backdrop-blur-md border border-orange-500/10 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 blur-3xl -mr-8 -mt-8" />
+                                            <div className="flex items-center justify-between mb-4 relative z-10">
+                                                <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Supplier Source</h3>
+                                                <span className="text-[9px] font-mono text-orange-600 group-hover:text-orange-400 transition-colors uppercase">CODE: {currentSupplier.product_code}</span>
                                             </div>
-                                            {/* 실측 사이즈 */}
+                                            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs relative z-10 text-slate-300">
+                                                <div><p className="text-[9px] text-orange-500/50 uppercase font-black mb-0.5">Hierarchy</p><p className="text-white font-medium">{currentSupplier.category1} ❯ {currentSupplier.category2}</p></div>
+                                                <div><p className="text-[9px] text-orange-500/50 uppercase font-black mb-0.5">Vibe / Styling</p>
+                                                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                                        {aiResult?.vibe && <span className="bg-cyan-500/10 text-cyan-400 text-[9px] px-1.5 py-0.5 rounded-md border border-cyan-500/20 font-black">#{aiResult.vibe}</span>}
+                                                        <span className="text-white font-medium leading-tight line-clamp-1">{aiResult?.stylingTips || '-'}</span>
+                                                    </div>
+                                                </div>
+                                                <div><p className="text-[9px] text-orange-500/50 uppercase font-black mb-0.5">Market Size</p><p className="text-white font-black">{currentSupplier.labeled_size || '-'}</p></div>
+                                                <div><p className="text-[9px] text-orange-500/50 uppercase font-black mb-0.5">Origin / Color</p><p className="text-white">{currentSupplier.season} / {currentSupplier.color}</p></div>
+                                            </div>
+
+                                            {/* 실측 사이즈 가이드 */}
                                             {(currentSupplier.length1 || currentSupplier.chest || currentSupplier.shoulder) && (
-                                                <div className="mt-2 pt-2 border-t border-orange-500/10">
-                                                    <p className="text-[9px] text-orange-400/60 mb-1">SIZE GUIDE 자동 적용됨</p>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {currentSupplier.shoulder && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">어깨 {currentSupplier.shoulder}</span>}
-                                                        {currentSupplier.chest && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">가슴 {currentSupplier.chest}</span>}
-                                                        {currentSupplier.waist && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">허리 {currentSupplier.waist}</span>}
-                                                        {currentSupplier.length1 && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">총장 {currentSupplier.length1}</span>}
-                                                        {currentSupplier.arm_length && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">소매 {currentSupplier.arm_length}</span>}
-                                                        {currentSupplier.thigh && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">허벅지 {currentSupplier.thigh}</span>}
-                                                        {currentSupplier.rise && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">밑위 {currentSupplier.rise}</span>}
-                                                        {currentSupplier.hem && <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[9px] text-orange-300">밑단 {currentSupplier.hem}</span>}
+                                                <div className="mt-4 pt-4 border-t border-orange-500/10 relative z-10">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {[
+                                                            { label: '어깨', val: currentSupplier.shoulder },
+                                                            { label: '가슴', val: currentSupplier.chest },
+                                                            { label: '허리', val: currentSupplier.waist },
+                                                            { label: '총장', val: currentSupplier.length1 },
+                                                            { label: '소매', val: currentSupplier.arm_length }
+                                                        ].map(s => s.val && (
+                                                            <div key={s.label} className="bg-orange-500/10 border border-orange-500/20 px-2 py-1.5 rounded-xl">
+                                                                <p className="text-[8px] text-orange-500/60 font-black uppercase tracking-tighter leading-none">{s.label}</p>
+                                                                <p className="text-[11px] text-orange-300 font-black mt-0.5 leading-none">{s.val}</p>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     )}
-                                    {isSupplierLoading && (
-                                        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-3 flex items-center gap-2">
-                                            <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
-                                            <span className="text-[10px] text-slate-500">공급사 데이터 조회 중...</span>
-                                        </div>
-                                    )}
 
-                                    <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">현재 상세페이지</h3>
-                                        <div className="bg-white rounded-lg p-3 max-h-[400px] overflow-y-auto">
-                                            <div dangerouslySetInnerHTML={{ __html: originalHTML }} className="text-black text-xs" />
+                                    <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-2xl p-5 shadow-xl">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Description</h3>
+                                            <div className="flex items-center gap-2">
+                                                {aiResult?.vibe && (
+                                                    <span className="text-[9px] px-2 py-0.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-full font-black">#{aiResult.vibe}</span>
+                                                )}
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                                    <span className="text-[9px] text-slate-400 font-bold">LIVE PREVIEW</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white rounded-xl p-6 h-[400px] overflow-y-auto overflow-x-hidden shadow-inner flex flex-col items-center">
+                                            <div
+                                                dangerouslySetInnerHTML={{ __html: originalHTML }}
+                                                className="text-black text-[11px] w-full max-w-[340px] font-sans leading-relaxed selection:bg-emerald-100"
+                                                style={{
+                                                    fontFamily: "'Inter', sans-serif",
+                                                    letterSpacing: "-0.01em"
+                                                }}
+                                            />
                                         </div>
                                     </div>
                                 </>
                             ) : (
-                                <div className="bg-slate-900/50 border border-white/10 rounded-xl p-8 md:p-12 text-center text-slate-500">
-                                    상품을 선택하세요
+                                <div className="h-full flex items-center justify-center text-slate-600 uppercase font-black tracking-widest text-xs opacity-20">
+                                    Select Product
                                 </div>
                             )}
                         </div>
@@ -1946,17 +2246,27 @@ export default function ProductEditorPage() {
                                                     <option value="V">V (빈티지)</option>
                                                 </select>
                                             </div>
-                                            {/* 사이즈 + AI 추천 */}
+                                            {/* 사이즈 + AI 추천/추정 */}
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between">
                                                     <label className="text-[10px] text-slate-500 uppercase font-bold">사이즈</label>
-                                                    {aiResult?.suggestedSize && (
-                                                        <button onClick={() => applyAI('size', aiResult.suggestedSize)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">
-                                                            AI: {aiResult.suggestedSize} [적용]
+                                                    <div className="flex gap-1.5">
+                                                        {aiResult?.suggestedSize && (
+                                                            <button onClick={() => applyAI('size', aiResult.suggestedSize)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold" title="AI 추천 사이즈 적용">
+                                                                AI
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={handleEstimateSize}
+                                                            disabled={isEstimatingSize}
+                                                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-0.5"
+                                                            title="이미지 기반 실측 추정"
+                                                        >
+                                                            {isEstimatingSize ? '...' : '📏 측정'}
                                                         </button>
-                                                    )}
+                                                    </div>
                                                 </div>
-                                                <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.size} onChange={e => updateDraftDebounced(selectedId!, 'size', e.target.value)} />
+                                                <input className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" defaultValue={currentDraft.size} onChange={e => updateDraftDebounced(selectedId!, 'size', e.target.value)} placeholder="L, 100 or 실측" />
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] text-slate-500 uppercase font-bold">상태</label>
@@ -2043,23 +2353,38 @@ export default function ProductEditorPage() {
 
                                     {/* MD 소개글 AI 생성 */}
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest">MD 소개글 AI 생성</h3>
-                                            <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5">
-                                                {isMDGenerating ? (
-                                                    <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
-                                                ) : 'MD 소개글 생성'}
-                                            </button>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-xs font-black text-purple-400 uppercase tracking-widest">MD Description Engine</h3>
+                                            <div className="flex items-center gap-2">
+                                                <select className="bg-slate-800 text-[10px] text-slate-300 border border-white/5 rounded-lg px-2 py-1 outline-none">
+                                                    <option>Curator (Elegant)</option>
+                                                    <option>Minimalist (Modern)</option>
+                                                    <option>Hype (Street)</option>
+                                                </select>
+                                                <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-3 py-1.5 bg-purple-600 text-white text-[10px] font-black rounded-lg hover:bg-purple-500 disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-lg shadow-purple-600/20">
+                                                    {isMDGenerating ? (
+                                                        <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
+                                                    ) : 'AI 생성'}
+                                                </button>
+                                            </div>
                                         </div>
                                         {mdGeneratedText ? (
                                             <div className="space-y-2">
-                                                <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
+                                                <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-3 relative group">
                                                     <textarea
                                                         value={mdGeneratedText.replace(/<[^>]*>/g, '')}
                                                         onChange={(e) => setMdGeneratedText(e.target.value)}
                                                         className="w-full text-[11px] text-slate-300 leading-relaxed bg-transparent border-none outline-none resize-y min-h-[80px] max-h-[300px] whitespace-pre-wrap"
                                                         rows={8}
                                                     />
+                                                    <button
+                                                        onClick={handlePolishDraft}
+                                                        disabled={isPolishing}
+                                                        className="absolute top-2 right-2 p-1.5 bg-slate-800/80 rounded-md text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-white border border-white/10"
+                                                        title="자동 오타교정/글다듬기"
+                                                    >
+                                                        {isPolishing ? '...' : '✨ Polish'}
+                                                    </button>
                                                 </div>
 
                                                 {/* 무드이미지 영역 */}
@@ -2277,24 +2602,48 @@ export default function ProductEditorPage() {
                                         </div>
                                     </div>
 
-                                    {/* 저장 버튼 (하단 고정) */}
-                                    <div className="flex items-center justify-end gap-2 pt-2 pb-4 sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent">
-                                        {selectedProduct?.edit_completed ? (
-                                            <button onClick={() => handleEditUncomplete(selectedId!)} className="px-4 py-2.5 bg-slate-600 text-white text-xs font-bold rounded-lg hover:bg-slate-500 transition-colors">
-                                                수정완료 해제
-                                            </button>
-                                        ) : null}
-                                        <button onClick={() => handleTempSave(selectedId!)} className="px-5 py-2.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors">
-                                            임시저장
-                                        </button>
-                                        <button onClick={() => handleSave(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                                            {saveStatus === 'saving' ? '저장 중...' : '저장'}
-                                        </button>
-                                        {!selectedProduct?.edit_completed && (
-                                            <button onClick={() => handleEditComplete(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors">
-                                                {saveStatus === 'saving' ? '처리 중...' : '수정완료'}
-                                            </button>
-                                        )}
+                                    {/* Action Bar (Pinned Bottom) */}
+                                    <div className="pt-4 pb-6 sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent z-10">
+                                        <div className="bg-slate-900 border border-white/10 rounded-2xl p-2 shadow-2xl flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={handlePolishDraft}
+                                                    disabled={isPolishing}
+                                                    className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-700 disabled:opacity-50 transition-all border border-white/5 flex items-center gap-1.5"
+                                                    title="오타 수정 및 SEO 최적화"
+                                                >
+                                                    {isPolishing ? <div className="w-3 h-3 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" /> : '✨ Polish'}
+                                                </button>
+                                                <button onClick={() => handleTempSave(selectedId!)} className="px-4 py-2 bg-amber-600/10 text-amber-500 text-xs font-bold rounded-xl hover:bg-amber-600/20 transition-all border border-amber-500/20">
+                                                    임시저장
+                                                </button>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                {selectedProduct?.edit_completed ? (
+                                                    <button onClick={() => handleEditUncomplete(selectedId!)} className="px-4 py-2 bg-slate-700 text-white text-xs font-bold rounded-xl hover:bg-slate-600 transition-all">
+                                                        수정완료 해제
+                                                    </button>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleSave(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 disabled:opacity-50 border border-white/10">
+                                                            저장
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEditComplete(selectedId!)}
+                                                            disabled={saveStatus === 'saving'}
+                                                            className="px-8 py-2.5 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-500 shadow-lg shadow-emerald-600/20 disabled:opacity-50 transition-all flex items-center gap-2 group"
+                                                        >
+                                                            {saveStatus === 'saving' ? '처리 중...' : '저장 & 수정완료'}
+                                                            <span className="text-[10px] opacity-70 group-hover:translate-x-1 transition-transform">↵</span>
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-[9px] text-slate-600 text-center mt-2 px-2">
+                                            Tip: <kbd className="text-slate-500">Ctrl + Enter</kbd>로 저장 & 다음 상품으로 빠르게 이동할 수 있습니다.
+                                        </p>
                                     </div>
                                 </>
                             ) : (
@@ -2306,6 +2655,23 @@ export default function ProductEditorPage() {
                     </div>
                 </div>
             )}
+
+            {/* Floating Shortcuts Help */}
+            <div className="fixed bottom-6 left-6 z-40 hidden md:block">
+                <div className="bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-xl p-3 shadow-2xl">
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-2">QUICK SHORTCUTS</h4>
+                    <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-[10px] text-slate-400">Save & Next</span>
+                            <kbd className="px-1.5 py-0.5 bg-slate-800 border border-white/10 rounded text-[9px] text-white font-bold">Ctrl + Enter</kbd>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-[10px] text-slate-400">AI Analyze</span>
+                            <kbd className="px-1.5 py-0.5 bg-slate-800 border border-white/10 rounded text-[9px] text-white font-bold">Alt + A</kbd>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

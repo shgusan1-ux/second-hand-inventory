@@ -34,6 +34,8 @@ export interface AIAnalysisResult {
     suggestedFabric: string;
     suggestedCategory: string;
     suggestedGender: string;
+    vibe?: string;
+    stylingTips?: string;
 }
 
 /**
@@ -51,6 +53,8 @@ export async function analyzeProductImage(imageUrl: string, currentName: string,
     suggestedCategory: string;
     suggestedGender: string;
     suggestedConsumerPrice: number;
+    vibe: string;
+    stylingTips: string;
 }> {
     try {
         const hasLabels = labelImageUrls && labelImageUrls.length > 0;
@@ -90,7 +94,7 @@ ${hasLabels ? `★ 중요: 첫 번째 이미지는 상품 사진이고, 이후 �
    - "UNIQLO 유니클로 치노 팬츠 MAN-M" ← 특징이 없음, 색상/소재 없음
    - "NIKE 나이키 후드티 MAN-L" ← 색상/디테일 없음
    성별은 MAN/WOMAN/KIDS/UNISEX 중 하나, 사이즈는 라벨 표기 기준.
-5. suggestedBrand: 브랜드명 (로고나 텍스트로 식별, 식별 불가시 "Generic" 또는 공란)
+5. suggestedBrand: 브랜드명 (로고나 텍스트로 식별. 만약 식별이 불가능하거나 브랜드가 모호할(VARIOUS 등) 경우, 옷의 분위기에 맞춰 "JAPAN ARCHIVE", "EUROPEAN VINTAGE", "US VINTAGE", "VINTAGE SELECTION", "PARIS ARCHIVE", "TOKYO SELECTION" 등 매력적인 가상의 아카이브 명칭 중 하나를 선정하세요. 절대 "VARIOUS", "Generic", "Unknown", "공란"으로 적지 마세요.)
 6. suggestedSize: 사이즈 - **반드시 아래 규칙 준수**
    ★ 최우선: 라벨/태그에 적힌 표기 그대로 사용 (예: "L", "M", "95", "100")
    ★ 라벨이 안 보이면: 상품명에 이미 포함된 사이즈 표기 그대로 사용
@@ -106,7 +110,7 @@ ${hasLabels ? `★ 중요: 첫 번째 이미지는 상품 사진이고, 이후 �
 
    ★ 식별 불가시 공란
 
-7. suggestedFabric: 원단/소재 ${hasLabels ? '(★ 라벨/세탁택 이미지에서 읽은 정확한 소재 구성을 기재. 예: "면 100%", "폴리에스터 65% 면 35%", "울 80% 나일론 20%")' : '(라벨 텍스트 또는 재질감 추정, 예: "면 100%", "폴리에스터 혼방")'}
+7. suggestedFabric: 원단/소재 (라벨/세탁택에 일본어(綿, 毛 등)나 한자가 있을 경우 반드시 한국어(면, 모 등)로 번역하여 기재하세요. 예: "綿 100%" → "면 100%", "毛 100%" → "모 100%". 소재 구성을 정확히 기재하세요. 예: "면 100%", "폴리에스터 65% 면 35%", "울 80% 나일론 20%")
 8. suggestedCategory: 카테고리 (다음 중 하나: 코트, 재킷, 블레이저, 패딩, 사파리, 아우터, 셔츠, 데님셔츠, 블라우스, 니트, 가디건, 니트/가디건, 맨투맨, 맨투맨/후드맨투맨, 후드/맨투맨, 후드집업/후리스, 티셔츠, 반팔 티셔츠, 1/2 티셔츠, 1/2 셔츠, 원피스, 스커트, 팬츠, 데님팬츠, 1/2 팬츠, 스포츠, 가방, 모자, 신발, 머플러,스카프,행거치프, 넥타이, 벨트 및 기타, 양말, 타월, 악세사리)
 9. suggestedGender: 성별 판별 (MAN / WOMAN / KIDS / UNISEX 중 하나. 옷의 디자인, 핏, 라벨 표기 등으로 판별)
 10. suggestedConsumerPrice: 소비자가 추천 (새제품 정가의 약 70% 가격을 추천. 브랜드와 카테고리를 고려하여 이 상품이 새것일 때의 정상판매가를 추정하고, 그것의 70%를 원 단위로 반올림하여 제시. 예: 새제품 정가 100,000원이면 소비자가 70,000원)
@@ -188,6 +192,8 @@ ${hasLabels ? `★ 중요: 첫 번째 이미지는 상품 사진이고, 이후 �
             suggestedCategory: result.suggestedCategory || '',
             suggestedGender: result.suggestedGender || '',
             suggestedConsumerPrice: result.suggestedConsumerPrice || 0,
+            vibe: result.vibe || '',
+            stylingTips: result.stylingTips || '',
         };
     } catch (error) {
         console.error('Image analysis error:', error);
@@ -202,6 +208,8 @@ ${hasLabels ? `★ 중요: 첫 번째 이미지는 상품 사진이고, 이후 �
             suggestedCategory: '',
             suggestedGender: '',
             suggestedConsumerPrice: 0,
+            vibe: '',
+            stylingTips: '',
         };
     }
 }
@@ -338,16 +346,19 @@ export async function generateMDDescription(product: {
 # 출력 구조 (섹션 제목은 반드시 아래 영어 그대로 사용)
 
 [Brand Heritage]
-(브랜드의 역사, 패션사 내 위상, 이 라인/컬렉션의 의미)
+(브랜드의 역사적 배경, 패션사에서의 상징성, 이 시기/컬렉션의 희소성을 컬렉터에게 설명하여 소유욕을 자극하세요)
 
 [Detail Guide]
-(이미지에서 확인되는 소재감, 봉제 방식, 디테일 포인트, 에이징 상태)
+(관찰된 소재의 질감, 에이징 상태, 단추/지퍼/포켓 등 디테일의 만듦새를 정밀하게 묘사하세요)
+
+[Styling Point]
+(이 상품을 현대적으로 어떻게 코디하면 좋을지, 어떤 무드로 완성되는지 감각적으로 제안하세요)
 
 [Archive Value]
-(이 상품의 투자 가치, 희소성, 컬렉터 관점에서의 매력)
+(시간이 흐를수록 가치가 높아지는 이유, 소장 가치, 투자가치 관점에서의 매력을 강조하세요)
 
 [Collector's Comment]
-(감성적인 한 줄 평)`;
+(이 옷을 만났을 때의 감동을 담은 짧고 여운 있는 한 문장)`;
 
         // 이미지 Vision 분석 (상품 사진 + label 이미지 직접 확인)
         const parts: any[] = [{ text: prompt }];
@@ -674,11 +685,87 @@ export async function analyzeProductComplete(product: {
         suggestedFabric: imageAnalysisResult.suggestedFabric,
         suggestedCategory: imageAnalysisResult.suggestedCategory,
         suggestedGender: imageAnalysisResult.suggestedGender,
+        vibe: imageAnalysisResult.vibe,
+        stylingTips: imageAnalysisResult.stylingTips,
     };
 }
 
+/**
+ * 6. 최종 퀄리티 체크 및 교정 (Spelling & Tone Polish)
+ * 저장 전 마지막으로 오타, 문법, 톤을 점검하고 보정합니다.
+ */
+export async function polishProductDraft(draft: {
+    name: string;
+    brand: string;
+    md_comment: string;
+    fabric: string;
+    size: string;
+}): Promise<{
+    polishedName: string;
+    polishedMD: string;
+    polishedFabric: string;
+    corrections: string[];
+}> {
+    try {
+        const prompt = `
+당신은 의류 커머스 전문 카피라이터이자 교정 전문가입니다.
+다음 상품 데이터를 분석하여 '오타 수정', '문법 교정', '판매 매력도 향상'을 처리해주세요.
+
+[데이터]
+상품명: ${draft.name}
+브랜드: ${draft.brand}
+MD소개글: ${draft.md_comment}
+원단: ${draft.fabric}
+사이즈: ${draft.size}
+
+[수칙]
+1. 모든 오타를 수정하세요 (특히 브랜드명, 소재 명칭).
+2. "綿 100%" 같은 일본어/오타는 반드시 "면 100%"로 교정하세요.
+3. MD소개글의 말투를 우아하고 전문적인 '큐레이터' 톤으로 유지하되, 문장이 매끄럽지 않은 부분을 다듬으세요.
+4. 상품명을 SEO에 최적화되면서도 읽기 좋게 다듬으세요.
+5. 수정된 사항이 있다면 'corrections' 배열에 간단히 적어주세요.
+
+다음 JSON 형식으로만 답변하세요:
+{
+  "polishedName": "...",
+  "polishedMD": "...",
+  "polishedFabric": "...",
+  "corrections": ["오타 수정: ...", "문법 교정: ..."]
+}
+`;
+
+        const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim();
+        const result = JSON.parse(jsonStr);
+
+        return {
+            polishedName: result.polishedName || draft.name,
+            polishedMD: result.polishedMD || draft.md_comment,
+            polishedFabric: result.polishedFabric || draft.fabric,
+            corrections: result.corrections || []
+        };
+    } catch (error) {
+        console.error('Polish draft error:', error);
+        return {
+            polishedName: draft.name,
+            polishedMD: draft.md_comment,
+            polishedFabric: draft.fabric,
+            corrections: []
+        };
+    }
+}
+
 // 헬퍼 함수들
-async function fetchImageAsBase64(url: string): Promise<string> {
+export async function fetchImageAsBase64(url: string): Promise<string> {
     const response = await fetch(url);
     const buffer = await response.arrayBuffer();
     return Buffer.from(buffer).toString('base64');
