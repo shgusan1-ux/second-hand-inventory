@@ -7,7 +7,63 @@
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v22.0';
 
-// 환경변수에서 설정 로드
+// DB 캐시 (서버 프로세스 내 메모리 캐시, 5분)
+let _dbConfigCache: { data: any; fetchedAt: number } | null = null;
+const DB_CACHE_TTL = 5 * 60 * 1000;
+
+/**
+ * DB에서 Meta 설정을 로드 (system_settings 테이블)
+ * 환경변수보다 DB 설정이 우선
+ */
+export async function getConfigFromDB(): Promise<{
+    accessToken: string;
+    appId: string;
+    appSecret: string;
+    pageId: string;
+    igAccountId: string;
+}> {
+    // 메모리 캐시 체크
+    if (_dbConfigCache && (Date.now() - _dbConfigCache.fetchedAt < DB_CACHE_TTL)) {
+        return _dbConfigCache.data;
+    }
+
+    const envConfig = {
+        accessToken: process.env.META_ACCESS_TOKEN || '',
+        appId: process.env.META_APP_ID || '',
+        appSecret: process.env.META_APP_SECRET || '',
+        pageId: process.env.META_PAGE_ID || '',
+        igAccountId: process.env.META_IG_ACCOUNT_ID || '',
+    };
+
+    try {
+        const { db } = await import('./db');
+        const res = await db.query("SELECT value FROM system_settings WHERE key = 'meta_config'");
+        if (res.rows.length > 0) {
+            const dbConfig = JSON.parse(res.rows[0].value);
+            const merged = {
+                accessToken: dbConfig.accessToken || envConfig.accessToken,
+                appId: dbConfig.appId || envConfig.appId,
+                appSecret: dbConfig.appSecret || envConfig.appSecret,
+                pageId: dbConfig.pageId || envConfig.pageId,
+                igAccountId: dbConfig.igAccountId || envConfig.igAccountId,
+            };
+            _dbConfigCache = { data: merged, fetchedAt: Date.now() };
+            return merged;
+        }
+    } catch (e) {
+        // DB 접근 실패 시 환경변수 fallback
+    }
+
+    _dbConfigCache = { data: envConfig, fetchedAt: Date.now() };
+    return envConfig;
+}
+
+/** DB 캐시 무효화 (설정 저장 후 호출) */
+export function invalidateConfigCache() {
+    _dbConfigCache = null;
+}
+
+// 환경변수에서 설정 로드 (동기, 빠른 접근용)
 function getConfig() {
     return {
         accessToken: process.env.META_ACCESS_TOKEN || '',
@@ -67,7 +123,7 @@ export interface MetaAccountStatus {
  * 액세스 토큰 유효성 + 정보 확인
  */
 export async function debugToken(accessToken?: string): Promise<MetaTokenInfo> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     const token = accessToken || config.accessToken;
     if (!token) return { isValid: false, error: '토큰이 설정되지 않았습니다' };
 
@@ -102,7 +158,7 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
     expiresIn?: number;
     error?: string;
 }> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     if (!config.appId || !config.appSecret) {
         return { error: 'META_APP_ID와 META_APP_SECRET이 필요합니다' };
     }
@@ -136,7 +192,7 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
  * 연결된 Facebook 페이지 목록 + 각 페이지의 Instagram 비즈니스 계정 조회
  */
 export async function getPages(accessToken?: string): Promise<MetaPageInfo[]> {
-    const token = accessToken || getConfig().accessToken;
+    const token = accessToken || (await getConfigFromDB()).accessToken;
     if (!token) return [];
 
     try {
@@ -168,7 +224,7 @@ export async function getPages(accessToken?: string): Promise<MetaPageInfo[]> {
  * 전체 연결 상태 확인 (UI에서 사용)
  */
 export async function getAccountStatus(): Promise<MetaAccountStatus> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     if (!config.accessToken) {
         return {
             connected: false,
@@ -228,7 +284,7 @@ export async function postToFacebook(options: {
     imageUrl?: string;
     link?: string;
 }): Promise<MetaPostResult> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     const pages = await getPages();
     const page = config.pageId
         ? pages.find(p => p.id === config.pageId)
@@ -303,7 +359,7 @@ export async function postToInstagram(options: {
     imageUrl: string;     // 공개 접근 가능한 이미지 URL (필수)
     caption: string;      // 캡션 + 해시태그
 }): Promise<MetaPostResult> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     const pages = await getPages();
     const page = config.pageId
         ? pages.find(p => p.id === config.pageId)
@@ -397,7 +453,7 @@ export async function postToInstagram(options: {
 export async function postToInstagramStory(options: {
     imageUrl: string;
 }): Promise<MetaPostResult> {
-    const config = getConfig();
+    const config = await getConfigFromDB();
     const pages = await getPages();
     const page = config.pageId
         ? pages.find(p => p.id === config.pageId)

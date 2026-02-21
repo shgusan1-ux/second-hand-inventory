@@ -1254,6 +1254,105 @@ export async function testSmartStoreConnection() {
         return { success: false, error: e.message || '연동 테스트 중 오류가 발생했습니다.' };
     }
 }
+
+// --- Meta API (Facebook/Instagram) Config Actions ---
+
+export async function saveMetaConfig(formData: FormData) {
+    const session = await getSession();
+    if (!session || (session.job_title !== '대표자' && session.job_title !== '경영지원' && session.job_title !== '총매니저')) {
+        return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const accessToken = formData.get('accessToken') as string;
+    const appId = formData.get('appId') as string;
+    const appSecret = formData.get('appSecret') as string;
+    const pageId = formData.get('pageId') as string;
+    const igAccountId = formData.get('igAccountId') as string;
+
+    if (!accessToken) {
+        return { success: false, error: 'Access Token을 입력해주세요.' };
+    }
+
+    try {
+        const config = { accessToken, appId, appSecret, pageId, igAccountId };
+        await db.query(
+            `INSERT INTO system_settings(key, value) VALUES('meta_config', $1)
+             ON CONFLICT(key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
+            [JSON.stringify(config)]
+        );
+
+        await logAction('UPDATE_CONFIG', 'system', 'meta', 'Updated Meta API credentials');
+        revalidatePath('/settings/meta');
+        return { success: true };
+    } catch (e) {
+        console.error('Save meta config failed:', e);
+        return { success: false, error: '설정 저장 실패' };
+    }
+}
+
+export async function getMetaConfig() {
+    const session = await getSession();
+    if (!session) return null;
+
+    try {
+        const res = await db.query("SELECT value FROM system_settings WHERE key = 'meta_config'");
+        if (res.rows.length > 0) {
+            return JSON.parse(res.rows[0].value);
+        }
+        return null;
+    } catch (e) {
+        console.error('Get meta config failed:', e);
+        return null;
+    }
+}
+
+export async function testMetaConnection() {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    try {
+        const { debugToken, getPages } = await import('./meta-api');
+        const tokenInfo = await debugToken();
+        if (!tokenInfo.isValid) {
+            return { success: false, error: `토큰 무효: ${tokenInfo.error}` };
+        }
+
+        const pages = await getPages();
+        return {
+            success: true,
+            message: `연동 성공! (${tokenInfo.type} 토큰, 권한 ${tokenInfo.scopes?.length || 0}개)`,
+            pages: pages.map(p => ({
+                id: p.id,
+                name: p.name,
+                igId: p.instagram_business_account?.id,
+                igUsername: p.instagram_business_account?.username,
+            })),
+            scopes: tokenInfo.scopes,
+            expiresAt: tokenInfo.expiresAt,
+        };
+    } catch (e: any) {
+        console.error('Meta connection test failed:', e);
+        return { success: false, error: e.message || '연동 테스트 중 오류가 발생했습니다.' };
+    }
+}
+
+export async function getSnsPosts(limit = 20) {
+    const session = await getSession();
+    if (!session) return { posts: [] };
+
+    try {
+        const res = await db.query(
+            `SELECT id, platform, post_id, post_url, message, image_url, status, created_at
+             FROM sns_posts ORDER BY created_at DESC LIMIT $1`,
+            [limit]
+        );
+        return { posts: res.rows };
+    } catch (e) {
+        console.error('Get SNS posts failed:', e);
+        return { posts: [] };
+    }
+}
+
 // --- SmartStore AI Category Approval Actions ---
 
 export async function getPendingAiSuggestions() {

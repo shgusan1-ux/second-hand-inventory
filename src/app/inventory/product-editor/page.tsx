@@ -2173,6 +2173,18 @@ export default function ProductEditorPage() {
 
                                     {/* 편집 폼 */}
                                     <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 space-y-3" key={`${selectedId}-${formKey}`}>
+                                        {/* 자체상품코드 */}
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] text-slate-500 uppercase font-black">자체상품코드</label>
+                                                <span className="text-[9px] text-slate-600 font-mono">PRODUCT ID</span>
+                                            </div>
+                                            <div className="bg-slate-950/50 border border-white/5 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono select-all flex items-center justify-between group">
+                                                {selectedId}
+                                                <span className="text-[8px] text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity uppercase font-bold">Click to select all</span>
+                                            </div>
+                                        </div>
+
                                         {/* 상품명 + AI 추천 */}
                                         <div className="space-y-1">
                                             <div className="flex items-center justify-between">

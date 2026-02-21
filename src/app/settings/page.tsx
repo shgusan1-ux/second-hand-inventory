@@ -33,6 +33,34 @@ export default async function SettingsPage() {
                 <div className="space-y-6">
                     <PasswordChangeForm />
 
+                    {/* 외부 API 연동 설정 */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>외부 연동</CardTitle>
+                            <CardDescription>외부 플랫폼 API 연결 설정</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <Link href="/settings/smartstore" className="block">
+                                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 transition-colors">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">스마트스토어 API</p>
+                                        <p className="text-xs text-slate-500">네이버 커머스 API 연동</p>
+                                    </div>
+                                    <span className="text-slate-400 text-sm">→</span>
+                                </div>
+                            </Link>
+                            <Link href="/settings/meta" className="block">
+                                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 transition-colors">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">Meta API</p>
+                                        <p className="text-xs text-slate-500">Facebook / Instagram 자동 게시</p>
+                                    </div>
+                                    <span className="text-slate-400 text-sm">→</span>
+                                </div>
+                            </Link>
+                        </CardContent>
+                    </Card>
+
                     <Card className="opacity-75">
                         <CardHeader>
                             <CardTitle>시스템 정보</CardTitle>
