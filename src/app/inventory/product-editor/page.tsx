@@ -2387,15 +2387,17 @@ export default function ProductEditorPage() {
                                         <div className="flex items-center justify-between mb-4">
                                             <h3 className="text-xs font-black text-purple-400 uppercase tracking-widest">MD Description Engine</h3>
                                             <div className="flex items-center gap-2">
-                                                <select className="bg-slate-800 text-[10px] text-slate-300 border border-white/5 rounded-lg px-2 py-1 outline-none">
-                                                    <option>Curator (Elegant)</option>
-                                                    <option>Minimalist (Modern)</option>
-                                                    <option>Hype (Street)</option>
-                                                </select>
-                                                <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-3 py-1.5 bg-purple-600 text-white text-[10px] font-black rounded-lg hover:bg-purple-500 disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-lg shadow-purple-600/20">
+                                                <button onClick={handleMDGenerate} disabled={isMDGenerating} className="px-4 py-2 bg-purple-600 text-white text-[11px] font-black rounded-xl hover:bg-purple-500 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-purple-600/30">
                                                     {isMDGenerating ? (
-                                                        <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> 생성 중...</>
-                                                    ) : 'AI 생성'}
+                                                        <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> 작성 중...</>
+                                                    ) : (
+                                                        <>
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                            </svg>
+                                                            고품질 AI 생성
+                                                        </>
+                                                    )}
                                                 </button>
                                             </div>
                                         </div>
@@ -2445,8 +2447,9 @@ export default function ProductEditorPage() {
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="bg-slate-800 rounded-lg h-16 flex items-center justify-center text-slate-600 text-xs">
-                                                Gemini AI가 브랜드 헤리티지, 디테일 가이드, 아카이브 밸류를 분석하여 소개글을 작성합니다
+                                            <div className="bg-slate-800/50 rounded-xl h-20 flex flex-col items-center justify-center text-slate-500 text-[10px] border border-white/5 space-y-1">
+                                                <p className="font-bold uppercase tracking-tighter opacity-50">Claude 3.5 Sonnet Engine</p>
+                                                <p className="text-slate-600">브랜드 헤리티지, 디테일 가이드, 아카이브 밸류를 분석하여 작성합니다</p>
                                             </div>
                                         )}
                                     </div>
