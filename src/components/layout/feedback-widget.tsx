@@ -19,7 +19,7 @@ export function FeedbackWidget() {
     const [imageFile, setImageFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [data, setData] = useState({
-        type: 'BUG' as FeedbackType,
+        type: 'FEATURE' as FeedbackType,
         title: '',
         content: ''
     });
@@ -82,19 +82,7 @@ export function FeedbackWidget() {
 
     return (
         <>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-                <Button
-                    onClick={() => {
-                        setData({ ...data, type: 'BUG' });
-                        setIsOpen(true);
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="justify-start gap-2 bg-slate-950 border-slate-800 text-slate-300 hover:text-rose-400 hover:border-rose-900/50 h-9"
-                >
-                    <Bug className="w-4 h-4" />
-                    <span>버그 신고</span>
-                </Button>
+            <div className="grid grid-cols-1 gap-2 mb-2">
                 <Button
                     onClick={() => {
                         setData({ ...data, type: 'FEATURE' });
@@ -102,10 +90,10 @@ export function FeedbackWidget() {
                     }}
                     variant="outline"
                     size="sm"
-                    className="justify-start gap-2 bg-slate-950 border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-900/50 h-9"
+                    className="justify-center gap-2 bg-slate-950 border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-900/50 h-9"
                 >
                     <Lightbulb className="w-4 h-4" />
-                    <span>기능 제안</span>
+                    <span>시스템 기능 제안하기</span>
                 </Button>
             </div>
 
@@ -132,12 +120,6 @@ export function FeedbackWidget() {
                                     <SelectValue placeholder="유형 선택" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                                    <SelectItem value="BUG">
-                                        <div className="flex items-center gap-2">
-                                            <Bug className="w-4 h-4 text-rose-400" />
-                                            <span>버그신고</span>
-                                        </div>
-                                    </SelectItem>
                                     <SelectItem value="FEATURE">
                                         <div className="flex items-center gap-2">
                                             <Lightbulb className="w-4 h-4 text-amber-400" />

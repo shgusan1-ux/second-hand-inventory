@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AttendanceClockWidget } from './attendance-clock-widget';
 import { ChatWidget } from './chat-widget';
 import { FeedbackWidget } from './feedback-widget';
-import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Database, MessageSquare, Bot } from 'lucide-react';
+import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarChart3, Megaphone, Archive, ShoppingBag, Users, LogOut, LogIn, Briefcase, Lock, Truck, CreditCard, Shield, Database, MessageSquare, Bot, Bug } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ const salesHub = [
     { name: '공급사 원본DB', href: '/admin/supplier', icon: Database, newWindow: true },
     { name: '반품 관리', href: '/inventory-management/returns', icon: RotateCcw },
     { name: '통계/분석', href: '/statistics', icon: BarChart3 },
+    { name: 'SNS 마케팅', href: '/tools/sns-marketing', icon: Megaphone },
 ];
 
 // 2. Management Hub (관리 사이트)
@@ -37,7 +38,7 @@ const managementHub = [
     { name: '임직원 소통', href: '/members', icon: Users },
     { name: '경영지원', href: '/business', icon: Briefcase },
     { name: '보안/계정관리', href: '/security', icon: Lock },
-    { name: '개선/버그 관리', href: '/admin/feedback', icon: MessageSquare, adminOnly: true },
+    { name: '버그 및 기술 이슈 관리', href: '/admin/bugs', icon: Bug, adminOnly: true },
 ];
 
 // 3. Manuals

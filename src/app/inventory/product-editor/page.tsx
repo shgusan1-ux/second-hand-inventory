@@ -211,6 +211,21 @@ export default function ProductEditorPage() {
         }
     }, [products]);
 
+    // 선택한 상품의 카테고리에 맞춰 성별(대분류) 자동 동기화
+    useEffect(() => {
+        if (!selectedId || categories.length === 0) return;
+        const draft = drafts.get(selectedId);
+        const product = products.find(p => p.id === selectedId);
+        const currentCatId = draft?.category || product?.category;
+
+        if (currentCatId) {
+            const cat = categories.find(c => String(c.id) === String(currentCatId));
+            if (cat?.classification) {
+                setSelectedGender(cat.classification);
+            }
+        }
+    }, [selectedId, categories, drafts, products]);
+
     // 선택된 상품
     const selectedProduct = useMemo(() =>
         products.find(p => p.id === selectedId) || null
@@ -1967,7 +1982,17 @@ export default function ProductEditorPage() {
                                         <div className="grid grid-cols-2 gap-4 text-xs">
                                             <div className="space-y-3">
                                                 <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Product Name</p><p className="text-white font-bold leading-tight line-clamp-2">{selectedProduct.name}</p></div>
-                                                <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Category</p><p className="text-slate-300">{selectedProduct.category_name || selectedProduct.category || '-'}</p></div>
+                                                <div>
+                                                    <p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Category / Group</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-slate-300">{selectedProduct.category_name || selectedProduct.category || '-'}</p>
+                                                        {selectedGender && (
+                                                            <span className="bg-emerald-500/10 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded-md border border-emerald-500/20 font-black">
+                                                                {selectedGender}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="space-y-3">
                                                 <div><p className="text-[10px] text-slate-500 uppercase font-black mb-0.5">Brand</p><p className="text-white font-bold">{selectedProduct.brand || 'UNKNOWN'}</p></div>
@@ -2200,12 +2225,18 @@ export default function ProductEditorPage() {
                                                                 key={g}
                                                                 type="button"
                                                                 onClick={() => setSelectedGender(selectedGender === g ? '' : g)}
-                                                                className={`px-2 py-2 md:py-1.5 text-[11px] md:text-[10px] font-bold rounded-lg border transition-all ${selectedGender === g
-                                                                    ? colorMap[g] || 'bg-emerald-600 border-emerald-500 text-white'
-                                                                    : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
+                                                                className={`px-3 py-2 md:py-1.5 text-[11px] md:text-[10px] font-black rounded-xl border transition-all relative ${selectedGender === g
+                                                                    ? `${colorMap[g] || 'bg-emerald-600 border-emerald-500 text-white'} shadow-lg shadow-current/20 ring-2 ring-white/20 select-none scale-105 z-10`
+                                                                    : 'bg-slate-900 border-white/5 text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                                                                     }`}
                                                             >
-                                                                {g}<span className="ml-0.5 text-[8px] opacity-70">({count})</span>
+                                                                {selectedGender === g && (
+                                                                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-white/80"></span>
+                                                                    </span>
+                                                                )}
+                                                                {g}<span className="ml-1 text-[8px] opacity-60">({count})</span>
                                                             </button>
                                                         );
                                                     })}

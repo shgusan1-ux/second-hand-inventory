@@ -505,8 +505,41 @@ export async function initDatabase() {
         expires_at TIMESTAMP -- For temporary alerts like deployment
       )
     `);
+
+    // 버그 신고 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        user_name TEXT,
+        page_url TEXT,
+        user_agent TEXT,
+        content TEXT NOT NULL,
+        console_logs TEXT, -- JSON string of captured errors
+        status TEXT DEFAULT 'pending', -- pending, reviewing, fixed, closed
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read)`);
+
+    // SNS 게시 이력 테이블
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS sns_posts (
+        id TEXT PRIMARY KEY,
+        platform TEXT NOT NULL,
+        post_id TEXT,
+        post_url TEXT,
+        message TEXT,
+        image_url TEXT,
+        status TEXT DEFAULT 'published',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_sns_posts_platform ON sns_posts(platform)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_sns_posts_created ON sns_posts(created_at)`);
 
     console.log('✅ DB 초기화 완료');
     isInitialized = true;
