@@ -12,8 +12,8 @@
 // Gemini API 설정
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-// MD코멘트 전용 고품질 모델 (Gemini 2.5 Flash)
-const GEMINI_MD_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent';
+// MD코멘트 전용 고품질 모델 (Gemini 1.5 Pro) - 사용자 Pro 요금제 최적화
+const GEMINI_MD_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
 
 // Replicate API 설정 (가상 피팅용)
 const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';
