@@ -10,7 +10,7 @@ import { AlertCircle, FileSpreadsheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input'; // Added Input import
 
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 import { ensureBrand } from '@/lib/brand-extractor';
 
 export function CornerLogisImportForm() {
@@ -77,7 +77,8 @@ export function CornerLogisImportForm() {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
+            const XLSX = await import('xlsx');
             const bstr = evt.target?.result;
             const wb = XLSX.read(bstr, { type: 'binary' });
             const wsname = wb.SheetNames[0];

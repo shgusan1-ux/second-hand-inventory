@@ -22,6 +22,7 @@ interface ProductData {
     md_comment: string;
     master_reg_date: string;
     category_classification?: string;
+    edit_completed?: number;
 }
 
 interface DraftData {
@@ -99,6 +100,10 @@ export default function ProductEditorPage() {
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null); // 전체 AI 배치 진행
     const batchAbortRef = useRef(false); // 배치 중단 플래그
     const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview'); // 새 상세페이지 미리보기 모드
+    const [autoMode, setAutoMode] = useState(false); // 자동 AI 워크플로우 on/off (기본 OFF)
+    const autoWorkflowRef = useRef<string | null>(null); // 현재 자동 워크플로우 진행 중인 상품 ID
+    const autoAbortRef = useRef<AbortController | null>(null); // 자동 워크플로우 API 중단용
+    const originalProductsRef = useRef<Map<string, string[]>>(new Map()); // 에디터 진입 시 원본 이미지 보관
 
     // cleanup: 디바운스 타이머 해제 + 좌우 스크롤 방지
     useEffect(() => {
@@ -121,6 +126,17 @@ export default function ProductEditorPage() {
                 const parsed = JSON.parse(data);
                 setProducts(parsed);
                 if (parsed.length > 0) setSelectedId(parsed[0].id);
+                // 원본 이미지 보관 (초기화용)
+                for (const p of parsed) {
+                    try {
+                        const imgs = typeof p.images === 'string' ? JSON.parse(p.images) : p.images;
+                        if (Array.isArray(imgs) && imgs.length > 0) {
+                            originalProductsRef.current.set(p.id, imgs.filter(Boolean));
+                        } else if (p.image_url) {
+                            originalProductsRef.current.set(p.id, p.image_url.split(',').map((s: string) => s.trim()).filter(Boolean));
+                        }
+                    } catch { }
+                }
             } catch { }
             sessionStorage.removeItem('product-editor-data');
         }
@@ -428,6 +444,73 @@ export default function ProductEditorPage() {
         }
     };
 
+    // 수정완료 처리 (저장 + edit_completed 마킹)
+    const handleEditComplete = async (id: string) => {
+        const product = products.find(p => p.id === id);
+        if (!product) return;
+        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+        let draft = getCurrentDraft(product);
+        const pending = pendingDraftRef.current.get(id);
+        if (pending) {
+            draft = { ...draft, ...pending } as DraftData;
+            pendingDraftRef.current.delete(id);
+        }
+        flushPendingDrafts();
+
+        setSaveStatuses(prev => new Map(prev).set(id, 'saving'));
+        try {
+            const res = await fetch('/api/inventory/products/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, ...draft, edit_completed: true }),
+            });
+            if (res.ok) {
+                setSaveStatuses(prev => new Map(prev).set(id, 'saved'));
+                localStorage.removeItem(`product-draft-${id}`);
+                setHasDraft(prev => { const next = new Set(prev); next.delete(id); return next; });
+                setProducts(prev => prev.map(p => p.id === id ? {
+                    ...p, ...draft,
+                    image_url: draft.images[0] || '',
+                    images: JSON.stringify(draft.images),
+                    edit_completed: 1,
+                } : p));
+                toast.success(`${draft.name} 수정완료 처리됨`);
+                // 다음 미완료 상품으로 자동 이동
+                const currentIdx = products.findIndex(p => p.id === id);
+                const nextIncomplete = products.find((p, i) => i > currentIdx && !p.edit_completed);
+                if (nextIncomplete) {
+                    setSelectedId(nextIncomplete.id);
+                } else if (products.length === 1) {
+                    setTimeout(() => window.close(), 800);
+                }
+            } else {
+                const data = await res.json();
+                setSaveStatuses(prev => new Map(prev).set(id, 'error'));
+                toast.error(`저장 실패: ${data.error}`);
+            }
+        } catch (err: any) {
+            setSaveStatuses(prev => new Map(prev).set(id, 'error'));
+            toast.error(`저장 오류: ${err.message}`);
+        }
+    };
+
+    // 수정완료 해제
+    const handleEditUncomplete = async (id: string) => {
+        try {
+            const res = await fetch('/api/inventory/products/update-field', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, edit_completed: 0 }),
+            });
+            if (res.ok) {
+                setProducts(prev => prev.map(p => p.id === id ? { ...p, edit_completed: 0 } : p));
+                toast.success('수정완료 해제됨 — 다시 편집할 수 있습니다');
+            }
+        } catch (err: any) {
+            toast.error(`해제 실패: ${err.message}`);
+        }
+    };
+
     // 임시저장 (pending 디바운스 데이터 병합)
     const handleTempSave = (id: string) => {
         const product = products.find(p => p.id === id);
@@ -495,7 +578,8 @@ export default function ProductEditorPage() {
                         const event = JSON.parse(line.slice(6));
                         if (event.type === 'result' && event.resultUrl) {
                             setFittingImage(event.resultUrl);
-                            setFittingApplied('none');
+                            setFittingAsThumbnailDone(false);
+                            setFittingAsImageDone(false);
                             toast.success('모델착용샷 생성 완료!');
                         } else if (event.type === 'error') {
                             toast.error(`피팅 실패: ${event.reason || event.message}`);
@@ -769,7 +853,55 @@ export default function ProductEditorPage() {
         setFormKey(k => k + 1);
     };
 
-    // 피팅 이미지를 상품 이미지 1번(상세 첫번째)에 추가
+    // 이미지 초기화 (최초 이미지 상태로 복원)
+    const resetImagesToOriginal = () => {
+        if (!selectedId) return;
+
+        // 1순위: 공급사 원본 이미지
+        const supplier = supplierData.get(selectedId);
+        if (supplier?.image_urls) {
+            try {
+                const supplierImages: string[] = JSON.parse(supplier.image_urls).filter(Boolean);
+                if (supplierImages.length > 0) {
+                    updateDraft(selectedId, 'images', supplierImages);
+                    setBadgePreview(null);
+                    setOriginalImage0(null);
+                    setFormKey(k => k + 1);
+                    toast.success(`이미지 초기화 완료 (공급사 원본 ${supplierImages.length}장)`);
+                    return;
+                }
+            } catch { }
+        }
+
+        // 2순위: 에디터 진입 시 보관한 원본 이미지
+        const originalImages = originalProductsRef.current.get(selectedId);
+        if (originalImages && originalImages.length > 0) {
+            updateDraft(selectedId, 'images', [...originalImages]);
+            setBadgePreview(null);
+            setOriginalImage0(null);
+            setFormKey(k => k + 1);
+            toast.success(`이미지 초기화 완료 (원본 ${originalImages.length}장)`);
+            return;
+        }
+
+        // 3순위: 현재 products 배열의 원본 데이터
+        const product = products.find(p => p.id === selectedId);
+        if (product) {
+            const imgs = parseImages(product);
+            if (imgs.length > 0) {
+                updateDraft(selectedId, 'images', imgs);
+                setBadgePreview(null);
+                setOriginalImage0(null);
+                setFormKey(k => k + 1);
+                toast.success(`이미지 초기화 완료 (DB 원본 ${imgs.length}장)`);
+                return;
+            }
+        }
+
+        toast.error('복원할 원본 이미지가 없습니다');
+    };
+
+    // 피팅 이미지를 상세설명 1번째(images[1])에 삽입 — images[0]은 뱃지/썸네일 원본
     const addFittingToImages = () => {
         if (!fittingImage || !selectedId) return;
         if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
@@ -780,7 +912,11 @@ export default function ProductEditorPage() {
             const product = products.find(p => p.id === id);
             if (!product) return prev;
             const current = prev.get(id) || createDefaultDraft(product);
-            const newImages = [fitImg, ...current.images.filter(img => img && img !== fitImg)];
+            // 중복 제거 후 images[0] 유지, images[1]에 피팅 이미지 삽입
+            const filtered = current.images.filter(img => img && img !== fitImg);
+            const first = filtered[0] || '';
+            const rest = filtered.slice(1);
+            const newImages = [first, fitImg, ...rest];
             const next = new Map(prev);
             next.set(id, { ...current, images: newImages });
             return next;
@@ -788,7 +924,7 @@ export default function ProductEditorPage() {
         setHasDraft(prev => new Set(prev).add(id));
         setFormKey(k => k + 1);
         setFittingAsImageDone(true);
-        toast.success('상세 이미지 1번에 추가됨');
+        toast.success('상세설명 1번째 이미지에 추가됨');
     };
 
     // 착용샷을 대표이미지(썸네일)로 설정
@@ -1014,6 +1150,7 @@ export default function ProductEditorPage() {
                         <p className="text-[9px] md:text-[10px] text-slate-500 mt-0.5 hidden md:block">{product.id} | {(product.price_sell || 0).toLocaleString()}원</p>
                     </div>
                     <div className="flex md:flex-col items-center md:items-end gap-0.5 flex-shrink-0">
+                        {product.edit_completed ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-500/20 text-violet-400">완료</span> : null}
                         {status === 'saved' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">저장됨</span>}
                         {status === 'saving' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400">저장중</span>}
                         {status === 'error' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400">오류</span>}
@@ -1077,9 +1214,15 @@ export default function ProductEditorPage() {
         }
     }, []);
 
-    // 선택된 상품 변경 시 피팅/AI/MD 결과 초기화 (뱃지는 수동 생성)
+    // 선택된 상품 변경 시 피팅/AI/MD 결과 초기화 + 이전 자동 워크플로우 중단
     useEffect(() => {
         selectedIdRef.current = selectedId;
+        // 이전 자동 워크플로우 중단
+        if (autoAbortRef.current) {
+            autoAbortRef.current.abort();
+            autoAbortRef.current = null;
+        }
+        autoWorkflowRef.current = null;
         setFittingImage(null);
         setAiResult(null);
         setBadgePreview(null);
@@ -1105,6 +1248,232 @@ export default function ProductEditorPage() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId]);
+
+    // 자동 AI 워크플로우: 상품 선택 → AI분석 + 착용샷 동시 → AI적용 + MD생성 → MD삽입
+    useEffect(() => {
+        if (!autoMode || !selectedId || !selectedProduct) return;
+        // edit_completed 상품은 자동 워크플로우 건너뜀
+        if (selectedProduct.edit_completed) return;
+        // 이미 이 상품에 대해 진행 중이면 건너뜀
+        if (autoWorkflowRef.current === selectedId) return;
+
+        const productId = selectedId;
+        autoWorkflowRef.current = productId;
+
+        const runAutoWorkflow = async () => {
+            // 잠시 대기 (UI 렌더링 + supplierData 로드 대기)
+            await new Promise(r => setTimeout(r, 500));
+            if (selectedIdRef.current !== productId) return;
+
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            const draft = drafts.get(productId) || createDefaultDraft(product);
+            const imageUrl = draft.images[0] || product.image_url || '';
+            if (!imageUrl) return;
+
+            toast.info('자동 AI 워크플로우 시작...');
+
+            // 1단계: AI 분석 + 착용샷 동시 시작
+            const supplier = supplierData.get(productId);
+            const labelImageUrls: string[] = supplier?.label_image
+                ? supplier.label_image.split('|').map((u: string) => u.trim()).filter(Boolean)
+                : [];
+
+            // 성별 자동 감지
+            let gender = selectedGender || 'MAN';
+            if (supplier?.gender) {
+                const g = supplier.gender.toUpperCase();
+                if (['MAN', 'WOMAN', 'KIDS'].includes(g)) gender = g;
+                else if (g === '남성' || g === '남자') gender = 'MAN';
+                else if (g === '여성' || g === '여자') gender = 'WOMAN';
+                else if (g === '키즈' || g === '아동') gender = 'KIDS';
+            }
+
+            setIsAnalyzing(true);
+            setIsFitting(true);
+
+            const [aiRes, fittingRes] = await Promise.allSettled([
+                // AI 분석
+                fetch('/api/ai/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: productId,
+                        name: draft.name || product.name,
+                        brand: draft.brand || product.brand,
+                        category: getCategoryDisplayName(draft.category) || product.category_name || product.category,
+                        imageUrl,
+                        price_consumer: draft.price_consumer || product.price_consumer,
+                        size: draft.size || product.size,
+                        labelImageUrls,
+                    }),
+                }).then(async r => r.ok ? r.json() : Promise.reject(await r.json())),
+
+                // 착용샷 생성
+                fetch('/api/smartstore/virtual-fitting/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        products: [{
+                            originProductNo: productId,
+                            name: draft.name || product.name,
+                            imageUrl,
+                            archiveCategory: product.category_name,
+                            gender,
+                        }],
+                        modelChoice: fittingModel,
+                        syncToNaver: false,
+                    }),
+                }).then(async r => {
+                    const reader = r.body?.getReader();
+                    if (!reader) throw new Error('스트림 불가');
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let resultUrl = '';
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+                        for (const line of lines) {
+                            if (!line.startsWith('data: ')) continue;
+                            try {
+                                const event = JSON.parse(line.slice(6));
+                                if (event.type === 'result' && event.resultUrl) resultUrl = event.resultUrl;
+                                else if (event.type === 'error') throw new Error(event.reason || event.message);
+                            } catch (e: any) { if (e.message) throw e; }
+                        }
+                    }
+                    if (!resultUrl) throw new Error('착용샷 URL 없음');
+                    return resultUrl;
+                }),
+            ]);
+
+            if (selectedIdRef.current !== productId) return; // 다른 상품으로 전환됨
+
+            // 2단계: AI 분석 결과 처리
+            let aiData: any = null;
+            if (aiRes.status === 'fulfilled') {
+                aiData = aiRes.value;
+                setAiResult(aiData);
+                setIsAnalyzing(false);
+
+                // 자동 적용 (applyAllAI 로직 인라인)
+                const updates: Partial<DraftData> = {};
+                if (aiData.suggestedName) updates.name = aiData.suggestedName;
+                if (aiData.suggestedBrand) updates.brand = aiData.suggestedBrand;
+                if (aiData.suggestedSize) updates.size = aiData.suggestedSize;
+                if (aiData.suggestedFabric) updates.fabric = aiData.suggestedFabric;
+                if (aiData.grade) updates.condition = aiData.grade;
+                if (aiData.suggestedPrice) updates.price_sell = aiData.suggestedPrice;
+                if (aiData.suggestedConsumerPrice) updates.price_consumer = aiData.suggestedConsumerPrice;
+                if (aiData.suggestedCategory) {
+                    const matched = matchCategory(aiData.suggestedCategory);
+                    if (matched) updates.category = matched.id;
+                }
+                if (aiData.suggestedGender) setSelectedGender(aiData.suggestedGender);
+
+                setDrafts(prev => {
+                    const next = new Map(prev);
+                    const current = prev.get(productId) || createDefaultDraft(product);
+                    next.set(productId, { ...current, ...updates });
+                    return next;
+                });
+                setHasDraft(prev => new Set(prev).add(productId));
+                setFormKey(k => k + 1);
+                setAiApplied(true);
+                toast.success(`AI 분석 완료 → 자동 적용됨`);
+
+                // 뱃지 자동 재생성 (등급 적용 후)
+                if (aiData.grade) {
+                    setBadgePreview(null);
+                    autoGenerateBadge(imageUrl, aiData.grade, productId);
+                }
+            } else {
+                setIsAnalyzing(false);
+                toast.error(`AI 분석 실패: ${(aiRes as PromiseRejectedResult).reason?.error || '알 수 없음'}`);
+            }
+
+            // 착용샷 결과 처리
+            if (fittingRes.status === 'fulfilled') {
+                const fitUrl = fittingRes.value as string;
+                setFittingImage(fitUrl);
+                setFittingAsThumbnailDone(false);
+                setFittingAsImageDone(false);
+                setIsFitting(false);
+                toast.success('모델착용샷 생성 완료!');
+            } else {
+                setIsFitting(false);
+                toast.error(`착용샷 실패: ${(fittingRes as PromiseRejectedResult).reason?.message || '알 수 없음'}`);
+            }
+
+            if (selectedIdRef.current !== productId) return;
+
+            // 3단계: MD 소개글 자동 생성 (AI 분석 결과 적용 후)
+            if (aiData) {
+                setIsMDGenerating(true);
+                setMdGeneratedText(null);
+                setMdInserted(false);
+                try {
+                    const latestDraft = (() => {
+                        // updates 적용 후의 draft를 재계산
+                        const base = drafts.get(productId) || createDefaultDraft(product);
+                        const updates2: any = {};
+                        if (aiData.suggestedName) updates2.name = aiData.suggestedName;
+                        if (aiData.suggestedBrand) updates2.brand = aiData.suggestedBrand;
+                        if (aiData.suggestedSize) updates2.size = aiData.suggestedSize;
+                        if (aiData.suggestedFabric) updates2.fabric = aiData.suggestedFabric;
+                        if (aiData.grade) updates2.condition = aiData.grade;
+                        return { ...base, ...updates2 };
+                    })();
+
+                    const mdRes = await fetch('/api/ai/md-generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: latestDraft.name || product.name,
+                            brand: latestDraft.brand || product.brand,
+                            category: getCategoryDisplayName(latestDraft.category) || product.category_name || product.category,
+                            condition: latestDraft.condition || product.condition,
+                            size: latestDraft.size || product.size,
+                            fabric: latestDraft.fabric || product.fabric,
+                            imageUrl,
+                        }),
+                    });
+
+                    if (selectedIdRef.current !== productId) return;
+
+                    if (mdRes.ok) {
+                        const mdData = await mdRes.json();
+                        setMdGeneratedText(mdData.mdDescription);
+
+                        // 4단계: MD 코멘트 자동 삽입
+                        if (mdData.mdDescription) {
+                            updateDraft(productId, 'md_comment', mdData.mdDescription);
+                            setFormKey(k => k + 1);
+                            setMdInserted(true);
+                            toast.success('MD 소개글 생성 + 자동 삽입 완료!');
+                        }
+                    } else {
+                        toast.error('MD 소개글 생성 실패');
+                    }
+                } catch (err: any) {
+                    toast.error(`MD 생성 오류: ${err.message}`);
+                } finally {
+                    setIsMDGenerating(false);
+                }
+            }
+
+            if (selectedIdRef.current === productId) {
+                autoWorkflowRef.current = null; // 완료
+            }
+        };
+
+        runAutoWorkflow();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedId, autoMode]);
 
     // MD 소개글 독립 AI 생성
     const handleMDGenerate = async () => {
@@ -1296,9 +1665,17 @@ export default function ProductEditorPage() {
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 overflow-hidden">
                         {/* LEFT: 상품 목록 */}
                         <div className="md:col-span-3 space-y-2 overflow-x-hidden">
-                            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">
-                                상품 목록 ({products.length})
-                            </h2>
+                            <div className="flex items-center justify-between px-1">
+                                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                    상품 목록 ({products.length})
+                                </h2>
+                                <button
+                                    onClick={() => setAutoMode(prev => !prev)}
+                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${autoMode ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-slate-700/50 text-slate-500 border border-slate-600/30'}`}
+                                >
+                                    {autoMode ? 'AUTO ON' : 'AUTO OFF'}
+                                </button>
+                            </div>
                             {/* 모바일: 가로 스크롤 스트립 / 데스크톱: 세로 목록 */}
                             <div className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto md:max-h-[calc(100vh-140px)] pb-2 md:pb-0 md:pr-1 snap-x md:snap-none">
                                 {productListItems}
@@ -1380,6 +1757,15 @@ export default function ProductEditorPage() {
                         <div className="md:col-span-5 space-y-3 md:max-h-[calc(100vh-140px)] md:overflow-y-auto overflow-x-hidden">
                             {selectedProduct && currentDraft ? (
                                 <>
+                                    {/* 수정완료 상품 안내 배너 */}
+                                    {selectedProduct.edit_completed ? (
+                                        <div className="bg-violet-500/10 border border-violet-500/30 rounded-xl p-3 flex items-center justify-between">
+                                            <span className="text-xs text-violet-300 font-bold">이 상품은 수정완료 처리되었습니다. 수정이 필요하면 &quot;수정완료 해제&quot; 후 편집하세요.</span>
+                                            <button onClick={() => handleEditUncomplete(selectedId!)} className="px-3 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-lg hover:bg-violet-500 transition-colors flex-shrink-0 ml-3">
+                                                수정완료 해제
+                                            </button>
+                                        </div>
+                                    ) : null}
                                     {/* AI 상품분석 (최상단) */}
                                     <div className="bg-slate-900/50 border border-cyan-500/30 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
@@ -1876,7 +2262,7 @@ export default function ProductEditorPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        {/* 뱃지 재생성 버튼 */}
+                                        {/* 뱃지 재생성 + 초기화 버튼 */}
                                         <div className="flex items-center gap-2 mt-2">
                                             <button onClick={() => handleBadgeGenerate(true)} disabled={isBadgeProcessing} className="px-3 py-1 bg-sky-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors flex items-center gap-1">
                                                 {isBadgeProcessing ? '생성 중...' : '빠른 뱃지'}
@@ -1884,18 +2270,31 @@ export default function ProductEditorPage() {
                                             <button onClick={() => handleBadgeGenerate(false)} disabled={isBadgeProcessing} className="px-3 py-1 bg-orange-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center gap-1">
                                                 {isBadgeProcessing ? '생성 중...' : '배경제거+뱃지'}
                                             </button>
+                                            <button onClick={resetImagesToOriginal} className="px-3 py-1 bg-red-600/80 text-white text-[10px] font-bold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1">
+                                                초기화
+                                            </button>
                                             <span className="text-[10px] text-slate-600">빠른 뱃지: 즉시 / 배경제거: 30초~</span>
                                         </div>
                                     </div>
 
                                     {/* 저장 버튼 (하단 고정) */}
                                     <div className="flex items-center justify-end gap-2 pt-2 pb-4 sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent">
+                                        {selectedProduct?.edit_completed ? (
+                                            <button onClick={() => handleEditUncomplete(selectedId!)} className="px-4 py-2.5 bg-slate-600 text-white text-xs font-bold rounded-lg hover:bg-slate-500 transition-colors">
+                                                수정완료 해제
+                                            </button>
+                                        ) : null}
                                         <button onClick={() => handleTempSave(selectedId!)} className="px-5 py-2.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-colors">
                                             임시저장
                                         </button>
                                         <button onClick={() => handleSave(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                                             {saveStatus === 'saving' ? '저장 중...' : '저장'}
                                         </button>
+                                        {!selectedProduct?.edit_completed && (
+                                            <button onClick={() => handleEditComplete(selectedId!)} disabled={saveStatus === 'saving'} className="px-5 py-2.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors">
+                                                {saveStatus === 'saving' ? '처리 중...' : '수정완료'}
+                                            </button>
+                                        )}
                                     </div>
                                 </>
                             ) : (

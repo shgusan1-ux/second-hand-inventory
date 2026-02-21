@@ -7,7 +7,7 @@ import { bulkCreateProducts } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, FileSpreadsheet, Upload, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 import { ensureBrand } from '@/lib/brand-extractor';
 
 export function BulkProductForm() {
@@ -35,6 +35,7 @@ export function BulkProductForm() {
         setError('');
 
         try {
+            const XLSX = await import('xlsx');
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data);
             const sheetName = workbook.SheetNames[0];

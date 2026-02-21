@@ -44,6 +44,13 @@ export default async function RootLayout({
           </AppShell>
           <Toaster position="top-center" richColors />
         </Providers>
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+          }
+        `}} />
       </body>
     </html>
   );

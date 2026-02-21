@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 import { bulkUpdateFromExcel } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 
@@ -50,8 +50,9 @@ export function BulkUpdateExcelDialog() {
     const parseExcel = (file: File): Promise<any[]> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
+                    const XLSX = await import('xlsx');
                     const data = e.target?.result;
                     const workbook = XLSX.read(data, { type: 'binary' });
                     const sheetName = workbook.SheetNames[0];

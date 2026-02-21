@@ -11,6 +11,14 @@ import { LayoutDashboard, Package, PlusCircle, Settings, Shirt, RotateCcw, BarCh
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/lib/actions';
+import { useQueryClient } from '@tanstack/react-query';
+
+// 호버 시 React Query 데이터 prefetch (페이지 전환 즉시 렌더)
+const prefetchMap: Record<string, () => Promise<any>> = {
+    '/inventory': () => fetch('/api/inventory/list?limit=50').then(r => r.json()),
+    '/smartstore': () => fetch('/api/smartstore/products?limit=50').then(r => r.json()),
+    '/statistics': () => fetch('/api/naver/stats').then(r => r.json()),
+};
 
 // 1. Sales Hub (판매 사이트)
 const salesHub = [
@@ -41,6 +49,18 @@ const manuals = [
 export function Sidebar({ user }: { user?: any }) {
     const pathname = usePathname();
     const isAdmin = user && ['대표자', '경영지원'].includes(user.job_title);
+    const queryClient = useQueryClient();
+
+    const handlePrefetch = (href: string) => {
+        const fetcher = prefetchMap[href];
+        if (fetcher) {
+            queryClient.prefetchQuery({
+                queryKey: ['prefetch', href],
+                queryFn: fetcher,
+                staleTime: 60 * 1000,
+            });
+        }
+    };
 
     return (
         <div className="flex h-full w-64 flex-col bg-slate-900 text-white">
@@ -60,6 +80,7 @@ export function Sidebar({ user }: { user?: any }) {
                                 key={item.name}
                                 href={item.href}
                                 target={item.newWindow ? '_blank' : undefined}
+                                onMouseEnter={() => handlePrefetch(item.href)}
                                 className={cn(
                                     'group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
                                     isActive

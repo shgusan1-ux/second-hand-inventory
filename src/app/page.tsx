@@ -291,17 +291,6 @@ export default async function DashboardPage() {
       {/* 사업 로드맵 마인드맵 */}
       <RoadmapMindmap isAdmin={session.role === 'admin'} />
 
-      {/* Footer */}
-      <footer className="mt-auto py-6 border-t border-slate-200 dark:border-slate-700">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          <p>© 2024 브라운스트리트 산업 주식회사</p>
-          <div className="flex gap-6">
-            <a href="#" className="hover:text-slate-900 dark:hover:text-white transition-colors">개인정보처리방침</a>
-            <a href="#" className="hover:text-slate-900 dark:hover:text-white transition-colors">이용약관</a>
-            <a href="#" className="hover:text-slate-900 dark:hover:text-white transition-colors">공장 현황</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

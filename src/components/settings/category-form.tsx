@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { addCategory, deleteCategory, bulkCreateCategories, updateCategory } from '@/lib/actions';
 import { Trash2, Plus, FileSpreadsheet, Upload, Edit, Save, X, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 
 interface Category {
     id: string;
@@ -95,7 +95,8 @@ export function CategoryForm({ categories }: { categories: Category[] }) {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
+            const XLSX = await import('xlsx');
             const bstr = evt.target?.result;
             const wb = XLSX.read(bstr, { type: 'binary' });
             const wsname = wb.SheetNames[0];

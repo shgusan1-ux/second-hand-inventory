@@ -7,13 +7,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { SmartStoreButton } from '@/components/inventory/smartstore-button';
 import { DiscardButton } from '@/components/inventory/discard-button';
 import { Button } from '@/components/ui/button';
-import { Edit, ChevronLeft, ChevronRight, CheckSquare, Square, Download, Eye } from 'lucide-react';
+import { Edit, ChevronLeft, ChevronRight, CheckSquare, Square, Download, Eye, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getInventoryForExport, bulkDeleteProducts } from '@/lib/actions';
 import { toast } from 'sonner';
 import { ProductEditDialog } from '@/components/inventory/product-edit-dialog';
 import { BulkEditDialog } from '@/components/inventory/bulk-edit-dialog';
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 import { BulkAiUpdateDialog } from '@/components/inventory/bulk-ai-update-dialog';
 import { ProductDetailPreview } from '@/components/inventory/product-detail-preview';
 import { BulkUpdateExcelDialog } from '@/components/inventory/bulk-update-excel-dialog';
@@ -107,6 +107,7 @@ export function InventoryTable({
             return;
         }
 
+        const XLSX = await import('xlsx');
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
@@ -205,6 +206,14 @@ export function InventoryTable({
                         }} className="h-8 text-xs font-semibold hover:bg-violet-500 hover:text-white transition-colors">
                             <Edit className="w-3 h-3 mr-2" />
                             상품 에디터
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => {
+                            const codes = selectedIds.join('\n');
+                            navigator.clipboard.writeText(codes);
+                            toast.success(`${selectedIds.length}개 상품코드 복사됨`);
+                        }} className="h-8 text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-colors">
+                            <Copy className="w-3 h-3 mr-2" />
+                            상품코드 복사
                         </Button>
                         <Button size="sm" variant="secondary" onClick={() => handleDownloadExcel('selected')} className="h-8 text-xs font-semibold hover:bg-blue-500 hover:text-white transition-colors">
                             <Download className="w-3 h-3 mr-2" />
@@ -337,8 +346,9 @@ export function InventoryTable({
                                                     src={product.image_url}
                                                     alt={product.name}
                                                     fill
+                                                    loading="lazy"
                                                     className="object-cover transition-all duration-300"
-                                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                                    sizes="64px"
                                                 />
                                             ) : (
                                                 <div className="flex items-center justify-center h-full text-[10px] text-slate-400">No Image</div>
@@ -457,6 +467,9 @@ export function InventoryTable({
                                         }>
                                             {product.status}
                                         </span>
+                                        {product.edit_completed ? (
+                                            <span className="ml-1 bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-violet-200">완료</span>
+                                        ) : null}
                                     </td>
                                     <td className="p-3 align-middle text-center">
                                         {product.smartstore_no ? (

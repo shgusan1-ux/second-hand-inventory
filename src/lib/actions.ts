@@ -842,6 +842,32 @@ export async function toggleTaskcheck(id: string, status: boolean) {
     }
 }
 
+export async function addDashboardTask(content: string) {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Unauthorized' };
+
+    if (!content || !content.trim()) {
+        return { success: false, error: '내용을 입력해주세요.' };
+    }
+
+    try {
+        const id = Math.random().toString(36).substring(2, 9);
+        const name = session.name || '관리자';
+        const formattedContent = `[${name}] ${content}`;
+
+        await db.query(
+            `INSERT INTO dashboard_tasks (id, content) VALUES ($1, $2)`,
+            [id, formattedContent]
+        );
+
+        revalidatePath('/');
+        return { success: true };
+    } catch (e) {
+        console.error('Add task failed:', e);
+        return { success: false, error: '등록 실패' };
+    }
+}
+
 // --- Settings Actions ---
 
 export async function changePassword(prevState: any, formData: FormData) {

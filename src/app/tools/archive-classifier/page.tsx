@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { classifyBulkArchive, type ArchiveCategory } from '@/lib/archive-classifier';
 import { Download, Sparkles, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// XLSX: 동적 import (~500KB 절감)
 
 export default function ArchiveClassifierPage() {
     const [input, setInput] = useState('');
@@ -37,7 +37,8 @@ export default function ArchiveClassifierPage() {
         setIsProcessing(false);
     };
 
-    const handleDownloadExcel = () => {
+    const handleDownloadExcel = async () => {
+        const XLSX = await import('xlsx');
         const data = results.map(r => ({
             '상품코드': r.productId,
             'ARCHIVE 분류': r.category || 'ARCHIVE 아님',

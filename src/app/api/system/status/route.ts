@@ -67,7 +67,7 @@ export async function GET() {
         const minutes = Math.floor((uptimeSeconds % 3600) / 60);
         const uptimeStr = `${days}일 ${hours}시간 ${minutes}분`;
 
-        const dbStatus = dbLatency < 150 ? 'healthy' : dbLatency < 600 ? 'degraded' : 'down';
+        const dbStatus = dbLatency < 50 ? 'healthy' : dbLatency < 200 ? 'degraded' : 'down';
         const aiStatus = remainingCredits > 10000 ? 'healthy' : remainingCredits > 0 ? 'degraded' : 'down';
 
         let naverStatus: 'healthy' | 'degraded' | 'down' = 'healthy';

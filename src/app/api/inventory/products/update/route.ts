@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
         await ensureDbInitialized();
 
         const body = await request.json();
-        const { id, name, brand, category, price_consumer, price_sell, status, condition, size, fabric, md_comment, master_reg_date, images } = body;
+        const { id, name, brand, category, price_consumer, price_sell, status, condition, size, fabric, md_comment, master_reg_date, images, edit_completed } = body;
 
         if (!id) {
             return NextResponse.json({ error: '상품 ID가 필요합니다.' }, { status: 400 });
@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
         const imageList: string[] = Array.isArray(images) ? images.filter(Boolean) : [];
         const image_url = imageList.length > 0 ? imageList[0] : '';
         const imagesJson = JSON.stringify(imageList);
+
+        const editCompletedVal = edit_completed !== undefined ? (edit_completed ? 1 : 0) : undefined;
 
         const finalParams: any[] = [
             name || '', brand || '', category || '',
@@ -29,8 +31,10 @@ export async function POST(request: NextRequest) {
 
         // sold_at은 판매완료 시에만 설정, 그 외엔 NULL로 리셋
         const sold_at_clause = status === '판매완료' ? `sold_at='${new Date().toISOString()}'` : 'sold_at=NULL';
+        // edit_completed가 명시적으로 전달된 경우만 업데이트
+        const editCompletedClause = editCompletedVal !== undefined ? `, edit_completed=${editCompletedVal}` : '';
 
-        const finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), ${sold_at_clause}, updated_at=CURRENT_TIMESTAMP, ai_completed=1 WHERE id=$14`;
+        const finalQuery = `UPDATE products SET name=$1, brand=$2, category=$3, price_consumer=$4, price_sell=$5, status=$6, condition=$7, image_url=$8, md_comment=$9, images=$10, size=$11, fabric=$12, master_reg_date=COALESCE($13, master_reg_date), ${sold_at_clause}, updated_at=CURRENT_TIMESTAMP, ai_completed=1${editCompletedClause} WHERE id=$14`;
 
         await db.query(finalQuery, finalParams);
 

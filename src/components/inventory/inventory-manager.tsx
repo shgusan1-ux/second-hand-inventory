@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react';
 import { InventoryFilter } from '@/components/inventory/inventory-filter';
 import { InventoryTable } from '@/components/inventory/inventory-table';
 import { useRouter, useSearchParams } from 'next/navigation';
-import * as XLSX from 'xlsx';
+import { useQuery } from '@tanstack/react-query';
+// XLSX는 ~500KB → 동적 import로 전환 (초기 번들에서 제거)
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,28 +16,11 @@ import { BulkProductForm } from './bulk-product-form';
 import { CornerLogisImportForm } from './corner-logis-import';
 import { DiscardedList } from './discarded-list';
 
-interface InventoryManagerProps {
-    initialProducts: any[];
-    initialTotalCount: number;
-    initialLimit: number;
-    currentPage: number;
-    categories: any[];
-    brands?: string[];
-    smartstoreStats?: { total: number; registered: number; unregistered: number; suspended: number; outofstock: number };
-}
-
-export function InventoryManager({
-    initialProducts,
-    initialTotalCount,
-    initialLimit,
-    currentPage,
-    categories,
-    brands = [],
-    smartstoreStats
-}: InventoryManagerProps) {
-    const [products, setProducts] = useState(initialProducts);
-    const [totalCount, setTotalCount] = useState(initialTotalCount);
+// React Query 기반 CSR - 페이지 이동 즉시 렌더 + 캐시된 데이터 먼저 표시
+function InventoryManagerInner() {
     const [isBulkMode, setIsBulkMode] = useState(false);
+    const [bulkProducts, setBulkProducts] = useState<any[]>([]);
+    const [bulkTotalCount, setBulkTotalCount] = useState(0);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [bulkPage, setBulkPage] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
@@ -44,13 +28,53 @@ export function InventoryManager({
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    // Reset to initial data when server props change (e.g. normal pagination/filter via URL)
-    useEffect(() => {
-        if (!isBulkMode) {
-            setProducts(initialProducts);
-            setTotalCount(initialTotalCount);
-        }
-    }, [initialProducts, initialTotalCount, isBulkMode]);
+    // URL searchParams → API fetch key
+    const apiUrl = `/api/inventory/list?${searchParams.toString()}`;
+    const currentPage = parseInt(searchParams.get('page') || '1', 10);
+    const currentLimit = parseInt(searchParams.get('limit') || '50', 10);
+
+    // React Query: 상품 목록 fetch (캐시 + stale-while-revalidate)
+    const { data: listData, isLoading: isListLoading, isFetching } = useQuery({
+        queryKey: ['inventory-list', searchParams.toString()],
+        queryFn: async () => {
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error('Failed to fetch');
+            return res.json();
+        },
+        staleTime: 30 * 1000, // 30초 동안 캐시 신선 유지
+        gcTime: 5 * 60 * 1000, // 5분 동안 캐시 유지
+        placeholderData: (prev) => prev, // 이전 데이터 유지 (페이지 전환 시 깜빡임 방지)
+    });
+
+    // React Query: 카테고리 fetch (5분 캐시)
+    const { data: catData } = useQuery({
+        queryKey: ['categories'],
+        queryFn: async () => {
+            const res = await fetch('/api/inventory/categories');
+            const json = await res.json();
+            return json.success ? json.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+    });
+
+    // React Query: 스마트스토어 통계 + 브랜드 (5분 캐시, 별도 API)
+    const { data: statsData } = useQuery({
+        queryKey: ['inventory-stats'],
+        queryFn: async () => {
+            const res = await fetch('/api/inventory/stats');
+            if (!res.ok) throw new Error('Failed to fetch stats');
+            return res.json();
+        },
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+    });
+
+    const categories = catData || [];
+    const brands = statsData?.brands || [];
+    const products = isBulkMode ? bulkProducts : (listData?.products || []);
+    const totalCount = isBulkMode ? bulkTotalCount : (listData?.totalCount || 0);
+    const smartstoreStats = statsData?.smartstoreStats;
 
     const handleBulkSearch = async (codes: string[]) => {
         if (codes.length === 0) {
@@ -71,9 +95,9 @@ export function InventoryManager({
             if (!response.ok) throw new Error('Search failed');
 
             const data = await response.json();
-            setProducts(data.products);
-            setTotalCount(data.totalCount);
-            setBulkPage(1); // Reset bulk page
+            setBulkProducts(data.products);
+            setBulkTotalCount(data.totalCount);
+            setBulkPage(1);
         } catch (error) {
             console.error('Bulk search error:', error);
             toast.error('대량 검색 중 오류가 발생했습니다.');
@@ -84,53 +108,34 @@ export function InventoryManager({
     };
 
     const handleFilterSearch = async (params: any) => {
-        setIsLoading(true);
-        setIsBulkMode(true);
-
-        try {
-            const { searchProducts } = await import('@/lib/actions');
-            const results = await searchProducts(params);
-
-            setProducts(results);
-            setTotalCount(results.length);
-            setBulkPage(1);
-
-            const urlParams = new URLSearchParams();
-            Object.entries(params).forEach(([key, val]) => {
-                if (key !== 'excludeCode' && val) urlParams.set(key, String(val));
-            });
-            router.replace(`${window.location.pathname}?${urlParams.toString()}`);
-
-            toast.success(`검색 완료: ${results.length}개`);
-
-        } catch (error) {
-            console.error('Filter search error:', error);
-            toast.error('검색 중 오류가 발생했습니다.');
-            setIsBulkMode(false);
-        } finally {
-            setIsLoading(false);
-        }
+        // 필터 검색 → URL 변경으로 React Query가 자동 refetch
+        setIsBulkMode(false);
+        const urlParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, val]) => {
+            if (key !== 'excludeCode' && val) urlParams.set(key, String(val));
+        });
+        urlParams.set('page', '1');
+        router.push(`${window.location.pathname}?${urlParams.toString()}`);
     };
 
     const handleReset = () => {
         setIsBulkMode(false);
-        setProducts(initialProducts);
-        setTotalCount(initialTotalCount);
+        setBulkProducts([]);
+        setBulkTotalCount(0);
         setSortConfig(null);
         setBulkPage(1);
-
-        router.push('/inventory');
+        router.push('/inventory/manage');
     };
 
-    const handleExportAll = () => {
+    const handleExportAll = async () => {
         if (!products || products.length === 0) {
             toast.error('다운로드할 데이터가 없습니다.');
             return;
         }
 
+        toast.info('엑셀 파일 준비 중...');
+        const XLSX = await import('xlsx');
         const fileName = `inventory_bulk_all_${new Date().toISOString().slice(0, 10)}.xlsx`;
-
-        // Use standard XLSX utils
         const worksheet = XLSX.utils.json_to_sheet(products);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
@@ -140,30 +145,22 @@ export function InventoryManager({
 
     // Client-side Sorting & Pagination Logic for Bulk Mode
     let visibleProducts = products;
-    let currentLimit = parseInt(searchParams.get('limit') || initialLimit.toString(), 10);
-    // In bulk mode, we use client-side pagination 'bulkPage'
-    // In normal mode, we use server-side 'currentPage' prop
     let currentPageNum = isBulkMode ? bulkPage : currentPage;
-    let currentTotal = isBulkMode ? products.length : totalCount;
+    let currentTotal = isBulkMode ? bulkProducts.length : totalCount;
 
     if (isBulkMode) {
-        // 1. Sort
         if (sortConfig) {
             visibleProducts = [...products].sort((a, b) => {
                 const aValue = a[sortConfig.key];
                 const bValue = b[sortConfig.key];
-
                 if (!aValue && !bValue) return 0;
                 if (!aValue) return 1;
                 if (!bValue) return -1;
-
                 if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
-
-        // 2. Paginate
         const startIndex = (bulkPage - 1) * currentLimit;
         visibleProducts = visibleProducts.slice(startIndex, startIndex + currentLimit);
     }
@@ -374,6 +371,7 @@ export function InventoryManager({
                 <div className="text-sm text-slate-600">
                     검색 결과: <span className="font-bold text-slate-900">{currentTotal.toLocaleString()}</span>개
                     {isBulkMode && <span className="ml-2 text-xs text-emerald-600 font-medium">(대량 검색 모드)</span>}
+                    {isFetching && !isListLoading && <span className="ml-2 text-xs text-blue-500 font-medium">갱신 중...</span>}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -384,7 +382,7 @@ export function InventoryManager({
                         onChange={(e) => {
                             const params = new URLSearchParams(searchParams.toString());
                             params.set('limit', e.target.value);
-                            params.set('page', '1'); // Reset to page 1
+                            params.set('page', '1');
                             router.push(`${window.location.pathname}?${params.toString()}`);
                         }}
                     >
@@ -397,18 +395,27 @@ export function InventoryManager({
                 </div>
             </div>
 
-            <InventoryTable
-                products={visibleProducts}
-                totalCount={currentTotal}
-                limit={currentLimit}
-                currentPage={currentPageNum}
-                isEditable={true}
-                categories={categories}
-                onSort={handleSort}
-                onPageChange={handlePageChange}
-                isBulkMode={isBulkMode}
-                onExportAll={isBulkMode ? handleExportAll : undefined}
-            />
+            {isListLoading && !listData ? (
+                // 최초 로딩 스켈레톤
+                <div className="space-y-3">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className="h-16 bg-slate-100 animate-pulse rounded-lg" />
+                    ))}
+                </div>
+            ) : (
+                <InventoryTable
+                    products={visibleProducts}
+                    totalCount={currentTotal}
+                    limit={currentLimit}
+                    currentPage={currentPageNum}
+                    isEditable={true}
+                    categories={categories}
+                    onSort={handleSort}
+                    onPageChange={handlePageChange}
+                    isBulkMode={isBulkMode}
+                    onExportAll={isBulkMode ? handleExportAll : undefined}
+                />
+            )}
 
             {isLoading && (
                 <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
@@ -419,5 +426,22 @@ export function InventoryManager({
                 </div>
             )}
         </div>
+    );
+}
+
+// useSearchParams()는 Suspense boundary가 필요
+export function InventoryManager() {
+    return (
+        <Suspense fallback={
+            <div className="space-y-4">
+                <div className="h-10 bg-slate-100 animate-pulse rounded-lg w-1/3" />
+                <div className="h-12 bg-slate-100 animate-pulse rounded-lg" />
+                {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="h-16 bg-slate-100 animate-pulse rounded-lg" />
+                ))}
+            </div>
+        }>
+            <InventoryManagerInner />
+        </Suspense>
     );
 }

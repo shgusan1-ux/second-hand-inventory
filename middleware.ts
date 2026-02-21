@@ -18,6 +18,9 @@ const publicPaths = [
   '/api/smartstore/automation/reclassify-archive', // 재분류 API (curl 호출용)
   '/api/smartstore/automation/md-strategy', // MD 전략 API (curl 호출용)
   '/api/cron', // Vercel Cron 자동 실행
+  '/api/inventory/list', // Edge 캐시 활성화 (공개 상품 목록)
+  '/api/inventory/stats', // Edge 캐시 활성화 (통계/브랜드)
+  '/api/inventory/categories', // Edge 캐시 활성화 (카테고리)
 ];
 
 // 캐시 무효화 전용 내부 호출 허용 (서버→서버 호출시 세션 쿠키 없음)

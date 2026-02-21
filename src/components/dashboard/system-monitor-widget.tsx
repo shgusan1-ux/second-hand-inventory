@@ -91,18 +91,26 @@ export function SystemMonitorWidget() {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Database */}
+                {/* Admin Page Performance */}
                 <div className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                             <Database className="w-3.5 h-3.5" />
-                            <span>DB 상태</span>
+                            <span>관리자 응답속도</span>
                         </div>
                         {getStatusIcon(status?.database.status || 'unknown')}
                     </div>
                     <div className="flex items-end justify-between">
-                        <span className="text-lg font-bold text-slate-900 dark:text-white">{status?.database.latency}ms</span>
-                        <span className="text-[10px] text-slate-400">응답속도</span>
+                        <div className="flex flex-col">
+                            <span className="text-lg font-bold text-slate-900 dark:text-white">{status?.database.latency}ms</span>
+                            <span className="text-[10px] text-slate-400">현재 응답속도</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] text-slate-400">적정 응답속도</span>
+                            <span className={`text-[10px] font-bold ${(status?.database.latency || 999) <= 50 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                50ms 이하
+                            </span>
+                        </div>
                     </div>
                 </div>
 

@@ -40,6 +40,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
     const [selectedBrand, setSelectedBrand] = useState(searchParams.get('brand') || 'all');
     const [smartstoreFilter, setSmartstoreFilter] = useState(searchParams.get('smartstore') || 'all');
     const [aiFilter, setAiFilter] = useState(searchParams.get('ai') || 'all');
+    const [editFilter, setEditFilter] = useState(searchParams.get('edit') || 'all');
 
     const handleSearch = () => { // Trigger search
         // Smart Parsing for Glued Codes
@@ -86,6 +87,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
             if (selectedBrand && selectedBrand !== 'all') params.brand = selectedBrand;
             if (smartstoreFilter && smartstoreFilter !== 'all') params.smartstore = smartstoreFilter;
             if (aiFilter && aiFilter !== 'all') params.ai = aiFilter;
+            if (editFilter && editFilter !== 'all') params.edit = editFilter;
 
             onFilterSearch(params);
             return;
@@ -112,6 +114,7 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
         if (selectedBrand && selectedBrand !== 'all') params.set('brand', selectedBrand);
         if (smartstoreFilter && smartstoreFilter !== 'all') params.set('smartstore', smartstoreFilter);
         if (aiFilter && aiFilter !== 'all') params.set('ai', aiFilter);
+        if (editFilter && editFilter !== 'all') params.set('edit', editFilter);
 
         params.set('page', '1');
         router.push(`/inventory/manage?${params.toString()}`);
@@ -304,6 +307,20 @@ export function InventoryFilter({ brands = [], categories = [], onBulkSearch, on
                                 <SelectItem value="all">AI 전체</SelectItem>
                                 <SelectItem value="done">AI 완료</SelectItem>
                                 <SelectItem value="undone">AI 미완료</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Edit Completed */}
+                    <div className="w-[calc(50%-4px)] sm:w-[120px]">
+                        <Select value={editFilter} onValueChange={setEditFilter}>
+                            <SelectTrigger className="bg-white h-9 text-xs">
+                                <SelectValue placeholder="수정완료" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">수정 전체</SelectItem>
+                                <SelectItem value="done">수정완료</SelectItem>
+                                <SelectItem value="undone">수정미완료</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

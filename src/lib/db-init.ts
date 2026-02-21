@@ -239,6 +239,7 @@ export async function initDatabase() {
       'ALTER TABLE products ADD COLUMN md_comment TEXT',
       'ALTER TABLE products ADD COLUMN updated_at TIMESTAMP',
       'ALTER TABLE products ADD COLUMN ai_completed INTEGER DEFAULT 0',
+      'ALTER TABLE products ADD COLUMN edit_completed INTEGER DEFAULT 0',
     ];
     for (const sql of productMigrations) {
       try { await db.query(sql); } catch (e) { /* Column likely exists */ }
@@ -478,6 +479,13 @@ export async function initDatabase() {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_product ON fitting_results(product_no)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_fitting_results_status ON fitting_results(status)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_products_status_sold ON products(status, sold_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_ai_completed ON products(ai_completed)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_products_edit_completed ON products(edit_completed)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_seller_code ON naver_products(seller_management_code)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_naver_products_reg_date ON naver_products(reg_date)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_chat_session_user ON chat_sessions(user_id)`);

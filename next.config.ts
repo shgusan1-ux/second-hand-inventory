@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // 대형 패키지 자동 최적화 (tree-shaking 강화)
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'recharts'],
+  },
   images: {
     remotePatterns: [
       {
